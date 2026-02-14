@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "quill",
+  "theme": "aspen",
   "name": "Anton Payments",
   "colors": {
     "primary": "#2563EB",
