@@ -152,9 +152,14 @@
             ]
           },
           {
+            "group": "Registration",
+            "pages": [
+              "api-reference/registration/register"
+            ]
+          },
+          {
             "group": "Onboarding",
             "pages": [
-              "api-reference/onboarding/register",
               "api-reference/onboarding/get-application",
               "api-reference/onboarding/update-draft",
               "api-reference/onboarding/submit-application",
@@ -198,11 +203,11 @@
           {
             "group": "User Management",
             "pages": [
-              "api-reference/user/get-profile",
-              "api-reference/user/update-profile",
-              "api-reference/user/get-mfa",
-              "api-reference/user/enroll-mfa",
-              "api-reference/user/change-password"
+              "api-reference/user-management/get-profile",
+              "api-reference/user-management/update-profile",
+              "api-reference/user-management/get-mfa",
+              "api-reference/user-management/enroll-mfa",
+              "api-reference/user-management/change-password"
             ]
           },
           {
