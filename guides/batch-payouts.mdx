@@ -1,0 +1,157 @@
+---
+title: "Batch Payouts"
+sidebarTitle: "Batch Payouts"
+description: "Send hundreds or thousands of payouts at once by uploading a CSV file."
+---
+
+## Overview
+
+Batch payouts let you process many payouts in a single operation. Upload a CSV file with payout details, review the parsed results, then confirm to execute all payouts at once.
+
+This is ideal for:
+- Payroll runs
+- Marketplace seller payouts
+- Monthly commission payments
+- Recurring supplier payments
+
+## Batch workflow
+
+<Steps>
+  <Step title="Download the template">
+    Get the CSV template with the correct column headers.
+  </Step>
+  <Step title="Fill in the data">
+    Add a row for each payout with beneficiary, amount, currency, and reference.
+  </Step>
+  <Step title="Upload the file">
+    Upload the CSV. Anton validates every row and reports any errors.
+  </Step>
+  <Step title="Review">
+    Check the parsed payouts and fix any errors.
+  </Step>
+  <Step title="Confirm">
+    Confirm the batch to create all payouts simultaneously.
+  </Step>
+</Steps>
+
+## 1. Get the template
+
+```bash
+curl https://api.antonpayments.com/v1/batches/template \
+  -H "Authorization: Bearer ak_test_..." \
+  -o batch-template.csv
+```
+
+The template includes columns like:
+
+```csv
+beneficiary_id,amount,currency,description,reference
+ben_abc123,500.00,USD,January salary,PAY-001
+ben_def456,1200.00,GBP,Consulting fee,PAY-002
+ben_ghi789,350.00,EUR,Commission,PAY-003
+```
+
+## 2. Upload the batch
+
+```bash
+curl https://api.antonpayments.com/v1/batches \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -F "file=@payouts.csv"
+```
+
+```json Response
+{
+  "data": {
+    "id": "bat_cng3q8s6ek9kc5qg1h5g",
+    "status": "pending_review",
+    "total_rows": 150,
+    "valid_rows": 148,
+    "error_rows": 2,
+    "total_amount": "125000.00",
+    "currency": "USD",
+    "created_at": "2026-02-14T10:00:00Z"
+  }
+}
+```
+
+## 3. Check for errors
+
+If there are validation errors, retrieve the detail:
+
+```bash
+curl https://api.antonpayments.com/v1/batches/bat_abc123/errors \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+```json Response
+{
+  "data": [
+    {
+      "row": 45,
+      "field": "amount",
+      "message": "Amount must be greater than 0"
+    },
+    {
+      "row": 102,
+      "field": "beneficiary_id",
+      "message": "Beneficiary not found: ben_invalid"
+    }
+  ]
+}
+```
+
+Fix the errors in your CSV and re-upload, or confirm the batch with only the valid rows.
+
+## 4. Confirm the batch
+
+```bash
+curl https://api.antonpayments.com/v1/batches/bat_abc123/confirm \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+This creates individual payouts for all valid rows. Each payout goes through normal screening and processing.
+
+## 5. Track progress
+
+Check the batch status and individual payout results:
+
+```bash
+# Batch status
+curl https://api.antonpayments.com/v1/batches/bat_abc123 \
+  -H "Authorization: Bearer ak_test_..."
+
+# Individual payouts in the batch
+curl https://api.antonpayments.com/v1/batches/bat_abc123/payouts \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+## Cancelling a batch
+
+Before confirmation, you can cancel the entire batch:
+
+```bash
+curl https://api.antonpayments.com/v1/batches/bat_abc123/cancel \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+After confirmation, individual payouts can be cancelled (if they haven't started processing) but the batch itself cannot be undone.
+
+## Limits and tips
+
+<AccordionGroup>
+  <Accordion title="File size limits" icon="file">
+    Maximum 10,000 rows per batch. For larger volumes, split into multiple batches.
+  </Accordion>
+  <Accordion title="Balance requirements" icon="scale-balanced">
+    Your available balance must cover the total batch amount at confirmation time. If insufficient, the confirmation will fail.
+  </Accordion>
+  <Accordion title="Use references" icon="hashtag">
+    Include a unique `reference` per row so you can match Anton payouts back to your source records.
+  </Accordion>
+  <Accordion title="Webhook notifications" icon="bell">
+    Subscribe to `batch.completed` and `batch.failed` events. Each individual payout within the batch also generates its own webhook events.
+  </Accordion>
+</AccordionGroup>

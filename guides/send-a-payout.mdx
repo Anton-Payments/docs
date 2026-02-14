@@ -1,0 +1,175 @@
+---
+title: "Send a Payout"
+sidebarTitle: "Send a Payout"
+description: "Complete walkthrough of creating a beneficiary and sending your first payout via the API."
+---
+
+## Overview
+
+This guide walks through the full flow of sending a payout: verifying your balance, creating a beneficiary, sending the payout, and tracking its status.
+
+## Prerequisites
+
+- An Anton Payments account with [API keys](/authentication)
+- Funded [balances](/concepts/balances) in the payout currency (sandbox has test balances pre-loaded)
+
+## 1. Check your balance
+
+Before sending a payout, verify you have sufficient funds:
+
+```bash
+curl https://api.antonpayments.com/v1/balances/USD \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+```json Response
+{
+  "data": {
+    "currency": "USD",
+    "available": "50000.00",
+    "held": "2000.00",
+    "total": "52000.00"
+  }
+}
+```
+
+The `available` amount is what you can use for new payouts. Ensure it covers the payout amount plus any fees.
+
+## 2. Create a beneficiary (if needed)
+
+If you're paying someone for the first time, create a beneficiary with their payment details:
+
+```bash
+curl https://api.antonpayments.com/v1/beneficiaries \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "individual",
+    "first_name": "Maria",
+    "last_name": "Garcia",
+    "email": "maria@example.com",
+    "country": "US",
+    "currency": "USD",
+    "bank_account": {
+      "account_number": "9876543210",
+      "routing_number": "021000021"
+    }
+  }'
+```
+
+```json Response
+{
+  "data": {
+    "id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "type": "individual",
+    "first_name": "Maria",
+    "last_name": "Garcia",
+    "country": "US",
+    "currency": "USD",
+    "status": "active",
+    "created_at": "2026-02-14T10:00:00Z"
+  }
+}
+```
+
+Save the `id` — you'll use it to create the payout.
+
+## 3. Send the payout
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.antonpayments.com/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: invoice-1042-maria" \
+  -d '{
+    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "amount": "2500.00",
+    "currency": "USD",
+    "description": "Consulting fee - January 2026",
+    "reference": "INV-1042"
+  }'
+```
+
+```javascript Node.js
+const response = await fetch("https://api.antonpayments.com/v1/payouts", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ak_test_...",
+    "Content-Type": "application/json",
+    "Idempotency-Key": "invoice-1042-maria",
+  },
+  body: JSON.stringify({
+    beneficiary_id: "ben_cng3q8s6ek9kc5qg1h1g",
+    amount: "2500.00",
+    currency: "USD",
+    description: "Consulting fee - January 2026",
+    reference: "INV-1042",
+  }),
+});
+
+const { data: payout } = await response.json();
+console.log(`Payout ${payout.id} created with status: ${payout.status}`);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.antonpayments.com/v1/payouts",
+    headers={
+        "Authorization": "Bearer ak_test_...",
+        "Idempotency-Key": "invoice-1042-maria",
+    },
+    json={
+        "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+        "amount": "2500.00",
+        "currency": "USD",
+        "description": "Consulting fee - January 2026",
+        "reference": "INV-1042",
+    },
+)
+
+payout = response.json()["data"]
+print(f"Payout {payout['id']} created with status: {payout['status']}")
+```
+
+</CodeGroup>
+
+<Tip>
+  **Always include an Idempotency-Key** for payout creation. This protects against duplicate payouts if your request is retried due to network issues.
+</Tip>
+
+## 4. Track the payout
+
+### Option A: Poll the status
+
+```bash
+curl https://api.antonpayments.com/v1/payouts/pay_cng3q8s6ek9kc5qg1h2g \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+### Option B: Use webhooks (recommended)
+
+Set up a [webhook subscription](/guides/handle-webhooks) to get notified automatically:
+
+```
+payout.created → payout.screening → payout.processing → payout.sent → payout.completed
+```
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="Insufficient balance" icon="circle-exclamation">
+    You'll get a `400` error if `available` balance is too low. Fund your account or retry when pending payouts complete and release held funds.
+  </Accordion>
+  <Accordion title="Invalid beneficiary" icon="user-xmark">
+    Ensure the beneficiary ID exists and belongs to your merchant account. Check you're using the right environment (test vs live).
+  </Accordion>
+  <Accordion title="Payout stuck in screening" icon="clock">
+    In production, compliance screening can take a few seconds to a few minutes. If a payout stays in `pending_screening` for more than 10 minutes, contact support.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,60 @@
+---
+title: "Environments"
+sidebarTitle: "Environments"
+description: "Anton Payments provides sandbox and production environments for development and live operations."
+---
+
+## Overview
+
+Anton Payments has two environments. Both have identical APIs — the only difference is whether real money moves.
+
+| Environment | Base URL | API Key Prefix | Real Money |
+|-------------|----------|----------------|------------|
+| **Sandbox** | `https://api.staging.antonpayments.com` | `ak_test_` | No |
+| **Production** | `https://api.antonpayments.com` | `ak_live_` | Yes |
+
+## Sandbox
+
+The sandbox environment is for development and testing. It mirrors production behavior exactly — same endpoints, same validation, same compliance screening — but no real funds move.
+
+**What works in sandbox:**
+- Full payout lifecycle (created → completed)
+- Beneficiary creation and validation
+- Webhook delivery to your endpoints
+- Batch upload and processing
+- Balance queries (seeded test balances)
+- Compliance screening simulation
+
+**What's different in sandbox:**
+- Payouts complete instantly (no real rail processing delay)
+- Compliance screening auto-approves (no real OFAC/PEP checks)
+- Balances are pre-funded with test amounts
+- No real money moves — ever
+
+<Tip>
+  Use sandbox to build and test your integration end-to-end. Only switch to production when you've completed the [going live checklist](/guides/going-live).
+</Tip>
+
+## Production
+
+Production processes real payouts with real compliance checks. Payouts are routed to real rail providers and funds are delivered to real bank accounts.
+
+To use production:
+1. Complete the onboarding process and get approved
+2. Fund your account balances
+3. Use `ak_live_` API keys
+4. Point your integration to `https://api.antonpayments.com`
+
+<Warning>
+  **Production payouts are irreversible** once they reach `sent` status. Double-check beneficiary details and amounts before creating payouts.
+</Warning>
+
+## Local development
+
+For local development, you can run the Anton API locally:
+
+| Service | URL |
+|---------|-----|
+| API | `http://localhost:8080` |
+
+The local environment uses dev mode authentication, which is simpler for development but not suitable for testing production auth flows.

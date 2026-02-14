@@ -1,33 +1,88 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API Reference"
+sidebarTitle: "Overview"
+description: "Complete reference for the Anton Payments REST API — every endpoint, request parameter, and response schema."
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Base URL
 
-## Welcome
+<CodeGroup>
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+```bash Production
+https://api.antonpayments.com
+```
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+```bash Sandbox
+https://api.staging.antonpayments.com
+```
+
+</CodeGroup>
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+All requests require an API key in the `Authorization` header:
 
-```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+```bash
+Authorization: Bearer ak_live_your_key_here
 ```
+
+See [Authentication](/authentication) for details on key management and security.
+
+## Request format
+
+- Request bodies use `Content-Type: application/json`
+- All monetary amounts are strings (e.g., `"500.00"`) to avoid floating-point precision issues
+- Dates use ISO 8601 format (`2026-02-14T10:30:00Z`)
+- IDs are prefixed strings (e.g., `pay_`, `ben_`, `bat_`)
+
+## Response format
+
+All successful responses are wrapped in a `data` envelope:
+
+```json Single resource
+{
+  "data": {
+    "id": "pay_cng3q8s6ek9kc5qg1h2g",
+    "status": "completed",
+    "amount": "500.00"
+  }
+}
+```
+
+```json List response
+{
+  "data": [
+    { "id": "pay_abc123" },
+    { "id": "pay_def456" }
+  ],
+  "pagination": {
+    "total": 42,
+    "limit": 20,
+    "offset": 0
+  }
+}
+```
+
+## Idempotency
+
+POST requests support idempotency via the `Idempotency-Key` header. See [Idempotency](/concepts/idempotency) for details.
+
+## Rate limiting
+
+Requests are rate-limited per IP. Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header.
+
+## Resource overview
+
+| Resource | Endpoint | Description |
+|----------|----------|-------------|
+| [Payouts](/api-reference/payouts/create-payout) | `/v1/payouts` | Create and manage money movements |
+| [Beneficiaries](/api-reference/beneficiaries/create-beneficiary) | `/v1/beneficiaries` | Manage payout recipients |
+| [Instruments](/api-reference/instruments/create-instrument) | `/v1/instruments` | Payment methods for beneficiaries |
+| [Balances](/api-reference/balances/list-balances) | `/v1/balances` | Check your funded account balances |
+| [Quotes](/api-reference/quotes/get-quote) | `/v1/quotes` | Get FX quotes for cross-currency payouts |
+| [Batches](/api-reference/batches/upload-batch) | `/v1/batches` | Bulk payout uploads via CSV |
+| [Webhooks](/api-reference/webhooks/create-subscription) | `/v1/webhooks` | Real-time event notifications |
+| [API Keys](/api-reference/api-keys/create-api-key) | `/v1/api-keys` | Manage your API credentials |
+| [Onboarding](/api-reference/onboarding/register) | `/v1/onboarding` | Merchant application and registration |
+| [Documents](/api-reference/documents/upload-document) | `/v1/documents` | KYB document management |
+| [Corridors](/api-reference/corridors/list-corridors) | `/v1/corridors` | Available payment corridors |

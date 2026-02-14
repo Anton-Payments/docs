@@ -1,0 +1,88 @@
+---
+title: "Webhooks"
+sidebarTitle: "Webhooks"
+description: "Receive real-time notifications when events happen in your Anton Payments account."
+---
+
+## Overview
+
+**Webhooks** push event notifications to your server in real time. Instead of polling the API to check payout status, you register a URL and Anton sends HTTP POST requests when events occur.
+
+## How webhooks work
+
+<Steps>
+  <Step title="Subscribe">
+    Register a webhook URL and choose which events you want to receive.
+  </Step>
+  <Step title="Event occurs">
+    When something happens (e.g., a payout completes), Anton creates an event.
+  </Step>
+  <Step title="Delivery">
+    Anton sends an HTTP POST to your URL with the event payload as JSON.
+  </Step>
+  <Step title="Acknowledge">
+    Your server responds with a `2xx` status code. If delivery fails, Anton retries with exponential backoff.
+  </Step>
+</Steps>
+
+## Event types
+
+| Event | Description |
+|-------|-------------|
+| `payout.created` | A payout was created |
+| `payout.screening` | Payout entered screening |
+| `payout.approved` | Payout approved (maker-checker) |
+| `payout.processing` | Payout submitted to rail |
+| `payout.sent` | Rail confirmed dispatch |
+| `payout.completed` | Payout delivered successfully |
+| `payout.failed` | Payout delivery failed |
+| `payout.returned` | Funds returned |
+| `payout.cancelled` | Payout cancelled |
+| `beneficiary.created` | A beneficiary was created |
+| `beneficiary.updated` | A beneficiary was updated |
+| `beneficiary.deleted` | A beneficiary was deleted |
+| `batch.completed` | A batch finished processing |
+| `batch.failed` | A batch processing failed |
+
+## Webhook payload
+
+Every webhook delivery contains:
+
+```json
+{
+  "id": "evt_cng3q8s6ek9kc5qg1h3g",
+  "type": "payout.completed",
+  "created_at": "2026-02-14T10:30:00Z",
+  "data": {
+    "id": "pay_cng3q8s6ek9kc5qg1h2g",
+    "status": "completed",
+    "amount": "1000.00",
+    "currency": "USD",
+    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "completed_at": "2026-02-14T10:30:00Z"
+  }
+}
+```
+
+## Retry policy
+
+If your endpoint doesn't return a `2xx` response, Anton retries with exponential backoff:
+
+| Attempt | Delay |
+|---------|-------|
+| 1 | Immediately |
+| 2 | 1 minute |
+| 3 | 5 minutes |
+| 4 | 30 minutes |
+| 5 | 2 hours |
+| 6 | 8 hours |
+
+After all retries are exhausted, the delivery is marked as failed. You can view failed deliveries and manually retry them through the dashboard.
+
+## Security
+
+<Warning>
+  **Always verify webhook signatures.** In production, every webhook includes an HMAC signature in the headers. Verify it before processing the payload to ensure the request came from Anton.
+</Warning>
+
+See the [Handle webhooks guide](/guides/handle-webhooks) for implementation details.

@@ -1,0 +1,111 @@
+---
+title: "Going Live"
+sidebarTitle: "Going Live"
+description: "Checklist for moving your Anton Payments integration from sandbox to production."
+---
+
+## Overview
+
+Before processing real payouts, complete this checklist to ensure your integration is production-ready and compliant.
+
+## Pre-launch checklist
+
+### 1. Account setup
+
+<Steps>
+  <Step title="Complete onboarding">
+    Finish the merchant application with all required business details, documents, and beneficial owner information. Your application must be approved before you can access production.
+  </Step>
+  <Step title="Fund your account">
+    Wire funds to your Anton production account. Confirm balances appear correctly via the API.
+  </Step>
+  <Step title="Generate production API keys">
+    Create production keys (`ak_live_...`) from the dashboard. Store them securely in your environment variables or secrets manager.
+  </Step>
+</Steps>
+
+### 2. Integration quality
+
+<AccordionGroup>
+  <Accordion title="Use production base URL" icon="globe" defaultOpen>
+    Switch from `https://api.staging.antonpayments.com` to `https://api.antonpayments.com`.
+  </Accordion>
+  <Accordion title="Use production API keys" icon="key" defaultOpen>
+    Replace `ak_test_...` keys with `ak_live_...`. Never use test keys in production.
+  </Accordion>
+  <Accordion title="Idempotency keys on all POST requests" icon="fingerprint">
+    Every payout creation should include an `Idempotency-Key` header to prevent duplicates.
+  </Accordion>
+  <Accordion title="Error handling and retries" icon="rotate">
+    Implement exponential backoff for 5xx errors and respect `Retry-After` for 429 responses. Never retry 4xx errors (except 429).
+  </Accordion>
+  <Accordion title="Webhook signature verification" icon="shield-check">
+    Verify HMAC signatures on incoming webhooks. Never trust unverified webhook payloads.
+  </Accordion>
+  <Accordion title="Webhook idempotency" icon="clone">
+    Handle duplicate webhook deliveries. Store processed event IDs and skip duplicates.
+  </Accordion>
+  <Accordion title="Proper amount handling" icon="calculator">
+    Amounts are passed as strings, never floating-point. Ensure your code uses decimal/string arithmetic for money.
+  </Accordion>
+</AccordionGroup>
+
+### 3. Security
+
+<AccordionGroup>
+  <Accordion title="API keys in environment variables" icon="lock" defaultOpen>
+    Never hardcode keys. Use environment variables or a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault).
+  </Accordion>
+  <Accordion title="Server-side only" icon="server" defaultOpen>
+    API keys must only be used from backend servers. Never expose them in browser JavaScript, mobile apps, or frontend code.
+  </Accordion>
+  <Accordion title="TLS everywhere" icon="shield">
+    All API calls must use HTTPS. The API rejects non-TLS connections in production.
+  </Accordion>
+  <Accordion title="Webhook endpoint over HTTPS" icon="lock">
+    Your webhook receiver URL must be HTTPS with a valid TLS certificate.
+  </Accordion>
+  <Accordion title="No PII in logs" icon="eye-slash">
+    Ensure your application doesn't log beneficiary bank details, API keys, or other sensitive data.
+  </Accordion>
+</AccordionGroup>
+
+### 4. Monitoring
+
+<AccordionGroup>
+  <Accordion title="Monitor webhook delivery" icon="bell">
+    Set up alerts for failed webhook deliveries. If your endpoint goes down, events queue up and you'll miss notifications.
+  </Accordion>
+  <Accordion title="Track payout delivery rates" icon="chart-line">
+    Monitor the ratio of completed vs. failed payouts. A spike in failures could indicate an issue with beneficiary data or a rail provider.
+  </Accordion>
+  <Accordion title="Balance monitoring" icon="scale-balanced">
+    Alert when balances drop below a threshold so you can fund your account before payouts start failing.
+  </Accordion>
+  <Accordion title="Error rate monitoring" icon="triangle-exclamation">
+    Track API error rates. A sudden increase in 4xx errors could indicate a code issue; 5xx errors could indicate a platform issue.
+  </Accordion>
+</AccordionGroup>
+
+## Sandbox vs. production differences
+
+| Aspect | Sandbox | Production |
+|--------|---------|------------|
+| **API URL** | `api.staging.antonpayments.com` | `api.antonpayments.com` |
+| **API keys** | `ak_test_...` | `ak_live_...` |
+| **Compliance** | Simulated (auto-pass) | Real OFAC, PEP, sanctions checks |
+| **Funds** | Pre-loaded test balances | Real money — must fund account |
+| **Delivery** | Instant simulation | Real rail processing (minutes to days) |
+| **Webhooks** | Delivered normally | Delivered normally |
+
+## Launch recommendation
+
+<Tip>
+  **Start small.** Send a few small production payouts first to verify end-to-end flow works with real compliance checks and real rail delivery. Once confirmed, ramp up volume.
+</Tip>
+
+## Need help?
+
+Contact the Anton Payments team:
+- **Email:** support@antonpayments.com
+- **Dashboard:** [app.antonpayments.com](https://app.antonpayments.com)

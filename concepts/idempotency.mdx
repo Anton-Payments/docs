@@ -1,0 +1,99 @@
+---
+title: "Idempotency"
+sidebarTitle: "Idempotency"
+description: "Safely retry requests without creating duplicate payouts using idempotency keys."
+---
+
+## Overview
+
+Network issues happen. When you create a payout and the connection drops before you receive the response, you don't know if the payout was created or not. Retrying could create a duplicate.
+
+**Idempotency keys** solve this. Include a unique key with your request, and Anton guarantees the operation only happens once — even if you send the same request multiple times.
+
+## How to use
+
+Add the `Idempotency-Key` header to any `POST` request:
+
+```bash
+curl https://api.antonpayments.com/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pay-inv-1042-2026-02-14" \
+  -d '{
+    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "amount": "500.00",
+    "currency": "USD",
+    "description": "Invoice #1042"
+  }'
+```
+
+If you send the same request with the same idempotency key again, Anton returns the original response instead of creating a duplicate. The response includes an `X-Idempotent-Replayed: true` header so you know it's a replay.
+
+## Key requirements
+
+| Rule | Detail |
+|------|--------|
+| **Unique per operation** | Use a different key for each distinct operation |
+| **Deterministic** | Use the same key when retrying the same operation |
+| **Max length** | 255 characters |
+| **Expiry** | Keys are remembered for 24 hours, then discarded |
+
+## Generating good keys
+
+Good idempotency keys are unique to the operation and deterministic:
+
+<CodeGroup>
+
+```javascript Node.js
+import { randomUUID } from 'crypto';
+
+// Option 1: UUID (simplest)
+const key = randomUUID();
+
+// Option 2: Deterministic from your data (recommended)
+const key = `payout-${invoiceId}-${beneficiaryId}`;
+
+// Option 3: Hash of the request body
+import { createHash } from 'crypto';
+const key = createHash('sha256')
+  .update(JSON.stringify(payoutData))
+  .digest('hex');
+```
+
+```python Python
+import uuid
+import hashlib
+import json
+
+# Option 1: UUID (simplest)
+key = str(uuid.uuid4())
+
+# Option 2: Deterministic from your data (recommended)
+key = f"payout-{invoice_id}-{beneficiary_id}"
+
+# Option 3: Hash of the request body
+key = hashlib.sha256(json.dumps(payout_data).encode()).hexdigest()
+```
+
+</CodeGroup>
+
+<Tip>
+  **Use deterministic keys.** If your system crashes after sending a request but before processing the response, a deterministic key (derived from your business data) lets you safely retry without tracking whether the request succeeded.
+</Tip>
+
+## What idempotency covers
+
+| Supported | Not supported |
+|-----------|---------------|
+| `POST` requests (create operations) | `GET`, `PUT`, `DELETE` requests (already naturally idempotent) |
+| Payout creation | Payout cancellation (already idempotent) |
+| Beneficiary creation | Listing and retrieval |
+| Webhook subscription creation | |
+| Batch upload | |
+
+## Behavior details
+
+- **Same key + same body** → Returns original response with `X-Idempotent-Replayed: true`
+- **Same key + different body** → Returns `409 Conflict` error (key reuse with different payload)
+- **Different key + same body** → Creates a new resource (keys are unique identifiers, not deduplication)

@@ -1,0 +1,95 @@
+---
+title: "Authentication"
+sidebarTitle: "Authentication"
+description: "How to authenticate your requests to the Anton Payments API using API keys."
+---
+
+## API keys
+
+Every request to the Anton Payments API must include an API key in the `Authorization` header using the Bearer scheme:
+
+```bash
+Authorization: Bearer ak_test_your_key_here
+```
+
+## Key formats
+
+API keys are prefixed to indicate their environment:
+
+| Prefix | Environment | Purpose |
+|--------|-------------|---------|
+| `ak_test_` | Sandbox | Testing and development — no real money moves |
+| `ak_live_` | Production | Real payouts with real money |
+
+<Warning>
+  **Never expose live API keys.** Store them in environment variables or a secrets manager. Never commit them to version control, embed them in client-side code, or log them.
+</Warning>
+
+## Key management
+
+You can create, list, and revoke API keys through the API or the merchant dashboard.
+
+### Create a key
+
+```bash
+curl https://api.antonpayments.com/v1/api-keys \
+  -X POST \
+  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production server",
+    "environment": "live"
+  }'
+```
+
+<Info>
+  The full API key is only returned **once** at creation time. We hash keys with SHA-256 before storage — we cannot retrieve the original key for you. Save it securely immediately.
+</Info>
+
+### Revoke a key
+
+If a key is compromised, revoke it immediately:
+
+```bash
+curl https://api.antonpayments.com/v1/api-keys/key_abc123/revoke \
+  -X POST \
+  -H "Authorization: Bearer ak_test_your_key_here"
+```
+
+Revoked keys stop working immediately. There is no undo.
+
+## Security best practices
+
+<AccordionGroup>
+  <Accordion title="Rotate keys regularly" icon="arrows-rotate">
+    Create a new key, update your systems to use it, then revoke the old key. This limits exposure if a key is leaked.
+  </Accordion>
+  <Accordion title="Use separate keys per environment" icon="layer-group">
+    Never use production keys in development. Create dedicated test keys for sandbox.
+  </Accordion>
+  <Accordion title="Restrict server-side only" icon="server">
+    API keys should only be used from your backend servers. Never include them in mobile apps, browser JavaScript, or client-side code.
+  </Accordion>
+  <Accordion title="Monitor key usage" icon="chart-line">
+    Review your API key list periodically. Revoke any keys that are no longer in use or that you don't recognize.
+  </Accordion>
+</AccordionGroup>
+
+## Error responses
+
+If authentication fails, you'll receive a `401 Unauthorized` response:
+
+```json
+{
+  "error": {
+    "code": 401,
+    "message": "Invalid or missing API key"
+  }
+}
+```
+
+Common causes:
+- Missing `Authorization` header
+- Malformed header (must be `Bearer <key>`, not just the key)
+- Revoked or expired key
+- Using a test key against production (or vice versa)

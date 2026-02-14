@@ -1,68 +1,221 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "theme": "quill",
+  "name": "Anton Payments",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#2563EB",
+    "light": "#3B82F6",
+    "dark": "#1D4ED8",
+    "background": {
+      "dark": "#0A1628"
+    }
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "openapi": ["/openapi.yaml"],
+  "api": {
+    "baseUrl": ["https://api.antonpayments.com", "https://api.staging.antonpayments.com", "http://localhost:8080"],
+    "auth": {
+      "method": "bearer",
+      "name": "Authorization"
+    },
+    "playground": {
+      "mode": "simple"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "authentication",
+              "environments"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/payouts",
+              "concepts/beneficiaries",
+              "concepts/balances",
+              "concepts/webhooks",
+              "concepts/pagination",
+              "concepts/errors",
+              "concepts/idempotency"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/send-a-payout",
+              "guides/manage-beneficiaries",
+              "guides/handle-webhooks",
+              "guides/batch-payouts",
+              "guides/error-handling",
+              "guides/going-live"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Payouts",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/payouts/create-payout",
+              "api-reference/payouts/list-payouts",
+              "api-reference/payouts/get-payout",
+              "api-reference/payouts/cancel-payout"
+            ]
+          },
+          {
+            "group": "Beneficiaries",
+            "pages": [
+              "api-reference/beneficiaries/create-beneficiary",
+              "api-reference/beneficiaries/list-beneficiaries",
+              "api-reference/beneficiaries/get-beneficiary",
+              "api-reference/beneficiaries/delete-beneficiary"
+            ]
+          },
+          {
+            "group": "Instruments",
+            "pages": [
+              "api-reference/instruments/create-instrument",
+              "api-reference/instruments/list-instruments",
+              "api-reference/instruments/list-beneficiary-instruments",
+              "api-reference/instruments/get-instrument",
+              "api-reference/instruments/update-instrument",
+              "api-reference/instruments/delete-instrument"
+            ]
+          },
+          {
+            "group": "Balances",
+            "pages": [
+              "api-reference/balances/list-balances",
+              "api-reference/balances/get-balance"
+            ]
+          },
+          {
+            "group": "Quotes",
+            "pages": [
+              "api-reference/quotes/get-quote"
+            ]
+          },
+          {
+            "group": "Batches",
+            "pages": [
+              "api-reference/batches/upload-batch",
+              "api-reference/batches/list-batches",
+              "api-reference/batches/get-batch",
+              "api-reference/batches/get-batch-payouts",
+              "api-reference/batches/confirm-batch",
+              "api-reference/batches/cancel-batch",
+              "api-reference/batches/download-template",
+              "api-reference/batches/get-batch-errors",
+              "api-reference/batches/get-batch-results"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "api-reference/webhooks/create-subscription",
+              "api-reference/webhooks/list-subscriptions",
+              "api-reference/webhooks/get-subscription",
+              "api-reference/webhooks/deactivate-subscription",
+              "api-reference/webhooks/delete-subscription",
+              "api-reference/webhooks/list-events",
+              "api-reference/webhooks/get-event",
+              "api-reference/webhooks/list-deliveries"
+            ]
+          },
+          {
+            "group": "API Keys",
+            "pages": [
+              "api-reference/api-keys/create-api-key",
+              "api-reference/api-keys/list-api-keys",
+              "api-reference/api-keys/revoke-api-key"
+            ]
+          },
+          {
+            "group": "Onboarding",
+            "pages": [
+              "api-reference/onboarding/register",
+              "api-reference/onboarding/get-application",
+              "api-reference/onboarding/update-draft",
+              "api-reference/onboarding/submit-application",
+              "api-reference/onboarding/get-status"
+            ]
+          },
+          {
+            "group": "Documents",
+            "pages": [
+              "api-reference/documents/upload-document",
+              "api-reference/documents/list-documents",
+              "api-reference/documents/get-document"
+            ]
+          },
+          {
+            "group": "RFIs",
+            "pages": [
+              "api-reference/rfis/list-rfis",
+              "api-reference/rfis/get-rfi",
+              "api-reference/rfis/respond-to-rfi"
+            ]
+          },
+          {
+            "group": "Corridors",
+            "pages": [
+              "api-reference/corridors/list-corridors"
+            ]
+          },
+          {
+            "group": "Risk Rules",
+            "pages": [
+              "api-reference/risk-rules/list-rules"
+            ]
+          },
+          {
+            "group": "Merchant",
+            "pages": [
+              "api-reference/merchant/get-merchant"
+            ]
+          },
+          {
+            "group": "User Management",
+            "pages": [
+              "api-reference/user/get-profile",
+              "api-reference/user/update-profile",
+              "api-reference/user/get-mfa",
+              "api-reference/user/enroll-mfa",
+              "api-reference/user/change-password"
+            ]
+          },
+          {
+            "group": "Notifications",
+            "pages": [
+              "api-reference/notifications/list-event-types",
+              "api-reference/notifications/list-channels",
+              "api-reference/notifications/create-channel",
+              "api-reference/notifications/update-channel",
+              "api-reference/notifications/delete-channel",
+              "api-reference/notifications/test-channel",
+              "api-reference/notifications/list-preferences",
+              "api-reference/notifications/update-preferences"
             ]
           }
         ]
@@ -71,52 +224,54 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
+          "anchor": "API Status",
+          "href": "https://status.antonpayments.com",
+          "icon": "signal"
         },
         {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "Support",
+          "href": "mailto:support@antonpayments.com",
+          "icon": "envelope"
         }
       ]
     }
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
   "navbar": {
     "links": [
       {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "label": "Dashboard",
+        "href": "https://app.antonpayments.com"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "Get API Keys",
+      "href": "https://app.antonpayments.com"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/anton-payments",
+      "linkedin": "https://linkedin.com/company/antonpayments",
+      "x": "https://x.com/antonpayments"
     }
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "cursor",
+      "vscode"
+    ]
   },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
-  }
+  "seo": {
+    "indexHiddenPages": false
+  },
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true
+  },
+  "analytics": {}
 }

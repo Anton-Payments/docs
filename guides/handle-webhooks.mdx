@@ -1,0 +1,212 @@
+---
+title: "Handle Webhooks"
+sidebarTitle: "Handle Webhooks"
+description: "Set up a webhook endpoint to receive real-time payout and event notifications from Anton."
+---
+
+## Overview
+
+Webhooks let you react to events in real time instead of polling the API. This guide covers setting up a subscription, building an endpoint, and handling events reliably.
+
+## 1. Create a webhook subscription
+
+Register your endpoint URL and choose which events to listen for:
+
+```bash
+curl https://api.antonpayments.com/v1/webhooks \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-server.com/webhooks/anton",
+    "events": [
+      "payout.completed",
+      "payout.failed",
+      "payout.returned"
+    ]
+  }'
+```
+
+```json Response
+{
+  "data": {
+    "id": "wbh_cng3q8s6ek9kc5qg1h4g",
+    "url": "https://your-server.com/webhooks/anton",
+    "events": ["payout.completed", "payout.failed", "payout.returned"],
+    "status": "active",
+    "created_at": "2026-02-14T10:00:00Z"
+  }
+}
+```
+
+## 2. Build your endpoint
+
+Your webhook endpoint must:
+- Accept `POST` requests with a `Content-Type: application/json` body
+- Return a `2xx` status code within 30 seconds
+- Be publicly accessible (not behind a VPN or firewall)
+
+<CodeGroup>
+
+```javascript Express.js
+const express = require("express");
+const app = express();
+
+app.use(express.json());
+
+app.post("/webhooks/anton", (req, res) => {
+  const event = req.body;
+
+  console.log(`Received event: ${event.type} for ${event.data.id}`);
+
+  switch (event.type) {
+    case "payout.completed":
+      // Mark the invoice as paid in your system
+      markInvoicePaid(event.data.reference);
+      break;
+
+    case "payout.failed":
+      // Alert your team and flag for retry
+      notifyPayoutFailed(event.data);
+      break;
+
+    case "payout.returned":
+      // Credit the funds back in your system
+      handlePayoutReturn(event.data);
+      break;
+  }
+
+  // Always return 200 quickly — do heavy processing async
+  res.status(200).json({ received: true });
+});
+
+app.listen(3000);
+```
+
+```python FastAPI
+from fastapi import FastAPI, Request
+
+app = FastAPI()
+
+@app.post("/webhooks/anton")
+async def handle_webhook(request: Request):
+    event = await request.json()
+
+    print(f"Received event: {event['type']} for {event['data']['id']}")
+
+    match event["type"]:
+        case "payout.completed":
+            # Mark the invoice as paid in your system
+            await mark_invoice_paid(event["data"]["reference"])
+        case "payout.failed":
+            # Alert your team and flag for retry
+            await notify_payout_failed(event["data"])
+        case "payout.returned":
+            # Credit the funds back in your system
+            await handle_payout_return(event["data"])
+
+    # Always return 200 quickly
+    return {"received": True}
+```
+
+```go Go
+package main
+
+import (
+    "encoding/json"
+    "log"
+    "net/http"
+)
+
+type WebhookEvent struct {
+    ID        string          `json:"id"`
+    Type      string          `json:"type"`
+    CreatedAt string          `json:"created_at"`
+    Data      json.RawMessage `json:"data"`
+}
+
+func handleWebhook(w http.ResponseWriter, r *http.Request) {
+    var event WebhookEvent
+    if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+        http.Error(w, "bad request", 400)
+        return
+    }
+
+    log.Printf("Received event: %s", event.Type)
+
+    switch event.Type {
+    case "payout.completed":
+        // Mark the invoice as paid
+    case "payout.failed":
+        // Alert your team
+    case "payout.returned":
+        // Handle the return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]bool{"received": true})
+}
+
+func main() {
+    http.HandleFunc("/webhooks/anton", handleWebhook)
+    log.Fatal(http.ListenAndServe(":3000", nil))
+}
+```
+
+</CodeGroup>
+
+## 3. Handle failures gracefully
+
+<Steps>
+  <Step title="Return 200 immediately">
+    Acknowledge receipt quickly. If processing takes time, queue it for async handling. Anton times out after 30 seconds and will retry.
+  </Step>
+  <Step title="Make it idempotent">
+    You may receive the same event more than once (retries). Use the `event.id` to deduplicate — store processed event IDs and skip duplicates.
+  </Step>
+  <Step title="Handle out-of-order">
+    Events might arrive out of order. A `payout.completed` could arrive before `payout.processing`. Use the `created_at` timestamp or the payout's actual status to determine the true state.
+  </Step>
+</Steps>
+
+## 4. Monitor deliveries
+
+Check the delivery history for a webhook event:
+
+```bash
+curl https://api.antonpayments.com/v1/webhooks/events/evt_abc123/deliveries \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+This returns each delivery attempt with status codes, response times, and error details.
+
+## Testing locally
+
+For local development, use a tunnel service to expose your local endpoint:
+
+```bash
+# Using ngrok
+ngrok http 3000
+
+# Your webhook URL will be something like:
+# https://abc123.ngrok.io/webhooks/anton
+```
+
+Register this temporary URL as your webhook endpoint in sandbox.
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Respond fast" icon="bolt">
+    Return `200` within 5 seconds. Queue heavy processing for later.
+  </Card>
+  <Card title="Deduplicate" icon="fingerprint">
+    Track event IDs to prevent processing the same event twice.
+  </Card>
+  <Card title="Log everything" icon="pencil">
+    Log the full event payload for debugging and audit.
+  </Card>
+  <Card title="Set up alerts" icon="bell">
+    Monitor for delivery failures — if your endpoint goes down, events queue up.
+  </Card>
+</CardGroup>

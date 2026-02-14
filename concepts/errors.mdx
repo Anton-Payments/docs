@@ -1,0 +1,144 @@
+---
+title: "Errors"
+sidebarTitle: "Errors"
+description: "How the Anton Payments API communicates errors and what each status code means."
+---
+
+## Error format
+
+When a request fails, the API returns a JSON error response with an HTTP status code:
+
+```json
+{
+  "error": {
+    "code": 422,
+    "message": "Validation failed: amount must be greater than 0"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `code` | integer | The HTTP status code |
+| `message` | string | A human-readable description of what went wrong |
+
+## HTTP status codes
+
+### Success codes
+
+| Code | Meaning |
+|------|---------|
+| `200 OK` | Request succeeded |
+| `201 Created` | Resource created successfully |
+| `204 No Content` | Request succeeded, no body returned (e.g., delete) |
+
+### Client error codes
+
+| Code | Meaning | What to do |
+|------|---------|------------|
+| `400 Bad Request` | Invalid request body or parameters | Check the `message` field for specifics. Fix the request and retry. |
+| `401 Unauthorized` | Missing or invalid API key | Check your `Authorization` header. Ensure the key isn't revoked. |
+| `403 Forbidden` | Valid key but insufficient permissions | Your key doesn't have access to this resource or action. |
+| `404 Not Found` | Resource doesn't exist | Check the ID in your URL. The resource may have been deleted. |
+| `409 Conflict` | State conflict (e.g., cancelling a completed payout) | The resource can't transition to the requested state. Check current status. |
+| `422 Unprocessable Entity` | Validation error | The request body is syntactically valid JSON but semantically wrong. |
+| `429 Too Many Requests` | Rate limit exceeded | Back off and retry after the `Retry-After` header value. |
+
+### Server error codes
+
+| Code | Meaning | What to do |
+|------|---------|------------|
+| `500 Internal Server Error` | Something went wrong on our end | Retry with exponential backoff. If persistent, contact support. |
+| `502 Bad Gateway` | Upstream service unavailable | Retry in a few seconds. |
+| `503 Service Unavailable` | Service temporarily unavailable | Retry with backoff. Check status page. |
+
+## Rate limiting
+
+The API enforces rate limits per IP address. When exceeded, you'll receive a `429` response:
+
+```json
+{
+  "error": {
+    "code": 429,
+    "message": "Rate limit exceeded. Retry after 30 seconds."
+  }
+}
+```
+
+Check the `Retry-After` response header for the number of seconds to wait.
+
+## Handling errors in code
+
+<CodeGroup>
+
+```javascript Node.js
+const response = await fetch("https://api.antonpayments.com/v1/payouts", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(payoutData),
+});
+
+if (!response.ok) {
+  const error = await response.json();
+
+  switch (response.status) {
+    case 400:
+    case 422:
+      // Fix the request - don't retry
+      console.error("Validation error:", error.error.message);
+      break;
+    case 401:
+      // Check API key
+      console.error("Authentication failed");
+      break;
+    case 429:
+      // Back off and retry
+      const retryAfter = response.headers.get("Retry-After") || 30;
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      // ... retry the request
+      break;
+    case 500:
+    case 502:
+    case 503:
+      // Retry with backoff
+      // ... implement exponential backoff
+      break;
+  }
+}
+```
+
+```python Python
+import requests
+import time
+
+response = requests.post(
+    "https://api.antonpayments.com/v1/payouts",
+    headers={"Authorization": f"Bearer {api_key}"},
+    json=payout_data,
+)
+
+if not response.ok:
+    error = response.json()
+
+    if response.status_code in (400, 422):
+        # Fix the request - don't retry
+        print(f"Validation error: {error['error']['message']}")
+    elif response.status_code == 401:
+        print("Authentication failed")
+    elif response.status_code == 429:
+        retry_after = int(response.headers.get("Retry-After", 30))
+        time.sleep(retry_after)
+        # ... retry the request
+    elif response.status_code >= 500:
+        # Retry with backoff
+        pass
+```
+
+</CodeGroup>
+
+<Tip>
+  **Never retry 4xx errors** (except 429). They indicate a problem with your request that won't be fixed by retrying. Only retry 5xx errors and rate limit (429) responses.
+</Tip>

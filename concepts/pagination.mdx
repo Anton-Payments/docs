@@ -1,0 +1,121 @@
+---
+title: "Pagination"
+sidebarTitle: "Pagination"
+description: "How to paginate through list endpoints in the Anton Payments API."
+---
+
+## Overview
+
+All list endpoints return paginated results. The Anton API uses **offset-based pagination** with `limit` and `offset` query parameters.
+
+## Parameters
+
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 20 | 100 | Number of items per page |
+| `offset` | integer | 0 | — | Number of items to skip |
+
+## Response format
+
+Every list response includes a `pagination` object:
+
+```json
+{
+  "data": [
+    { "id": "pay_abc123", "status": "completed", "amount": "500.00" },
+    { "id": "pay_def456", "status": "processing", "amount": "1200.00" }
+  ],
+  "pagination": {
+    "total": 142,
+    "limit": 20,
+    "offset": 0
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `total` | Total number of items matching your query |
+| `limit` | Items per page (echoes your request) |
+| `offset` | Current offset (echoes your request) |
+
+## Iterating through pages
+
+To get the next page, increment `offset` by `limit`:
+
+<CodeGroup>
+
+```bash cURL
+# Page 1
+curl "https://api.antonpayments.com/v1/payouts?limit=20&offset=0" \
+  -H "Authorization: Bearer ak_test_..."
+
+# Page 2
+curl "https://api.antonpayments.com/v1/payouts?limit=20&offset=20" \
+  -H "Authorization: Bearer ak_test_..."
+
+# Page 3
+curl "https://api.antonpayments.com/v1/payouts?limit=20&offset=40" \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+```javascript Node.js
+async function getAllPayouts(apiKey) {
+  const payouts = [];
+  let offset = 0;
+  const limit = 100;
+
+  while (true) {
+    const response = await fetch(
+      `https://api.antonpayments.com/v1/payouts?limit=${limit}&offset=${offset}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    const json = await response.json();
+    payouts.push(...json.data);
+
+    if (offset + limit >= json.pagination.total) break;
+    offset += limit;
+  }
+
+  return payouts;
+}
+```
+
+```python Python
+import requests
+
+def get_all_payouts(api_key):
+    payouts = []
+    offset = 0
+    limit = 100
+
+    while True:
+        response = requests.get(
+            f"https://api.antonpayments.com/v1/payouts?limit={limit}&offset={offset}",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        data = response.json()
+        payouts.extend(data["data"])
+
+        if offset + limit >= data["pagination"]["total"]:
+            break
+        offset += limit
+
+    return payouts
+```
+
+</CodeGroup>
+
+## Tips
+
+<AccordionGroup>
+  <Accordion title="Use the maximum page size" icon="gauge-high">
+    Set `limit=100` to minimize the number of API calls when fetching all items.
+  </Accordion>
+  <Accordion title="Check total before iterating" icon="calculator">
+    The `total` field tells you how many pages you'll need. Use it to display progress or estimate completion time.
+  </Accordion>
+  <Accordion title="Don't paginate past the end" icon="flag-checkered">
+    Stop when `offset + limit >= total`. Requesting an offset beyond the total returns an empty `data` array.
+  </Accordion>
+</AccordionGroup>

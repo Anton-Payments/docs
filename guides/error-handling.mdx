@@ -1,0 +1,226 @@
+---
+title: "Error Handling"
+sidebarTitle: "Error Handling"
+description: "Build robust integrations with proper error handling, retries, and recovery strategies."
+---
+
+## Overview
+
+A production-quality integration needs to handle every possible failure case. This guide covers strategies for dealing with API errors, network issues, and edge cases.
+
+## Retry strategy
+
+Not all errors should be retried. Here's how to decide:
+
+| Status Code | Action | Retry? |
+|-------------|--------|--------|
+| `400` Bad Request | Fix the request payload | **No** |
+| `401` Unauthorized | Check your API key | **No** |
+| `403` Forbidden | Check permissions | **No** |
+| `404` Not Found | Check the resource ID | **No** |
+| `409` Conflict | Check resource state | **No** |
+| `422` Validation | Fix the validation error | **No** |
+| `429` Rate Limited | Wait and retry | **Yes** — respect `Retry-After` |
+| `500` Server Error | Retry with backoff | **Yes** |
+| `502` Bad Gateway | Retry with backoff | **Yes** |
+| `503` Unavailable | Retry with backoff | **Yes** |
+
+## Exponential backoff
+
+For retryable errors, use exponential backoff with jitter:
+
+<CodeGroup>
+
+```javascript Node.js
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      // Don't retry client errors (except 429)
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        return response;
+      }
+
+      // Retry rate limits
+      if (response.status === 429) {
+        const retryAfter = parseInt(response.headers.get("Retry-After") || "5");
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+
+      // Retry server errors
+      if (response.status >= 500) {
+        if (attempt < maxRetries) {
+          await sleep(getBackoff(attempt));
+          continue;
+        }
+      }
+
+      return response;
+    } catch (err) {
+      // Network error — retry
+      if (attempt < maxRetries) {
+        await sleep(getBackoff(attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+function getBackoff(attempt) {
+  const base = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s, 8s...
+  const jitter = Math.random() * 1000;       // 0-1s random jitter
+  return base + jitter;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+```
+
+```python Python
+import time
+import random
+import requests
+
+def fetch_with_retry(method, url, max_retries=3, **kwargs):
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.request(method, url, **kwargs)
+
+            # Don't retry client errors (except 429)
+            if 400 <= response.status_code < 500 and response.status_code != 429:
+                return response
+
+            # Retry rate limits
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 5))
+                time.sleep(retry_after)
+                continue
+
+            # Retry server errors
+            if response.status_code >= 500:
+                if attempt < max_retries:
+                    time.sleep(get_backoff(attempt))
+                    continue
+
+            return response
+
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries:
+                time.sleep(get_backoff(attempt))
+                continue
+            raise
+
+def get_backoff(attempt):
+    base = (2 ** attempt)  # 1s, 2s, 4s, 8s...
+    jitter = random.random()  # 0-1s random jitter
+    return base + jitter
+```
+
+</CodeGroup>
+
+## Payout-specific error handling
+
+### Insufficient balance
+
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "Insufficient balance: available USD 5000.00, required USD 10000.00"
+  }
+}
+```
+
+**Don't retry.** Instead:
+1. Check your current balance
+2. Wait for pending payouts to complete (releasing held funds)
+3. Fund your account if needed
+4. Then retry the payout
+
+### Duplicate idempotency key
+
+```json
+{
+  "error": {
+    "code": 409,
+    "message": "Idempotency key already used with different request body"
+  }
+}
+```
+
+**Don't retry with the same key.** This means you reused an idempotency key with a different payload. Generate a new key for the new request.
+
+### Invalid state transition
+
+```json
+{
+  "error": {
+    "code": 409,
+    "message": "Cannot cancel payout in status 'completed'"
+  }
+}
+```
+
+**Don't retry.** The payout has already progressed past the point where this action is valid. Fetch the current payout status to understand the actual state.
+
+## Circuit breaker pattern
+
+If you're making many API calls, implement a circuit breaker to fail fast when the API is having issues:
+
+```javascript
+class CircuitBreaker {
+  constructor(threshold = 5, resetTimeout = 60000) {
+    this.failures = 0;
+    this.threshold = threshold;
+    this.resetTimeout = resetTimeout;
+    this.state = "closed"; // closed = normal, open = failing
+    this.nextAttempt = 0;
+  }
+
+  async call(fn) {
+    if (this.state === "open") {
+      if (Date.now() < this.nextAttempt) {
+        throw new Error("Circuit breaker is open — API unavailable");
+      }
+      this.state = "half-open";
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (err) {
+      this.onFailure();
+      throw err;
+    }
+  }
+
+  onSuccess() {
+    this.failures = 0;
+    this.state = "closed";
+  }
+
+  onFailure() {
+    this.failures++;
+    if (this.failures >= this.threshold) {
+      this.state = "open";
+      this.nextAttempt = Date.now() + this.resetTimeout;
+    }
+  }
+}
+```
+
+## Testing error scenarios
+
+In sandbox, you can trigger specific error conditions to test your error handling:
+
+| Scenario | How to trigger |
+|----------|---------------|
+| Insufficient balance | Create a payout larger than your sandbox balance |
+| Invalid beneficiary | Use a non-existent beneficiary ID |
+| Validation error | Omit required fields or use invalid values |
+| Rate limiting | Send many requests rapidly from the same IP |

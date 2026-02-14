@@ -1,0 +1,95 @@
+---
+title: "Manage Beneficiaries"
+sidebarTitle: "Manage Beneficiaries"
+description: "Best practices for creating, organizing, and managing payout recipients."
+---
+
+## Overview
+
+Beneficiaries are the recipients of your payouts. This guide covers best practices for managing them at scale — creating different types, attaching multiple payment instruments, and handling common scenarios.
+
+## Individual vs. business beneficiaries
+
+Choose the right type based on who you're paying:
+
+| Type | Use when | Required fields |
+|------|----------|----------------|
+| `individual` | Paying a person (freelancer, contractor, employee, refund customer) | `first_name`, `last_name`, `country`, `currency` |
+| `business` | Paying a company (supplier, vendor, partner) | `company_name`, `country`, `currency` |
+
+## Adding payment instruments
+
+A beneficiary can have multiple **instruments** — different ways to receive payment. For example, a contractor might have both a US bank account and a UK bank account.
+
+### Create the beneficiary first
+
+```bash
+curl https://api.antonpayments.com/v1/beneficiaries \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "individual",
+    "first_name": "Alex",
+    "last_name": "Chen",
+    "email": "alex@example.com",
+    "country": "US",
+    "currency": "USD"
+  }'
+```
+
+### Then add instruments
+
+```bash
+# US bank account
+curl https://api.antonpayments.com/v1/beneficiaries/ben_abc123/instruments \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "bank_account",
+    "currency": "USD",
+    "details": {
+      "account_number": "9876543210",
+      "routing_number": "021000021"
+    }
+  }'
+```
+
+## Listing and filtering
+
+Retrieve beneficiaries with pagination:
+
+```bash
+# All beneficiaries
+curl "https://api.antonpayments.com/v1/beneficiaries?limit=50" \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+## Deletion considerations
+
+<Warning>
+  Beneficiary deletion is permanent and cannot be undone. Before deleting, ensure there are no active or pending payouts to this beneficiary.
+</Warning>
+
+When you delete a beneficiary:
+- **In-progress payouts** to that beneficiary will still complete
+- **New payouts** to that beneficiary will fail
+- **Historical data** (completed payouts) is preserved for audit
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Validate bank details early" icon="check">
+    Create beneficiaries and verify their details well before you need to send a payout. This catches errors (wrong account number, invalid routing number) before time-sensitive payments.
+  </Accordion>
+  <Accordion title="Use email for notifications" icon="envelope">
+    Include the beneficiary's email when creating them. This allows Anton to send delivery confirmations where applicable.
+  </Accordion>
+  <Accordion title="One beneficiary per recipient" icon="user">
+    Don't create duplicate beneficiaries for the same person. Use instruments to add multiple payment methods to a single beneficiary.
+  </Accordion>
+  <Accordion title="Store your mapping" icon="database">
+    Keep a mapping between your internal user/vendor IDs and Anton beneficiary IDs. This makes it easy to create payouts from your business logic.
+  </Accordion>
+</AccordionGroup>

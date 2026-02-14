@@ -1,80 +1,203 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+sidebarTitle: "Quickstart"
+description: "Send your first payout in under 5 minutes using the Anton Payments API."
 ---
 
-## Get started in three steps
+## Before you begin
 
-Get your documentation site running locally and make your first customization.
+You'll need an Anton Payments account and an API key. If you don't have one yet, [register for a sandbox account](https://app.antonpayments.com) or contact our team.
 
-### Step 1: Set up your local environment
+<Info>
+  **Sandbox mode** — All examples use test API keys (`ak_test_...`). No real money moves in sandbox. Switch to `ak_live_...` keys when you're ready for production.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 1: Authenticate
 
-### Step 2: Deploy your changes
+Every API request requires a Bearer token in the `Authorization` header. Your API key looks like `ak_test_...` (sandbox) or `ak_live_...` (production).
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```bash
+curl https://api.antonpayments.com/v1/merchant \
+  -H "Authorization: Bearer ak_test_your_key_here"
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Check>
+  If you get back your merchant profile, you're authenticated and ready to go.
+</Check>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 2: Create a beneficiary
 
-### Step 3: Go live
+Before you can send money, you need to register the recipient. A beneficiary stores the recipient's identity and payment details.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<CodeGroup>
 
-## Next steps
+```bash cURL
+curl https://api.antonpayments.com/v1/beneficiaries \
+  -X POST \
+  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "individual",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "country": "GB",
+    "currency": "GBP",
+    "bank_account": {
+      "account_number": "12345678",
+      "sort_code": "123456"
+    }
+  }'
+```
 
-Now that you have your docs running, explore these key features:
+```javascript Node.js
+const beneficiary = await fetch("https://api.antonpayments.com/v1/beneficiaries", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ak_test_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    type: "individual",
+    first_name: "Jane",
+    last_name: "Smith",
+    email: "jane@example.com",
+    country: "GB",
+    currency: "GBP",
+    bank_account: {
+      account_number: "12345678",
+      sort_code: "123456",
+    },
+  }),
+});
+
+const data = await beneficiary.json();
+console.log(data.data.id); // ben_cng3q8s...
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.antonpayments.com/v1/beneficiaries",
+    headers={"Authorization": "Bearer ak_test_your_key_here"},
+    json={
+        "type": "individual",
+        "first_name": "Jane",
+        "last_name": "Smith",
+        "email": "jane@example.com",
+        "country": "GB",
+        "currency": "GBP",
+        "bank_account": {
+            "account_number": "12345678",
+            "sort_code": "123456",
+        },
+    },
+)
+
+beneficiary = response.json()
+print(beneficiary["data"]["id"])  # ben_cng3q8s...
+```
+
+</CodeGroup>
+
+Save the `id` from the response — you'll need it in the next step.
+
+## Step 3: Send a payout
+
+Now send money to your beneficiary. The payout goes through compliance screening and routing automatically.
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.antonpayments.com/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "amount": "250.00",
+    "currency": "GBP",
+    "description": "Invoice #1042 payment",
+    "reference": "INV-1042"
+  }'
+```
+
+```javascript Node.js
+const payout = await fetch("https://api.antonpayments.com/v1/payouts", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer ak_test_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    beneficiary_id: "ben_cng3q8s6ek9kc5qg1h1g",
+    amount: "250.00",
+    currency: "GBP",
+    description: "Invoice #1042 payment",
+    reference: "INV-1042",
+  }),
+});
+
+const data = await payout.json();
+console.log(data.data.id);     // pay_cng3q8s...
+console.log(data.data.status); // "created"
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.antonpayments.com/v1/payouts",
+    headers={"Authorization": "Bearer ak_test_your_key_here"},
+    json={
+        "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+        "amount": "250.00",
+        "currency": "GBP",
+        "description": "Invoice #1042 payment",
+        "reference": "INV-1042",
+    },
+)
+
+payout = response.json()
+print(payout["data"]["id"])      # pay_cng3q8s...
+print(payout["data"]["status"])  # "created"
+```
+
+</CodeGroup>
+
+## Step 4: Check the status
+
+Poll the payout to see it progress through the lifecycle:
+
+```bash
+curl https://api.antonpayments.com/v1/payouts/pay_cng3q8s6ek9kc5qg1h2g \
+  -H "Authorization: Bearer ak_test_your_key_here"
+```
+
+The payout moves through these statuses:
+
+```
+created → pending_screening → processing → sent → completed ✓
+```
+
+<Tip>
+  **Don't poll — use webhooks.** Set up a [webhook subscription](/guides/handle-webhooks) to get notified instantly when payout status changes. Polling is fine for testing, but webhooks are the way to go in production.
+</Tip>
+
+## What's next?
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Payout lifecycle" icon="arrows-spin" href="/concepts/payouts">
+    Understand every status a payout can be in and what triggers transitions.
+  </Card>
+  <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
+    Set up real-time notifications for payout events.
+  </Card>
+  <Card title="Batch payouts" icon="layer-group" href="/guides/batch-payouts">
+    Send thousands of payouts at once via CSV upload.
+  </Card>
+  <Card title="Go live" icon="rocket" href="/guides/going-live">
+    Checklist for moving from sandbox to production.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

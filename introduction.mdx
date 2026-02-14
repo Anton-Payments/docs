@@ -1,0 +1,93 @@
+---
+title: "Introduction"
+sidebarTitle: "Introduction"
+description: "Anton Payments is a cross-border payout platform that helps businesses move money globally across bank transfers, cards, mobile money, and stablecoins."
+---
+
+## What is Anton Payments?
+
+Anton Payments provides a single API for businesses to send payouts worldwide. Instead of integrating with dozens of payment providers, banks, and rails individually, you connect once to Anton and we handle routing, compliance, and delivery.
+
+<CardGroup cols={2}>
+  <Card title="Multi-rail payments" icon="route">
+    Send payouts via SWIFT, SEPA, ACH, FPS, mobile money, cards, and crypto — all through one API.
+  </Card>
+  <Card title="Compliance built-in" icon="shield-check">
+    Automated OFAC screening, PEP checks, velocity rules, and maker-checker approvals.
+  </Card>
+  <Card title="Real-time visibility" icon="eye">
+    Track every payout through its lifecycle with webhooks and status polling.
+  </Card>
+  <Card title="Double-entry ledger" icon="scale-balanced">
+    Every money movement creates balanced debit/credit entries. Your books are always accurate.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Create a beneficiary">
+    Register who you're paying — their bank account, mobile wallet, or card details.
+  </Step>
+  <Step title="Send a payout">
+    Call the Payouts API with the amount, currency, and beneficiary. Anton screens the transaction, routes it to the optimal rail, and delivers the funds.
+  </Step>
+  <Step title="Track delivery">
+    Receive webhook notifications as the payout moves through screening, processing, and delivery. Or poll the status endpoint anytime.
+  </Step>
+</Steps>
+
+## Quick links
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get your first payout sent in 5 minutes.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn how API key authentication works.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Full reference for every endpoint.
+  </Card>
+</CardGroup>
+
+## Core resources
+
+| Resource | Description |
+|----------|-------------|
+| **[Payouts](/concepts/payouts)** | The core object — represents a money movement from your account to a beneficiary. |
+| **[Beneficiaries](/concepts/beneficiaries)** | The recipients of your payouts. Store their details once, pay them repeatedly. |
+| **[Balances](/concepts/balances)** | Your funded accounts in each currency. Payouts debit from these balances. |
+| **[Webhooks](/concepts/webhooks)** | Real-time notifications when payout status changes, deliveries complete, or issues arise. |
+
+## SDKs and tools
+
+We provide a RESTful JSON API. While official SDKs are coming soon, the API works with any HTTP client:
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.antonpayments.com/v1/payouts \
+  -H "Authorization: Bearer ak_live_..." \
+  -H "Content-Type: application/json"
+```
+
+```javascript Node.js
+const response = await fetch("https://api.antonpayments.com/v1/payouts", {
+  headers: {
+    "Authorization": "Bearer ak_live_...",
+    "Content-Type": "application/json",
+  },
+});
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://api.antonpayments.com/v1/payouts",
+    headers={"Authorization": "Bearer ak_live_..."},
+)
+```
+
+</CodeGroup>

@@ -1,0 +1,92 @@
+---
+title: "Balances"
+sidebarTitle: "Balances"
+description: "Understand how merchant balances work — available funds, held amounts, and multi-currency accounts."
+---
+
+## Overview
+
+Your Anton Payments account holds balances in multiple currencies. Before you can send payouts, you need sufficient funds in the payout's currency.
+
+## Balance structure
+
+Each currency balance has three components:
+
+| Field | Description |
+|-------|-------------|
+| `available` | Funds you can use for new payouts right now |
+| `held` | Funds reserved for payouts that are in progress (created but not yet completed) |
+| `total` | `available + held` — your total balance in this currency |
+
+When you create a payout:
+1. The payout amount moves from `available` to `held`
+2. When the payout completes, the `held` amount is released (deducted from total)
+3. If the payout is cancelled, the `held` amount returns to `available`
+
+## Checking balances
+
+### All currencies
+
+```bash
+curl https://api.antonpayments.com/v1/balances \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+```json Response
+{
+  "data": [
+    {
+      "currency": "USD",
+      "available": "50000.00",
+      "held": "5000.00",
+      "total": "55000.00"
+    },
+    {
+      "currency": "GBP",
+      "available": "25000.00",
+      "held": "0.00",
+      "total": "25000.00"
+    },
+    {
+      "currency": "EUR",
+      "available": "30000.00",
+      "held": "1500.00",
+      "total": "31500.00"
+    }
+  ]
+}
+```
+
+### Single currency
+
+```bash
+curl https://api.antonpayments.com/v1/balances/USD \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+## Funding your account
+
+<Info>
+  Account funding is managed through the merchant dashboard or by contacting the Anton Payments team. API-based funding is coming in a future release.
+</Info>
+
+In sandbox, your accounts are pre-funded with test balances in multiple currencies.
+
+In production, you fund your account by wire transfer. Contact the Anton team for funding instructions.
+
+## Insufficient funds
+
+If you try to create a payout with insufficient `available` balance, the API returns a `400 Bad Request` error:
+
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "Insufficient balance: available USD 5000.00, required USD 10000.00"
+  }
+}
+```
+
+## FX and cross-currency payouts
+
+If you have a USD balance but need to send GBP, Anton can convert automatically. Request a [quote](/api-reference/quotes/get-quote) first to see the exchange rate, then create the payout with the quoted rate.
