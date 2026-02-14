@@ -5,25 +5,17 @@
   "colors": {
     "primary": "#2563EB",
     "light": "#3B82F6",
-    "dark": "#1D4ED8",
-    "background": {
-      "dark": "#0A1628"
-    }
+    "dark": "#1D4ED8"
   },
   "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
-  "openapi": ["/openapi.yaml"],
   "api": {
-    "baseUrl": ["https://api.antonpayments.com", "https://api.staging.antonpayments.com", "http://localhost:8080"],
-    "auth": {
-      "method": "bearer",
-      "name": "Authorization"
-    },
+    "openapi": ["/openapi.yaml"],
     "playground": {
-      "mode": "simple"
+      "display": "simple"
     }
   },
   "navigation": {
@@ -272,11 +264,6 @@
     ]
   },
   "seo": {
-    "indexHiddenPages": false
-  },
-  "feedback": {
-    "thumbsRating": true,
-    "suggestEdit": true
-  },
-  "analytics": {}
+    "indexing": "navigable"
+  }
 }
