@@ -45,8 +45,8 @@ tags:
     description: Merchant profile management
   - name: Payouts
     description: Create and manage payouts
-  - name: Beneficiaries
-    description: Manage payout beneficiaries
+  - name: Payees
+    description: Manage payout payees
   - name: Balances
     description: Merchant balance queries
   - name: API Keys
@@ -244,13 +244,13 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  # ── Beneficiaries ──────────────────────────────────────────────────
+  # ── Payees ──────────────────────────────────────────────────
 
-  /v1/beneficiaries:
+  /v1/payees:
     post:
-      tags: [Beneficiaries]
-      summary: Create a beneficiary
-      operationId: createBeneficiary
+      tags: [Payees]
+      summary: Create a payee
+      operationId: createPayee
       security:
         - apiKey: []
       requestBody:
@@ -258,20 +258,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateBeneficiaryRequest"
+              $ref: "#/components/schemas/CreatePayeeRequest"
       responses:
         "201":
-          description: Beneficiary created
+          description: Payee created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "400":
           $ref: "#/components/responses/BadRequest"
     get:
-      tags: [Beneficiaries]
-      summary: List beneficiaries
-      operationId: listBeneficiaries
+      tags: [Payees]
+      summary: List payees
+      operationId: listPayees
       security:
         - apiKey: []
       parameters:
@@ -279,41 +279,41 @@ paths:
         - $ref: "#/components/parameters/Offset"
       responses:
         "200":
-          description: Paginated list of beneficiaries
+          description: Paginated list of payees
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BeneficiaryList"
+                $ref: "#/components/schemas/PayeeList"
 
-  /v1/beneficiaries/{id}:
+  /v1/payees/{id}:
     get:
-      tags: [Beneficiaries]
-      summary: Get a beneficiary by ID
-      operationId: getBeneficiary
+      tags: [Payees]
+      summary: Get a payee by ID
+      operationId: getPayee
       security:
         - apiKey: []
       parameters:
         - $ref: "#/components/parameters/ResourceID"
       responses:
         "200":
-          description: Beneficiary details
+          description: Payee details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
-      tags: [Beneficiaries]
-      summary: Delete a beneficiary
-      operationId: deleteBeneficiary
+      tags: [Payees]
+      summary: Delete a payee
+      operationId: deletePayee
       security:
         - apiKey: []
       parameters:
         - $ref: "#/components/parameters/ResourceID"
       responses:
         "204":
-          description: Beneficiary deleted
+          description: Payee deleted
 
   # ── Balances ───────────────────────────────────────────────────────
 
@@ -798,11 +798,11 @@ paths:
 
   # ── Payment Instruments ────────────────────────────────────────────
 
-  /v1/beneficiaries/{id}/instruments:
+  /v1/payees/{id}/instruments:
     post:
       tags: [Instruments]
-      summary: Create a payment instrument for a beneficiary
-      description: Adds a new payment instrument (bank account, card, crypto wallet, etc.) to the specified beneficiary.
+      summary: Create a payment instrument for a payee
+      description: Adds a new payment instrument (bank account, card, crypto wallet, etc.) to the specified payee.
       operationId: createInstrument
       security:
         - apiKey: []
@@ -833,9 +833,9 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       tags: [Instruments]
-      summary: List instruments for a beneficiary
-      description: Returns all payment instruments attached to the specified beneficiary.
-      operationId: listBeneficiaryInstruments
+      summary: List instruments for a payee
+      description: Returns all payment instruments attached to the specified payee.
+      operationId: listPayeeInstruments
       security:
         - apiKey: []
       parameters:
@@ -863,7 +863,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary ID
+          description: Filter by payee ID
         - name: method
           in: query
           schema:
@@ -1603,15 +1603,11 @@ paths:
       security:
         - apiKey: []
       parameters:
-        - name: source_currency
+        - name: currency
           in: query
           schema:
             type: string
-        - name: dest_currency
-          in: query
-          schema:
-            type: string
-        - name: dest_country
+        - name: country
           in: query
           schema:
             type: string
@@ -2210,11 +2206,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/PayoutList"
 
-  /v1/ops/merchants/{id}/beneficiaries:
+  /v1/ops/merchants/{id}/payees:
     get:
       tags: [Merchants]
-      summary: List merchant beneficiaries
-      description: Returns paginated beneficiaries for a specific merchant.
+      summary: List merchant payees
+      description: Returns paginated payees for a specific merchant.
       operationId: listMerchantBeneficiaries
       security:
         - opsAuth: []
@@ -2226,7 +2222,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary status
+          description: Filter by payee status
         - name: country
           in: query
           schema:
@@ -2236,7 +2232,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary type
+          description: Filter by payee type
         - name: search
           in: query
           schema:
@@ -2244,18 +2240,18 @@ paths:
           description: Search by name
       responses:
         "200":
-          description: Paginated list of beneficiaries
+          description: Paginated list of payees
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BeneficiaryList"
+                $ref: "#/components/schemas/PayeeList"
 
-  /v1/ops/merchants/{id}/beneficiaries/{bid}:
+  /v1/ops/merchants/{id}/payees/{bid}:
     get:
       tags: [Merchants]
-      summary: Get a merchant's beneficiary
-      description: Returns a single beneficiary scoped to a specific merchant.
-      operationId: getMerchantBeneficiary
+      summary: Get a merchant's payee
+      description: Returns a single payee scoped to a specific merchant.
+      operationId: getMerchantPayee
       security:
         - opsAuth: []
       parameters:
@@ -2265,14 +2261,14 @@ paths:
           required: true
           schema:
             type: string
-          description: Beneficiary ID
+          description: Payee ID
       responses:
         "200":
-          description: Beneficiary details
+          description: Payee details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2292,7 +2288,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary ID
+          description: Filter by payee ID
         - name: method
           in: query
           schema:
@@ -2437,7 +2433,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary ID
+          description: Filter by payee ID
         - name: batch_id
           in: query
           schema:
@@ -2524,11 +2520,11 @@ paths:
 
   # ── Ops: Beneficiaries ────────────────────────────────────────────
 
-  /v1/ops/beneficiaries:
+  /v1/ops/payees:
     get:
-      tags: [Beneficiaries]
-      summary: List all beneficiaries (cross-merchant)
-      description: Returns paginated beneficiaries across all merchants with optional filters.
+      tags: [Payees]
+      summary: List all payees (cross-merchant)
+      description: Returns paginated payees across all merchants with optional filters.
       operationId: listAllBeneficiaries
       security:
         - opsAuth: []
@@ -2549,7 +2545,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Filter by beneficiary type
+          description: Filter by payee type
         - name: search
           in: query
           schema:
@@ -2562,7 +2558,7 @@ paths:
           description: Filter by merchant ID
       responses:
         "200":
-          description: Paginated list of beneficiaries
+          description: Paginated list of payees
           content:
             application/json:
               schema:
@@ -2571,38 +2567,38 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: "#/components/schemas/Beneficiary"
+                      $ref: "#/components/schemas/Payee"
                   has_more:
                     type: boolean
                   total:
                     type: integer
 
-  /v1/ops/beneficiaries/{id}:
+  /v1/ops/payees/{id}:
     get:
-      tags: [Beneficiaries]
-      summary: Get a beneficiary (cross-merchant)
-      description: Returns a single beneficiary without merchant scoping.
-      operationId: getBeneficiaryOps
+      tags: [Payees]
+      summary: Get a payee (cross-merchant)
+      description: Returns a single payee without merchant scoping.
+      operationId: getPayeeOps
       security:
         - opsAuth: []
       parameters:
         - $ref: "#/components/parameters/ResourceID"
       responses:
         "200":
-          description: Beneficiary details
+          description: Payee details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /v1/ops/beneficiaries/{id}/block:
+  /v1/ops/payees/{id}/block:
     post:
-      tags: [Beneficiaries]
-      summary: Block a beneficiary
-      description: Blocks a beneficiary. Requires a reason for compliance audit trail.
-      operationId: blockBeneficiary
+      tags: [Payees]
+      summary: Block a payee
+      description: Blocks a payee. Requires a reason for compliance audit trail.
+      operationId: blockPayee
       security:
         - opsAuth: []
       parameters:
@@ -2619,11 +2615,11 @@ paths:
                   type: string
       responses:
         "200":
-          description: Beneficiary blocked
+          description: Payee blocked
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "400":
           $ref: "#/components/responses/BadRequest"
         "422":
@@ -2633,23 +2629,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/ops/beneficiaries/{id}/unblock:
+  /v1/ops/payees/{id}/unblock:
     post:
-      tags: [Beneficiaries]
-      summary: Unblock a beneficiary
-      description: Unblocks a previously blocked beneficiary.
-      operationId: unblockBeneficiary
+      tags: [Payees]
+      summary: Unblock a payee
+      description: Unblocks a previously blocked payee.
+      operationId: unblockPayee
       security:
         - opsAuth: []
       parameters:
         - $ref: "#/components/parameters/ResourceID"
       responses:
         "200":
-          description: Beneficiary unblocked
+          description: Payee unblocked
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "422":
           description: Unprocessable entity
           content:
@@ -2657,23 +2653,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/ops/beneficiaries/{id}/verify:
+  /v1/ops/payees/{id}/verify:
     post:
-      tags: [Beneficiaries]
-      summary: Verify a beneficiary
-      description: Marks a beneficiary as verified.
-      operationId: verifyBeneficiary
+      tags: [Payees]
+      summary: Verify a payee
+      description: Marks a payee as verified.
+      operationId: verifyPayee
       security:
         - opsAuth: []
       parameters:
         - $ref: "#/components/parameters/ResourceID"
       responses:
         "200":
-          description: Beneficiary verified
+          description: Payee verified
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Beneficiary"
+                $ref: "#/components/schemas/Payee"
         "422":
           description: Unprocessable entity
           content:
@@ -4038,15 +4034,11 @@ paths:
       security:
         - opsAuth: []
       parameters:
-        - name: source_currency
+        - name: currency
           in: query
           schema:
             type: string
-        - name: dest_currency
-          in: query
-          schema:
-            type: string
-        - name: dest_country
+        - name: country
           in: query
           schema:
             type: string
@@ -4091,13 +4083,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [source_currency, dest_currency, dest_country, provider, method]
+              required: [currency, country, provider, method]
               properties:
-                source_currency:
+                currency:
                   type: string
-                dest_currency:
-                  type: string
-                dest_country:
+                country:
                   type: string
                 provider:
                   type: string
@@ -5817,8 +5807,8 @@ components:
         pagination:
           $ref: "#/components/schemas/Pagination"
 
-    # ── Beneficiary ───────────────────────────────────────────────────
-    Beneficiary:
+    # ── Payee ───────────────────────────────────────────────────
+    Payee:
       type: object
       properties:
         id:
@@ -5874,7 +5864,7 @@ components:
           type: string
           format: date-time
 
-    CreateBeneficiaryRequest:
+    CreatePayeeRequest:
       type: object
       required: [type, first_name, last_name, country]
       properties:
@@ -5905,13 +5895,13 @@ components:
         wallet_network:
           type: string
 
-    BeneficiaryList:
+    PayeeList:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/Beneficiary"
+            $ref: "#/components/schemas/Payee"
         pagination:
           $ref: "#/components/schemas/Pagination"
 
@@ -7473,13 +7463,10 @@ components:
         rail_type:
           type: string
           enum: [fiat, crypto, stablecoin]
-        source_currency:
-          type: string
-          example: USD
-        dest_currency:
+        currency:
           type: string
           example: EUR
-        dest_country:
+        country:
           type: string
           example: DE
         network:
