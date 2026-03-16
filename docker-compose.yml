@@ -1,0 +1,13 @@
+# API Docs — standalone development
+# Usage: docker compose up
+
+services:
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3003:3003"
+    volumes:
+      - .:/app
+      - /app/node_modules
