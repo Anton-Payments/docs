@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "aspen",
+  "theme": "maple",
   "name": "Anton Payments",
   "colors": {
     "primary": "#2563EB",
@@ -12,11 +12,40 @@
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
+  "appearance": {
+    "default": "system"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Inter",
+      "weight": 600
+    },
+    "body": {
+      "family": "Inter",
+      "weight": 400
+    }
+  },
+  "background": {
+    "decoration": "windows"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "light": "github-light",
+      "dark": "github-dark"
+    }
+  },
   "api": {
     "openapi": ["/openapi.yaml"],
     "playground": {
-      "display": "simple"
+      "display": "interactive"
+    },
+    "examples": {
+      "languages": ["bash", "javascript", "python", "go"]
     }
+  },
+  "search": {
+    "prompt": "Search docs..."
   },
   "navigation": {
     "tabs": [
