@@ -89,4 +89,4 @@ If you try to create a payout with insufficient `available` balance, the API ret
 
 ## FX and cross-currency payouts
 
-If you have a USD balance but need to send GBP, Anton can convert automatically. Request a [quote](/api-reference/quotes/get-quote) first to see the exchange rate, then create the payout with the quoted rate.
+If you have a USD balance but need to send GBP, Anton can convert automatically. Request an [FX quote](/api-reference/fx/create-fx-quote) first to see the exchange rate, then [execute the exchange](/api-reference/fx/execute-fx-exchange) or create the payout with the quoted rate.
