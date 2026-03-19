@@ -1,0 +1,3124 @@
+openapi: 3.1.0
+info:
+  title: Anton Payments API
+  version: "1.0"
+  description: |
+    The Anton Payments API enables businesses to send cross-border payouts globally via fiat, stablecoin, and cryptocurrency rails.
+
+    ## Authentication
+
+    All API requests require authentication via an API key passed as a Bearer token:
+
+    ```
+    Authorization: Bearer ak_live_...
+    ```
+
+    Use `ak_test_*` keys for sandbox testing and `ak_live_*` keys for production.
+
+    ## Environments
+
+    | Environment | Base URL |
+    |-------------|----------|
+    | Production  | `https://api.antonpayments.com` |
+    | Sandbox     | `https://api.antonpayments.dev` |
+
+    ## Pagination
+
+    List endpoints use cursor-based pagination. Pass `limit` (max 100) and `cursor` (from `next_cursor` in the previous response) as query parameters. Responses include `has_more` (boolean) and `next_cursor` (string, present when `has_more` is true).
+
+    ## Idempotency
+
+    Mutating financial endpoints (create payout, confirm batch, execute FX exchange) require an `Idempotency-Key` header. Retrying a request with the same key returns the original response without re-executing the operation.
+
+    ## Errors
+
+    All errors follow a consistent envelope:
+
+    ```json
+    {
+      "error": {
+        "message": "human-readable message",
+        "code": "machine_readable_code",
+        "details": { ... }
+      }
+    }
+    ```
+
+    5xx errors always return `"internal server error"` as the message.
+  contact:
+    name: Anton Payments
+    url: https://antonpayments.com
+    email: support@antonpayments.com
+
+servers:
+  - url: https://api.antonpayments.com
+    description: Production
+  - url: https://api.antonpayments.dev
+    description: Sandbox
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Reference Data
+    description: Supported currencies, countries, and payment methods.
+  - name: Payouts
+    description: Create, track, and manage cross-border payouts.
+  - name: Payees
+    description: Manage payout recipients (individuals and businesses).
+  - name: Instruments
+    description: Payment instruments (bank accounts, wallets, cards) attached to payees.
+  - name: Balances
+    description: View merchant funding balances by currency.
+  - name: Accounts
+    description: Funding accounts and transaction history.
+  - name: Batches
+    description: Upload and process bulk payouts via CSV/XLSX files.
+  - name: Webhooks
+    description: Subscribe to real-time event notifications.
+  - name: Documents
+    description: Upload compliance and KYB documents.
+  - name: RFIs
+    description: Respond to Requests for Information from the compliance team.
+  - name: Pricing
+    description: View pricing plans and calculate payout fees.
+  - name: FX
+    description: Foreign exchange quoting and currency conversion.
+  - name: Corridors
+    description: Available payment corridors (destination currency, country, and method combinations).
+
+paths:
+  # ═══════════════════════════════════════════════════════════════════
+  # Reference Data
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/currencies:
+    get:
+      operationId: listCurrencies
+      summary: List supported currencies
+      description: Returns all currencies supported by the platform, including fiat, stablecoin, and cryptocurrency.
+      tags: [Reference Data]
+      responses:
+        "200":
+          description: List of supported currencies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Currency"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/countries:
+    get:
+      operationId: listCountries
+      summary: List supported countries
+      description: Returns all supported destination countries with their supported payout currencies.
+      tags: [Reference Data]
+      responses:
+        "200":
+          description: List of supported countries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Country"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/payment-methods:
+    get:
+      operationId: listPaymentMethods
+      summary: List supported payment methods
+      description: Returns supported payment method types derived from active corridor configurations.
+      tags: [Reference Data]
+      responses:
+        "200":
+          description: List of supported payment methods.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PaymentMethod"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Payouts
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/payouts:
+    post:
+      operationId: createPayout
+      summary: Create a payout
+      description: Initiates a new payout from the authenticated merchant to a payee via a specified instrument.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayoutRequest"
+      responses:
+        "201":
+          description: Payout created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payout"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Payout blocked by risk policy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    get:
+      operationId: listPayouts
+      summary: List payouts
+      description: Returns a paginated list of payouts for the authenticated merchant.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          description: Filter by payout status.
+          schema:
+            $ref: "#/components/schemas/PayoutStatus"
+        - name: beneficiary_id
+          in: query
+          description: Filter by payee ID.
+          schema:
+            type: string
+        - name: source_currency
+          in: query
+          description: Filter by source currency code.
+          schema:
+            type: string
+        - name: reference
+          in: query
+          description: Filter by merchant reference.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of payouts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payout"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/payouts/{id}:
+    get:
+      operationId: getPayout
+      summary: Get a payout
+      description: Returns a single payout by ID.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Payout details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payout"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/payouts/{id}/events:
+    get:
+      operationId: listPayoutEvents
+      summary: List payout events
+      description: Returns the chronological event timeline for a payout showing all state transitions.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: List of payout events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PayoutEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/payouts/{id}/cancel:
+    post:
+      operationId: cancelPayout
+      summary: Cancel a payout
+      description: Cancels a payout that has not yet been submitted to the payment rail. Only payouts in cancellable states can be cancelled.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Payout cancelled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payout"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Payout cannot be cancelled in its current state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Payees
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/payees:
+    post:
+      operationId: createPayee
+      summary: Create a payee
+      description: Creates a new payee (individual or business). PII is tokenized via Basis Theory.
+      tags: [Payees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayeeRequest"
+      responses:
+        "201":
+          description: Payee created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payee"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    get:
+      operationId: listPayees
+      summary: List payees
+      description: Returns a paginated list of payees for the authenticated merchant.
+      tags: [Payees]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived, blocked]
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [individual, business]
+        - name: search
+          in: query
+          description: Fuzzy search on display name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of payees.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payee"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/payees/{id}:
+    get:
+      operationId: getPayee
+      summary: Get a payee
+      description: Returns a single payee by ID.
+      tags: [Payees]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Payee details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payee"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: updatePayee
+      summary: Update a payee
+      description: Updates mutable fields on a payee. Does not update PII -- use the Update PII endpoint for that.
+      tags: [Payees]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePayeeRequest"
+      responses:
+        "200":
+          description: Payee updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payee"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    delete:
+      operationId: deletePayee
+      summary: Delete a payee
+      description: Soft-deletes a payee. The payee will no longer be usable for new payouts.
+      tags: [Payees]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "204":
+          description: Payee deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/payees/{id}/pii:
+    put:
+      operationId: updatePayeePII
+      summary: Update payee PII
+      description: Replaces the payee's PII stored in Basis Theory. Provide either `individual` or `business` details matching the payee's type.
+      tags: [Payees]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePayeePIIRequest"
+      responses:
+        "200":
+          description: PII updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payee"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/payees/{id}/instruments:
+    post:
+      operationId: createInstrumentForPayee
+      summary: Create an instrument for a payee
+      description: Creates a new payment instrument for a payee. Credentials are tokenized via Basis Theory.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInstrumentRequest"
+      responses:
+        "201":
+          description: Instrument created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Instrument"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    get:
+      operationId: listInstrumentsByPayee
+      summary: List instruments for a payee
+      description: Returns all payment instruments associated with a specific payee.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: List of instruments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Instrument"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Instruments
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/instruments:
+    get:
+      operationId: listInstruments
+      summary: List instruments
+      description: Returns a paginated list of all instruments for the authenticated merchant.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: payee_id
+          in: query
+          description: Filter by payee ID.
+          schema:
+            type: string
+        - name: method
+          in: query
+          description: Filter by instrument method.
+          schema:
+            $ref: "#/components/schemas/InstrumentMethod"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled]
+      responses:
+        "200":
+          description: Paginated list of instruments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Instrument"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/instruments/{id}:
+    get:
+      operationId: getInstrument
+      summary: Get an instrument
+      description: Returns a single instrument by ID.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Instrument details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Instrument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: updateInstrument
+      summary: Update an instrument
+      description: Updates mutable fields on an instrument (label, is_default, status). Credentials cannot be changed -- create a new instrument instead.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInstrumentRequest"
+      responses:
+        "200":
+          description: Instrument updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Instrument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    delete:
+      operationId: deleteInstrument
+      summary: Delete an instrument
+      description: Soft-deletes a payment instrument.
+      tags: [Instruments]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "204":
+          description: Instrument deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Balances
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/balances:
+    get:
+      operationId: listBalances
+      summary: List balances
+      description: Returns balances across all currencies for the authenticated merchant.
+      tags: [Balances]
+      responses:
+        "200":
+          description: List of balances by currency.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/balances/{currency}:
+    get:
+      operationId: getBalance
+      summary: Get balance by currency
+      description: Returns the balance for a specific currency.
+      tags: [Balances]
+      parameters:
+        - name: currency
+          in: path
+          required: true
+          description: Currency code (e.g., USD, EUR, USDT).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Balance for the specified currency.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Accounts
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/accounts:
+    get:
+      operationId: listAccounts
+      summary: List funding accounts
+      description: Returns all funding accounts for the authenticated merchant.
+      tags: [Accounts]
+      responses:
+        "200":
+          description: List of funding accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MerchantAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/accounts/{currency}:
+    get:
+      operationId: getAccount
+      summary: Get account by currency
+      description: Returns a funding account for a specific currency.
+      tags: [Accounts]
+      parameters:
+        - name: currency
+          in: path
+          required: true
+          description: Currency code (e.g., USD, EUR, GBP).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Account details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/MerchantAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/accounts/{currency}/details:
+    get:
+      operationId: getAccountDetails
+      summary: Get account deposit details
+      description: Returns banking or deposit details for receiving funds into a specific currency account (e.g., IBAN, sort code, account number).
+      tags: [Accounts]
+      parameters:
+        - name: currency
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Banking/deposit details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AccountDetails"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/accounts/{currency}/transactions:
+    get:
+      operationId: listAccountTransactions
+      summary: List account transactions
+      description: Returns a paginated list of transactions for a specific currency account.
+      tags: [Accounts]
+      parameters:
+        - name: currency
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of transactions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MerchantTransaction"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/transactions:
+    get:
+      operationId: listTransactions
+      summary: List all transactions
+      description: Returns a paginated list of transactions across all accounts.
+      tags: [Accounts]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of transactions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MerchantTransaction"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Batches
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/batches/template:
+    get:
+      operationId: downloadBatchTemplate
+      summary: Download batch template
+      description: Downloads a batch upload template file in CSV or XLSX format.
+      tags: [Batches]
+      parameters:
+        - name: format
+          in: query
+          description: Template file format.
+          schema:
+            type: string
+            enum: [xlsx, csv]
+            default: xlsx
+      responses:
+        "200":
+          description: Template file download.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/batches:
+    post:
+      operationId: uploadBatch
+      summary: Upload a batch file
+      description: Uploads a CSV or XLSX file containing payout instructions. The file is validated asynchronously. Maximum 32 MB, 10,000 rows.
+      tags: [Batches]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                file_hash:
+                  type: string
+                  description: Optional SHA-256 hash for integrity verification (`sha256:<hex>`).
+      responses:
+        "201":
+          description: Batch created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Batch"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Duplicate file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      operationId: listBatches
+      summary: List batches
+      description: Returns a paginated list of batches.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/BatchStatus"
+      responses:
+        "200":
+          description: Paginated list of batches.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Batch"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/batches/{id}:
+    get:
+      operationId: getBatch
+      summary: Get a batch
+      description: Returns a single batch by ID.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Batch details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Batch"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/batches/{id}/confirm:
+    post:
+      operationId: confirmBatch
+      summary: Confirm a batch
+      description: Confirms a validated batch for processing. The batch must be in `validated` status.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_currency:
+                  type: string
+                  description: Default funding currency for rows that don't specify one.
+      responses:
+        "200":
+          description: Batch confirmed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Batch"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Batch is not in a confirmable status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/batches/{id}/cancel:
+    post:
+      operationId: cancelBatch
+      summary: Cancel a batch
+      description: Cancels a batch that is not yet processing or in a terminal state.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Batch cancelled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Batch"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Batch cannot be cancelled in its current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/batches/{id}/payouts:
+    get:
+      operationId: listBatchPayouts
+      summary: List payouts in a batch
+      description: Returns a paginated list of payouts created from the batch.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of payouts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payout"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/batches/{id}/errors:
+    get:
+      operationId: getBatchErrors
+      summary: Get batch errors
+      description: Returns validation errors and warnings for a batch.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Batch errors and warnings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      errors:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BatchError"
+                      warnings:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BatchWarning"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/batches/{id}/results:
+    get:
+      operationId: getBatchResults
+      summary: Get batch results
+      description: Returns per-row processing results including payout IDs and row-level errors.
+      tags: [Batches]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of row results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BatchRowResult"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Webhooks
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/webhooks:
+    post:
+      operationId: createWebhookSubscription
+      summary: Create a webhook subscription
+      description: Creates a new webhook subscription. The signing secret is returned once in the response.
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Subscription created with signing secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookSubscriptionWithSecret"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    get:
+      operationId: listWebhookSubscriptions
+      summary: List webhook subscriptions
+      description: Returns a paginated list of webhook subscriptions.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of subscriptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookSubscription"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks/{id}:
+    get:
+      operationId: getWebhookSubscription
+      summary: Get a webhook subscription
+      description: Returns a single webhook subscription by ID.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Subscription details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookSubscription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteWebhookSubscription
+      summary: Delete a webhook subscription
+      description: Permanently deletes a webhook subscription.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "204":
+          description: Subscription deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks/{id}/secret:
+    get:
+      operationId: getWebhookSecret
+      summary: Get webhook signing secret
+      description: Retrieves the HMAC signing secret for a webhook subscription.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Signing secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/webhooks/{id}/secret/rotate:
+    post:
+      operationId: rotateWebhookSecret
+      summary: Rotate webhook signing secret
+      description: Generates a new HMAC signing secret. The previous secret is immediately invalidated.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: New signing secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks/{id}/test:
+    post:
+      operationId: testWebhookSubscription
+      summary: Send a test webhook event
+      description: Sends a test event to the subscription endpoint to verify it is reachable and correctly processing events. The subscription must be active.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "201":
+          description: Test event created and dispatched.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Subscription is not active.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}/deactivate:
+    post:
+      operationId: deactivateWebhookSubscription
+      summary: Deactivate a webhook subscription
+      description: Sets the subscription status to inactive. Events will no longer be delivered.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "204":
+          description: Subscription deactivated.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks/events:
+    get:
+      operationId: listWebhookEvents
+      summary: List webhook events
+      description: Returns a paginated list of webhook events.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: from
+          in: query
+          description: Start of date range (RFC 3339).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: End of date range (RFC 3339).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Paginated list of events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookEvent"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks/events/{id}:
+    get:
+      operationId: getWebhookEvent
+      summary: Get a webhook event
+      description: Returns a single webhook event by ID.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: Event details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/webhooks/events/{id}/deliveries:
+    get:
+      operationId: listWebhookEventDeliveries
+      summary: List deliveries for an event
+      description: Returns all delivery attempts for a specific webhook event.
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: List of delivery attempts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Documents
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/documents:
+    post:
+      operationId: uploadDocument
+      summary: Upload a document
+      description: Uploads a compliance or KYB document. Maximum file size is 25 MB.
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, category]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                category:
+                  $ref: "#/components/schemas/DocumentCategory"
+      responses:
+        "201":
+          description: Document uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Document"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    get:
+      operationId: listDocuments
+      summary: List documents
+      description: Returns a paginated list of documents for the authenticated merchant.
+      tags: [Documents]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of documents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Document"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # RFIs
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/rfis:
+    get:
+      operationId: listRFIs
+      summary: List RFIs
+      description: Returns a paginated list of Requests for Information for the authenticated merchant.
+      tags: [RFIs]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Paginated list of RFIs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RFI"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/rfis/{id}:
+    get:
+      operationId: getRFI
+      summary: Get an RFI
+      description: Returns a single RFI by ID.
+      tags: [RFIs]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: RFI details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/RFI"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/rfis/{id}/respond:
+    post:
+      operationId: respondToRFI
+      summary: Respond to an RFI
+      description: Submits the merchant's response to an open RFI. Optionally attach document IDs uploaded via the documents endpoint.
+      tags: [RFIs]
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RFIRespondRequest"
+      responses:
+        "200":
+          description: Response recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/RFI"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: RFI is not in a respondable status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Pricing
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/pricing:
+    get:
+      operationId: listMerchantPricing
+      summary: List pricing plans
+      description: Returns the pricing plans applicable to the authenticated merchant.
+      tags: [Pricing]
+      responses:
+        "200":
+          description: List of pricing plans.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PricingPlan"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/pricing/quote:
+    post:
+      operationId: createPricingQuote
+      summary: Get a pricing quote
+      description: Previews the fee calculation for a proposed payout. Returns the applicable pricing plan, calculated fee, and total cost.
+      tags: [Pricing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingQuoteRequest"
+      responses:
+        "200":
+          description: Pricing quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PricingQuoteResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # FX
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/fx/quote:
+    post:
+      operationId: createFXQuote
+      summary: Get an FX quote
+      description: Returns a locked FX quote with a guaranteed rate and expiry time. Use the quote ID when calling the exchange endpoint.
+      tags: [FX]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FXQuoteRequest"
+      responses:
+        "200":
+          description: FX quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/FXQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: No currency account found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: FX rates temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/fx/rate:
+    get:
+      operationId: getIndicativeFXRate
+      summary: Get an indicative FX rate
+      description: Returns an indicative (non-lockable) FX rate for a currency pair.
+      tags: [FX]
+      parameters:
+        - name: sell_currency
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: buy_currency
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: buy_amount
+          in: query
+          description: Amount to price. Defaults to 1.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Indicative rate.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/FXQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/fx/exchange:
+    post:
+      operationId: executeFXExchange
+      summary: Execute a currency exchange
+      description: |
+        Converts funds between two currencies. Two modes:
+        1. **Quote mode** -- provide `quote_id` from a locked quote.
+        2. **One-shot mode** -- omit `quote_id` and provide currencies and amount.
+      tags: [FX]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FXExchangeRequest"
+      responses:
+        "200":
+          description: Exchange executed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/FXExchange"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Quote not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "410":
+          description: Quote expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Insufficient balance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/fx/exchanges:
+    get:
+      operationId: listFXExchanges
+      summary: List FX exchanges
+      description: Returns exchange history for the authenticated merchant.
+      tags: [FX]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [completed, pending, failed]
+        - name: currency
+          in: query
+          description: Filter by currency (matches either sell or buy currency).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of exchanges.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FXExchange"
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Corridors
+  # ═══════════════════════════════════════════════════════════════════
+
+  /v1/corridors:
+    get:
+      operationId: listCorridors
+      summary: List available corridors
+      description: Returns active payment corridors available for payouts.
+      tags: [Corridors]
+      parameters:
+        - name: currency
+          in: query
+          description: Filter by destination currency.
+          schema:
+            type: string
+        - name: country
+          in: query
+          description: Filter by destination country (ISO 3166-1 alpha-2).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of active corridors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Corridor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+# ═════════════════════════════════════════════════════════════════════
+# Components
+# ═════════════════════════════════════════════════════════════════════
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: "Merchant API key: `ak_live_*` (production) or `ak_test_*` (sandbox)."
+
+  parameters:
+    PathID:
+      name: id
+      in: path
+      required: true
+      description: Resource identifier.
+      schema:
+        type: string
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return (default 20, max 100).
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+
+    Cursor:
+      name: cursor
+      in: query
+      description: Pagination cursor from previous response's `next_cursor`.
+      schema:
+        type: string
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key to ensure idempotent request processing.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication required or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+
+  schemas:
+
+    # ── Error Envelopes ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message]
+          properties:
+            message:
+              type: string
+            code:
+              type: string
+
+    ValidationErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, code]
+          properties:
+            message:
+              type: string
+              example: validation failed
+            code:
+              type: string
+              example: validation_error
+            details:
+              type: object
+              additionalProperties:
+                type: string
+
+    # ── Reference Data ──────────────────────────────────────────────
+
+    Currency:
+      type: object
+      required: [code, name, decimals, symbol, type]
+      properties:
+        code:
+          type: string
+          example: USD
+        name:
+          type: string
+          example: US Dollar
+        decimals:
+          type: integer
+          example: 2
+        symbol:
+          type: string
+          example: "$"
+        type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+
+    Country:
+      type: object
+      required: [iso2, iso3, name, supported_currencies]
+      properties:
+        iso2:
+          type: string
+          example: GB
+        iso3:
+          type: string
+          example: GBR
+        name:
+          type: string
+          example: United Kingdom
+        supported_currencies:
+          type: array
+          items:
+            type: string
+          example: [GBP]
+
+    PaymentMethod:
+      type: object
+      required: [code, name, description, rail_type]
+      properties:
+        code:
+          type: string
+          example: bank_transfer
+        name:
+          type: string
+          example: Bank Transfer
+        description:
+          type: string
+        rail_type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+        supported_countries:
+          type: array
+          items:
+            type: string
+
+    # ── Payouts ─────────────────────────────────────────────────────
+
+    PayoutStatus:
+      type: string
+      enum:
+        - created
+        - pending_screening
+        - screening_failed
+        - pending_approval
+        - approved
+        - processing
+        - sent
+        - completed
+        - failed
+        - returned
+        - cancelled
+        - manual_review
+        - velocity_blocked
+
+    CreatePayoutRequest:
+      type: object
+      required: [payee_id, instrument_id, source_amount, dest_amount, dest_currency, method, purpose, reference]
+      properties:
+        payee_id:
+          type: string
+          example: pye_abc123
+        instrument_id:
+          type: string
+          example: ins_abc123
+        source_amount:
+          type: string
+          example: "1000.00"
+        source_currency:
+          type: string
+          example: USD
+        dest_amount:
+          type: string
+          example: "850.00"
+        dest_currency:
+          type: string
+          example: EUR
+        method:
+          type: string
+          example: bank_transfer
+        rail_type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+        network:
+          type: string
+        purpose:
+          type: string
+          maxLength: 255
+        reference:
+          type: string
+          maxLength: 100
+        fee_bearer:
+          type: string
+          enum: [merchant, payee]
+        fixed_side:
+          type: string
+          enum: [fixed_source, fixed_dest]
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    Payout:
+      type: object
+      properties:
+        id:
+          type: string
+          example: pay_abc123
+        merchant_id:
+          type: string
+        payee_id:
+          type: string
+        instrument_id:
+          type: string
+        batch_id:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/PayoutStatus"
+        method:
+          type: string
+        source_amount:
+          type: string
+        source_currency:
+          type: string
+        dest_amount:
+          type: string
+        dest_currency:
+          type: string
+        exchange_rate:
+          type: string
+        fee:
+          type: string
+        fee_currency:
+          type: string
+        fee_bearer:
+          type: string
+          enum: [merchant, payee]
+        fixed_side:
+          type: string
+          enum: [fixed_source, fixed_dest]
+        total_debited:
+          type: string
+        total_debited_currency:
+          type: string
+        rail_type:
+          type: string
+        rail_provider:
+          type: string
+        rail_reference:
+          type: string
+        network:
+          type: string
+        wallet_address:
+          type: string
+        tx_hash:
+          type: string
+        cancelled_reason:
+          type: string
+        purpose:
+          type: string
+        reference:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        screened_at:
+          type: string
+          format: date-time
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PayoutEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        payout_id:
+          type: string
+        status:
+          type: string
+        previous_status:
+          type: string
+        actor_type:
+          type: string
+        actor_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        occurred_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Payees ──────────────────────────────────────────────────────
+
+    CreatePayeeRequest:
+      type: object
+      required: [type, country]
+      properties:
+        type:
+          type: string
+          enum: [individual, business]
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+        external_ref:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        individual:
+          $ref: "#/components/schemas/IndividualDetails"
+        business:
+          $ref: "#/components/schemas/BusinessDetails"
+
+    UpdatePayeeRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        country:
+          type: string
+        external_ref:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    UpdatePayeePIIRequest:
+      type: object
+      description: Provide either `individual` or `business` details matching the payee's type.
+      properties:
+        individual:
+          $ref: "#/components/schemas/IndividualDetails"
+        business:
+          $ref: "#/components/schemas/BusinessDetails"
+
+    IndividualDetails:
+      type: object
+      required: [first_name, last_name, email, phone, date_of_birth, nationality, address]
+      properties:
+        first_name:
+          type: string
+        middle_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        date_of_birth:
+          type: string
+          example: "1990-01-15"
+        nationality:
+          type: string
+        address:
+          $ref: "#/components/schemas/Address"
+
+    BusinessDetails:
+      type: object
+      required: [legal_name, registration_number, email, phone, address]
+      properties:
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        registration_number:
+          type: string
+        tax_id:
+          type: string
+        entity_type:
+          type: string
+        incorporation_country:
+          type: string
+        incorporation_date:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        website:
+          type: string
+        address:
+          $ref: "#/components/schemas/Address"
+
+    Address:
+      type: object
+      required: [street_line_1, city, postal_code, country]
+      properties:
+        street_line_1:
+          type: string
+        street_line_2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+
+    Payee:
+      type: object
+      properties:
+        id:
+          type: string
+          example: pye_abc123
+        merchant_id:
+          type: string
+        type:
+          type: string
+          enum: [individual, business]
+        status:
+          type: string
+          enum: [active, archived, blocked]
+        display_name:
+          type: string
+        country:
+          type: string
+        external_ref:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Instruments ─────────────────────────────────────────────────
+
+    InstrumentMethod:
+      type: string
+      enum:
+        - iban
+        - uk_bank
+        - us_bank
+        - ca_bank
+        - au_bank
+        - swift
+        - clabe
+        - pix
+        - upi
+        - crypto
+        - mobile_money
+        - card
+
+    CreateInstrumentRequest:
+      type: object
+      required: [method, credentials]
+      properties:
+        method:
+          $ref: "#/components/schemas/InstrumentMethod"
+        currency:
+          type: string
+        country:
+          type: string
+        label:
+          type: string
+        is_default:
+          type: boolean
+          default: false
+        credentials:
+          type: object
+          description: Method-specific credential fields. Tokenized via Basis Theory.
+          additionalProperties: true
+
+    UpdateInstrumentRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        is_default:
+          type: boolean
+        status:
+          type: string
+          enum: [active, disabled]
+
+    Instrument:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ins_abc123
+        payee_id:
+          type: string
+        merchant_id:
+          type: string
+        method:
+          $ref: "#/components/schemas/InstrumentMethod"
+        currency:
+          type: string
+        country:
+          type: string
+        label:
+          type: string
+        display_last4:
+          type: string
+        display_bank:
+          type: string
+        display_network:
+          type: string
+        masked_account:
+          type: string
+        status:
+          type: string
+          enum: [active, disabled]
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Balances ────────────────────────────────────────────────────
+
+    Balance:
+      type: object
+      required: [id, merchant_id, currency, available, pending, total, updated_at]
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        currency:
+          type: string
+        available:
+          type: string
+          example: "15000.50"
+        pending:
+          type: string
+          example: "2500.00"
+        total:
+          type: string
+          example: "17500.50"
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Accounts ────────────────────────────────────────────────────
+
+    MerchantAccount:
+      type: object
+      properties:
+        id:
+          type: string
+        currency:
+          type: string
+        country:
+          type: string
+        balance:
+          type: string
+        available_balance:
+          type: string
+        status:
+          type: string
+        provider:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AccountDetails:
+      type: object
+      required: [currency]
+      properties:
+        currency:
+          type: string
+        country:
+          type: string
+        iban:
+          type: string
+        bic:
+          type: string
+        account_number:
+          type: string
+        sort_code:
+          type: string
+        bank_name:
+          type: string
+        holder_name:
+          type: string
+        routing_codes:
+          type: object
+          additionalProperties:
+            type: string
+
+    MerchantTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        reference:
+          type: string
+        counterparty_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Batches ─────────────────────────────────────────────────────
+
+    BatchStatus:
+      type: string
+      enum:
+        - uploaded
+        - validating
+        - validated
+        - validation_failed
+        - confirmed
+        - processing
+        - completed
+        - partial
+        - failed
+        - cancelled
+
+    Batch:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/BatchStatus"
+        file_name:
+          type: string
+        file_format:
+          type: string
+          enum: [csv, xlsx]
+        file_size:
+          type: integer
+          format: int64
+        total_rows:
+          type: integer
+        valid_rows:
+          type: integer
+        invalid_rows:
+          type: integer
+        processed_rows:
+          type: integer
+        source_currency:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    BatchError:
+      type: object
+      properties:
+        row:
+          type: integer
+        field:
+          type: string
+        message:
+          type: string
+
+    BatchWarning:
+      type: object
+      properties:
+        row:
+          type: integer
+        type:
+          type: string
+        message:
+          type: string
+
+    BatchRowResult:
+      type: object
+      properties:
+        row:
+          type: integer
+        status:
+          type: string
+          enum: [success, failed, skipped, pending]
+        payout_id:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    # ── Webhooks ────────────────────────────────────────────────────
+
+    WebhookEventType:
+      type: string
+      enum:
+        - payout.created
+        - payout.approved
+        - payout.processing
+        - payout.sent
+        - payout.completed
+        - payout.failed
+        - payout.cancelled
+        - payout.returned
+        - beneficiary.created
+        - beneficiary.updated
+        - beneficiary.deleted
+        - batch.uploaded
+        - batch.completed
+        - batch.failed
+        - balance.low
+        - funding.credit
+        - screening.hit
+        - fx.quote.created
+        - fx.exchange.created
+        - fx.exchange.completed
+        - fx.exchange.failed
+        - test
+
+    CreateWebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS endpoint URL.
+          example: https://api.example.com/webhooks/anton
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        status:
+          type: string
+          enum: [active, inactive]
+        version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookSubscriptionWithSecret:
+      allOf:
+        - $ref: "#/components/schemas/WebhookSubscription"
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: HMAC signing secret. Shown once on creation.
+
+    WebhookEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        type:
+          $ref: "#/components/schemas/WebhookEventType"
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        event_id:
+          type: string
+        subscription_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, success, failed, abandoned]
+        url:
+          type: string
+          format: uri
+        response_status:
+          type: integer
+        response_body:
+          type: string
+        attempts:
+          type: integer
+        max_attempts:
+          type: integer
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+        duration_ms:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ── Documents ───────────────────────────────────────────────────
+
+    DocumentCategory:
+      type: string
+      enum:
+        - incorporation
+        - shareholder_register
+        - director_id
+        - ubo_id
+        - proof_of_address
+        - bank_statement
+        - license
+        - tax_certificate
+        - aml_policy
+        - financial_statement
+        - beneficiary_proof
+        - rfi_response
+        - other
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        category:
+          $ref: "#/components/schemas/DocumentCategory"
+        status:
+          type: string
+          enum: [uploaded, accepted, rejected, expired]
+        file_name:
+          type: string
+        content_type:
+          type: string
+        file_size:
+          type: integer
+          format: int64
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── RFIs ────────────────────────────────────────────────────────
+
+    RFIRespondRequest:
+      type: object
+      required: [response]
+      properties:
+        response:
+          type: string
+          description: Merchant's text response.
+        document_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of supporting documents uploaded via the documents endpoint.
+
+    RFI:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        status:
+          type: string
+          enum: [open, responded, in_review, resolved, escalated, closed]
+        category:
+          type: string
+          enum: [source_of_funds, purpose_of_payment, beneficiary_info, documentation, unusual_activity, sanctions_related, other]
+        urgency:
+          type: string
+          enum: [low, medium, high, critical]
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        subject:
+          type: string
+        description:
+          type: string
+        questions:
+          type: array
+          items:
+            type: string
+        response:
+          type: string
+        responded_at:
+          type: string
+          format: date-time
+          nullable: true
+        document_ids:
+          type: array
+          items:
+            type: string
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Pricing ─────────────────────────────────────────────────────
+
+    PricingPlan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+        source_currency:
+          type: string
+        dest_currency:
+          type: string
+        dest_country:
+          type: string
+        method:
+          type: string
+        fee_type:
+          type: string
+          enum: [fixed, percentage, hybrid, tiered]
+        fixed_fee:
+          type: string
+        fixed_currency:
+          type: string
+        percentage_fee:
+          type: string
+        min_fee:
+          type: string
+        max_fee:
+          type: string
+        priority:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PricingQuoteRequest:
+      type: object
+      required: [source_currency, dest_currency, amount]
+      properties:
+        source_currency:
+          type: string
+          example: USD
+        dest_currency:
+          type: string
+          example: EUR
+        dest_country:
+          type: string
+        method:
+          type: string
+        amount:
+          type: string
+          example: "1000.00"
+
+    PricingQuoteResult:
+      type: object
+      properties:
+        plan_id:
+          type: string
+        plan_name:
+          type: string
+        fee_type:
+          type: string
+        fee:
+          type: string
+        fee_currency:
+          type: string
+        fx_rate:
+          type: string
+        total_cost:
+          type: string
+        total_currency:
+          type: string
+
+    # ── FX ──────────────────────────────────────────────────────────
+
+    FXQuoteRequest:
+      type: object
+      required: [sell_currency, buy_currency]
+      properties:
+        sell_currency:
+          type: string
+          example: GBP
+        buy_currency:
+          type: string
+          example: EUR
+        buy_amount:
+          type: string
+          description: Fixed destination amount.
+        sell_amount:
+          type: string
+          description: Fixed source amount.
+
+    FXQuote:
+      type: object
+      properties:
+        id:
+          type: string
+        sell_currency:
+          type: string
+        buy_currency:
+          type: string
+        sell_amount:
+          type: string
+        buy_amount:
+          type: string
+        mid_market_rate:
+          type: string
+        customer_rate:
+          type: string
+        inverse_rate:
+          type: string
+        fx_markup_bps:
+          type: integer
+        fx_fee:
+          type: string
+        fx_fee_currency:
+          type: string
+        provider:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        locked:
+          type: boolean
+
+    FXExchangeRequest:
+      type: object
+      properties:
+        quote_id:
+          type: string
+          description: ID of a locked quote. Omit for one-shot mode.
+        sell_currency:
+          type: string
+        buy_currency:
+          type: string
+        buy_amount:
+          type: string
+
+    FXExchange:
+      type: object
+      properties:
+        id:
+          type: string
+        quote_id:
+          type: string
+        sell_currency:
+          type: string
+        buy_currency:
+          type: string
+        sell_amount:
+          type: string
+        buy_amount:
+          type: string
+        mid_market_rate:
+          type: string
+        customer_rate:
+          type: string
+        provider:
+          type: string
+        status:
+          type: string
+          enum: [completed, pending, failed]
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Corridors ───────────────────────────────────────────────────
+
+    Corridor:
+      type: object
+      properties:
+        id:
+          type: string
+        rail_type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+        currency:
+          type: string
+        country:
+          type: string
+        network:
+          type: string
+        provider:
+          type: string
+        method:
+          type: string
+        active:
+          type: boolean
+        priority:
+          type: integer
+        cutoff_time:
+          type: string
+        settlement_days:
+          type: integer
+        settlement_mins:
+          type: integer
+        min_amount:
+          type: string
+        max_amount:
+          type: string
+        required_confirms:
+          type: integer

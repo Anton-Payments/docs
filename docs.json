@@ -36,7 +36,7 @@
     }
   },
   "api": {
-    "openapi": ["/openapi.yaml"],
+    "openapi": ["/openapi-merchant.yaml"],
     "playground": {
       "display": "interactive"
     },
@@ -96,29 +96,40 @@
             ]
           },
           {
+            "group": "Reference Data",
+            "pages": [
+              "api-reference/reference-data/list-currencies",
+              "api-reference/reference-data/list-countries",
+              "api-reference/reference-data/list-payment-methods"
+            ]
+          },
+          {
             "group": "Payouts",
             "pages": [
               "api-reference/payouts/create-payout",
               "api-reference/payouts/list-payouts",
               "api-reference/payouts/get-payout",
+              "api-reference/payouts/list-payout-events",
               "api-reference/payouts/cancel-payout"
             ]
           },
           {
-            "group": "Beneficiaries",
+            "group": "Payees",
             "pages": [
-              "api-reference/beneficiaries/create-beneficiary",
-              "api-reference/beneficiaries/list-beneficiaries",
-              "api-reference/beneficiaries/get-beneficiary",
-              "api-reference/beneficiaries/delete-beneficiary"
+              "api-reference/payees/create-payee",
+              "api-reference/payees/list-payees",
+              "api-reference/payees/get-payee",
+              "api-reference/payees/update-payee",
+              "api-reference/payees/update-payee-pii",
+              "api-reference/payees/delete-payee"
             ]
           },
           {
             "group": "Instruments",
             "pages": [
-              "api-reference/instruments/create-instrument",
+              "api-reference/instruments/create-instrument-for-payee",
+              "api-reference/instruments/list-instruments-by-payee",
               "api-reference/instruments/list-instruments",
-              "api-reference/instruments/list-beneficiary-instruments",
               "api-reference/instruments/get-instrument",
               "api-reference/instruments/update-instrument",
               "api-reference/instruments/delete-instrument"
@@ -132,21 +143,25 @@
             ]
           },
           {
-            "group": "Quotes",
+            "group": "Accounts",
             "pages": [
-              "api-reference/quotes/get-quote"
+              "api-reference/accounts/list-accounts",
+              "api-reference/accounts/get-account",
+              "api-reference/accounts/get-account-details",
+              "api-reference/accounts/list-account-transactions",
+              "api-reference/accounts/list-transactions"
             ]
           },
           {
             "group": "Batches",
             "pages": [
+              "api-reference/batches/download-batch-template",
               "api-reference/batches/upload-batch",
               "api-reference/batches/list-batches",
               "api-reference/batches/get-batch",
-              "api-reference/batches/get-batch-payouts",
               "api-reference/batches/confirm-batch",
               "api-reference/batches/cancel-batch",
-              "api-reference/batches/download-template",
+              "api-reference/batches/list-batch-payouts",
               "api-reference/batches/get-batch-errors",
               "api-reference/batches/get-batch-results"
             ]
@@ -154,45 +169,24 @@
           {
             "group": "Webhooks",
             "pages": [
-              "api-reference/webhooks/create-subscription",
-              "api-reference/webhooks/list-subscriptions",
-              "api-reference/webhooks/get-subscription",
-              "api-reference/webhooks/deactivate-subscription",
-              "api-reference/webhooks/delete-subscription",
-              "api-reference/webhooks/list-events",
-              "api-reference/webhooks/get-event",
-              "api-reference/webhooks/list-deliveries"
-            ]
-          },
-          {
-            "group": "API Keys",
-            "pages": [
-              "api-reference/api-keys/create-api-key",
-              "api-reference/api-keys/list-api-keys",
-              "api-reference/api-keys/revoke-api-key"
-            ]
-          },
-          {
-            "group": "Registration",
-            "pages": [
-              "api-reference/registration/register"
-            ]
-          },
-          {
-            "group": "Onboarding",
-            "pages": [
-              "api-reference/onboarding/get-application",
-              "api-reference/onboarding/update-draft",
-              "api-reference/onboarding/submit-application",
-              "api-reference/onboarding/get-status"
+              "api-reference/webhooks/create-webhook-subscription",
+              "api-reference/webhooks/list-webhook-subscriptions",
+              "api-reference/webhooks/get-webhook-subscription",
+              "api-reference/webhooks/get-webhook-secret",
+              "api-reference/webhooks/rotate-webhook-secret",
+              "api-reference/webhooks/test-webhook-subscription",
+              "api-reference/webhooks/deactivate-webhook-subscription",
+              "api-reference/webhooks/delete-webhook-subscription",
+              "api-reference/webhooks/list-webhook-events",
+              "api-reference/webhooks/get-webhook-event",
+              "api-reference/webhooks/list-webhook-event-deliveries"
             ]
           },
           {
             "group": "Documents",
             "pages": [
               "api-reference/documents/upload-document",
-              "api-reference/documents/list-documents",
-              "api-reference/documents/get-document"
+              "api-reference/documents/list-documents"
             ]
           },
           {
@@ -204,44 +198,25 @@
             ]
           },
           {
+            "group": "Pricing",
+            "pages": [
+              "api-reference/pricing/list-merchant-pricing",
+              "api-reference/pricing/create-pricing-quote"
+            ]
+          },
+          {
+            "group": "FX",
+            "pages": [
+              "api-reference/fx/create-fx-quote",
+              "api-reference/fx/get-indicative-fx-rate",
+              "api-reference/fx/execute-fx-exchange",
+              "api-reference/fx/list-fx-exchanges"
+            ]
+          },
+          {
             "group": "Corridors",
             "pages": [
               "api-reference/corridors/list-corridors"
-            ]
-          },
-          {
-            "group": "Risk Rules",
-            "pages": [
-              "api-reference/risk-rules/list-rules"
-            ]
-          },
-          {
-            "group": "Merchant",
-            "pages": [
-              "api-reference/merchant/get-merchant"
-            ]
-          },
-          {
-            "group": "User Management",
-            "pages": [
-              "api-reference/user-management/get-profile",
-              "api-reference/user-management/update-profile",
-              "api-reference/user-management/get-mfa",
-              "api-reference/user-management/enroll-mfa",
-              "api-reference/user-management/change-password"
-            ]
-          },
-          {
-            "group": "Notifications",
-            "pages": [
-              "api-reference/notifications/list-event-types",
-              "api-reference/notifications/list-channels",
-              "api-reference/notifications/create-channel",
-              "api-reference/notifications/update-channel",
-              "api-reference/notifications/delete-channel",
-              "api-reference/notifications/test-channel",
-              "api-reference/notifications/list-preferences",
-              "api-reference/notifications/update-preferences"
             ]
           }
         ]
