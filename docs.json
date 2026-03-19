@@ -44,6 +44,9 @@
       "languages": ["bash", "javascript", "python", "go"]
     }
   },
+  "integrations": {
+    "intercom": "cofsfa9j"
+  },
   "search": {
     "prompt": "Search docs..."
   },
