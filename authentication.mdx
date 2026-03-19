@@ -12,13 +12,15 @@ Every request to the Anton Payments API must include an API key in the `Authoriz
 Authorization: Bearer ak_test_your_key_here
 ```
 
+API keys are created and managed in the [merchant portal](https://app.antonpayments.com). Navigate to **Settings > API Keys** to generate, view, and revoke keys.
+
 ## Key formats
 
 API keys are prefixed to indicate their environment:
 
 | Prefix | Environment | Purpose |
 |--------|-------------|---------|
-| `ak_test_` | Sandbox | Testing and development — no real money moves |
+| `ak_test_` | Sandbox | Testing and development -- no real money moves |
 | `ak_live_` | Production | Real payouts with real money |
 
 <Warning>
@@ -27,34 +29,26 @@ API keys are prefixed to indicate their environment:
 
 ## Key management
 
-You can create, list, and revoke API keys through the API or the merchant dashboard.
+You create, view, and revoke API keys through the merchant portal at **Settings > API Keys**. There is no API endpoint for key management -- all key operations are performed in the portal.
 
-### Create a key
+### Creating a key
 
-```bash
-curl https://api.antonpayments.com/v1/api-keys \
-  -X POST \
-  -H "Authorization: Bearer ak_test_your_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Production server",
-    "environment": "live"
-  }'
-```
+1. Log in to the [merchant portal](https://app.antonpayments.com)
+2. Navigate to **Settings > API Keys**
+3. Select the environment (sandbox or production)
+4. Click **Create Key** and give it a descriptive name (e.g., "Production server", "Staging CI")
 
 <Info>
-  The full API key is only returned **once** at creation time. We hash keys with SHA-256 before storage — we cannot retrieve the original key for you. Save it securely immediately.
+  The full API key is displayed **once** at creation time. We hash keys with SHA-256 before storage -- we cannot retrieve the original key for you. Copy it immediately and store it in your secrets manager.
 </Info>
 
-### Revoke a key
+### Revoking a key
 
-If a key is compromised, revoke it immediately:
+If a key is compromised, revoke it immediately from the merchant portal:
 
-```bash
-curl https://api.antonpayments.com/v1/api-keys/key_abc123/revoke \
-  -X POST \
-  -H "Authorization: Bearer ak_test_your_key_here"
-```
+1. Navigate to **Settings > API Keys**
+2. Find the key and click **Revoke**
+3. Confirm the revocation
 
 Revoked keys stop working immediately. There is no undo.
 
@@ -67,17 +61,17 @@ Revoked keys stop working immediately. There is no undo.
   <Accordion title="Use separate keys per environment" icon="layer-group">
     Never use production keys in development. Create dedicated test keys for sandbox.
   </Accordion>
-  <Accordion title="Restrict server-side only" icon="server">
+  <Accordion title="Restrict to server-side only" icon="server">
     API keys should only be used from your backend servers. Never include them in mobile apps, browser JavaScript, or client-side code.
   </Accordion>
   <Accordion title="Monitor key usage" icon="chart-line">
-    Review your API key list periodically. Revoke any keys that are no longer in use or that you don't recognize.
+    Review your API key list periodically in the merchant portal. Revoke any keys that are no longer in use or that you do not recognize.
   </Accordion>
 </AccordionGroup>
 
 ## Error responses
 
-If authentication fails, you'll receive a `401 Unauthorized` response:
+If authentication fails, you receive a `401 Unauthorized` response:
 
 ```json
 {
@@ -91,5 +85,5 @@ If authentication fails, you'll receive a `401 Unauthorized` response:
 Common causes:
 - Missing `Authorization` header
 - Malformed header (must be `Bearer <key>`, not just the key)
-- Revoked or expired key
-- Using a test key against production (or vice versa)
+- Revoked key
+- Using a test key against the production URL (or vice versa)

@@ -5,16 +5,16 @@ description: "Anton Payments provides isolated sandbox and production environmen
 mode: "wide"
 ---
 
-Anton has two environments — sandbox and production. They run the same API with the same endpoints, validation, and behavior. The difference is whether real money moves and real compliance checks execute.
+Anton has two environments -- sandbox and production. They run the same API with the same endpoints, validation, and behavior. The difference is whether real money moves and real compliance checks execute.
 
-Each environment is completely isolated. API keys, beneficiaries, payouts, balances, and webhook subscriptions created in one environment do not exist in the other.
+Each environment is completely isolated. API keys, payees, payouts, balances, and webhook subscriptions created in one environment do not exist in the other.
 
 | | Sandbox | Production |
 |---|---|---|
 | **Base URL** | `https://api.antonpayments.dev` | `https://api.antonpayments.com` |
 | **API key prefix** | `ak_test_` | `ak_live_` |
 | **Compliance screening** | Simulated (auto-pass) | Real OFAC, PEP, and sanctions checks |
-| **Funds** | Pre-loaded test balances | Real money — must fund account |
+| **Funds** | Pre-loaded test balances | Real money -- must fund account |
 | **Payout delivery** | Instant simulation | Real rail processing (minutes to days) |
 | **Webhooks** | Delivered normally | Delivered normally |
 | **Rate limits** | Relaxed | Enforced per plan |
@@ -23,14 +23,18 @@ Each environment is completely isolated. API keys, beneficiaries, payouts, balan
 
 ## Sandbox
 
-The sandbox is your development and testing environment. It behaves identically to production — same endpoints, same request/response formats, same validation rules — so code that works in sandbox will work in production without changes.
+The sandbox is your development and testing environment. It behaves identically to production -- same endpoints, same request/response formats, same validation rules -- so code that works in sandbox will work in production without changes.
+
+```
+https://api.antonpayments.dev
+```
 
 ### What you can do in sandbox
 
-- Create beneficiaries and attach payment instruments
+- Create payees and attach payment instruments
 - Submit payouts and observe the full lifecycle
 - Upload and process batch payouts
-- Register webhook subscriptions and receive deliveries
+- Register webhook endpoints and receive deliveries
 - Query balances and transaction history
 - Test error handling with invalid inputs
 
@@ -41,7 +45,7 @@ The sandbox is your development and testing environment. It behaves identically 
     All payouts pass compliance screening automatically. No real OFAC, PEP, or sanctions checks are performed. In production, payouts can be held for manual review or rejected by the screening engine.
   </Accordion>
   <Accordion title="Payouts settle instantly" icon="clock">
-    Sandbox payouts move through every lifecycle status — `screening`, `processing`, `sent`, `completed` — but transitions happen in seconds rather than minutes or days. Use this to verify your status handling logic without waiting.
+    Sandbox payouts move through every lifecycle status -- `screening`, `processing`, `sent`, `completed` -- but transitions happen in seconds rather than minutes or days. Use this to verify your status handling logic without waiting.
   </Accordion>
   <Accordion title="Balances are pre-funded" icon="wallet">
     Your sandbox account comes with test balances in supported currencies. These reset periodically. In production, you must fund your account before submitting payouts.
@@ -61,18 +65,22 @@ Sandbox access is provisioned after your merchant application is approved or by 
 
 Production processes real payouts through real payment rails. Compliance checks run against live sanctions lists. Funds are delivered to real bank accounts, mobile wallets, and crypto addresses.
 
+```
+https://api.antonpayments.com
+```
+
 <Warning>
-  **Production payouts are irreversible** once they reach `sent` status. Verify beneficiary details and amounts before submitting. Use [idempotency keys](/concepts/idempotency) on every request to prevent duplicates.
+  **Production payouts are irreversible** once they reach `sent` status. Verify payee details and amounts before submitting. Use [idempotency keys](/concepts/idempotency) on every request to prevent duplicates.
 </Warning>
 
 ### Requirements
 
 You must complete all of the following before submitting production payouts:
 
-1. **Approved merchant application** — KYB verification, document review, and compliance approval
-2. **Certification call** — technical walkthrough of your integration with our team
-3. **Funded account** — wire funds to your production account and confirm balances via the API
-4. **Production API keys** — generate `ak_live_` keys from the merchant portal
+1. **Approved merchant application** -- KYB verification, document review, and compliance approval
+2. **Certification call** -- technical walkthrough of your integration with our team
+3. **Funded account** -- wire funds to your production account and confirm balances via the API
+4. **Production API keys** -- generate `ak_live_` keys from the merchant portal
 
 For the full checklist, see [Going Live](/guides/going-live).
 
@@ -83,12 +91,12 @@ For the full checklist, see [Going Live](/guides/going-live).
 You can always determine which environment you are using by checking your API key prefix:
 
 ```
-ak_test_...  →  Sandbox
-ak_live_...  →  Production
+ak_test_...  ->  Sandbox   (api.antonpayments.dev)
+ak_live_...  ->  Production (api.antonpayments.com)
 ```
 
 Using a sandbox key against the production URL (or vice versa) will return a `401 Unauthorized` error. Keys are scoped to their environment and cannot cross over.
 
 <Note>
-  **Keep environments separate.** Use environment variables to manage your base URL and API keys. Never hardcode either — and never use production keys in development or CI.
+  **Keep environments separate.** Use environment variables to manage your base URL and API keys. Never hardcode either -- and never use production keys in development or CI.
 </Note>

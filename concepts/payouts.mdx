@@ -6,7 +6,7 @@ description: "Understanding the payout lifecycle — from creation through compl
 
 ## Overview
 
-A **payout** is the core object in Anton Payments. It represents a single money movement from your merchant account to a beneficiary. When you create a payout, Anton handles compliance screening, rail routing, and delivery automatically.
+A **payout** is the core object in Anton Payments. It represents a single money movement from your merchant account to a payee. When you create a payout, Anton handles compliance screening, rail routing, and delivery automatically.
 
 ## Payout lifecycle
 
@@ -38,7 +38,7 @@ stateDiagram-v2
 | `screening_failed` | Blocked by compliance — requires manual review by our ops team | No |
 | `pending_approval` | High-value or sensitive payout awaiting maker-checker approval | No |
 | `processing` | Submitted to the rail provider for delivery | No |
-| `sent` | Rail provider confirmed dispatch to the beneficiary's bank/wallet | No |
+| `sent` | Rail provider confirmed dispatch to the payee's bank/wallet | No |
 | `completed` | Funds delivered successfully | **Yes** |
 | `failed` | Delivery failed (wrong account, bank rejection, etc.) | **Yes** |
 | `returned` | Funds returned after delivery attempt | **Yes** |
@@ -48,12 +48,13 @@ stateDiagram-v2
 ## Creating a payout
 
 ```bash
-curl https://api.antonpayments.com/v1/payouts \
+curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
   -H "Authorization: Bearer ak_test_..." \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pay-inv-2026-001" \
   -d '{
-    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "payee_id": "pye_cng3q8s6ek9kc5qg1h1g",
     "amount": "1000.00",
     "currency": "USD",
     "description": "Contractor payment - January",
@@ -63,20 +64,20 @@ curl https://api.antonpayments.com/v1/payouts \
 
 **What happens when you create a payout:**
 
-1. **Validation** — Amount, currency, and beneficiary are validated
+1. **Validation** — Amount, currency, and payee are validated
 2. **Balance check** — Sufficient funds are verified in your account
 3. **Funds reserved** — The amount is held from your available balance
 4. **Velocity rules checked** — Fraud and compliance rules are evaluated
 5. **Screening** — OFAC, PEP, and sanctions checks run automatically
 6. **Routing** — The optimal rail provider is selected for the corridor
-7. **Delivery** — Funds are dispatched to the beneficiary
+7. **Delivery** — Funds are dispatched to the payee
 
 ## Cancelling a payout
 
 Payouts can only be cancelled before they reach `processing` status:
 
 ```bash
-curl https://api.antonpayments.com/v1/payouts/pay_abc123/cancel \
+curl https://api.antonpayments.dev/v1/payouts/pay_abc123/cancel \
   -X POST \
   -H "Authorization: Bearer ak_test_..."
 ```

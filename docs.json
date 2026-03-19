@@ -65,7 +65,7 @@
             "group": "Core Concepts",
             "pages": [
               "concepts/payouts",
-              "concepts/beneficiaries",
+              "concepts/payees",
               "concepts/balances",
               "concepts/webhooks",
               "concepts/pagination",
@@ -77,7 +77,7 @@
             "group": "Guides",
             "pages": [
               "guides/send-a-payout",
-              "guides/manage-beneficiaries",
+              "guides/manage-payees",
               "guides/handle-webhooks",
               "guides/batch-payouts",
               "guides/error-handling",

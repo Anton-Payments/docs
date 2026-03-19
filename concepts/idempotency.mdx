@@ -15,13 +15,13 @@ Network issues happen. When you create a payout and the connection drops before 
 Add the `Idempotency-Key` header to any `POST` request:
 
 ```bash
-curl https://api.antonpayments.com/v1/payouts \
+curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
   -H "Authorization: Bearer ak_test_..." \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: pay-inv-1042-2026-02-14" \
   -d '{
-    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "payee_id": "pye_cng3q8s6ek9kc5qg1h1g",
     "amount": "500.00",
     "currency": "USD",
     "description": "Invoice #1042"
@@ -52,7 +52,7 @@ import { randomUUID } from 'crypto';
 const key = randomUUID();
 
 // Option 2: Deterministic from your data (recommended)
-const key = `payout-${invoiceId}-${beneficiaryId}`;
+const key = `payout-${invoiceId}-${payeeId}`;
 
 // Option 3: Hash of the request body
 import { createHash } from 'crypto';
@@ -70,7 +70,7 @@ import json
 key = str(uuid.uuid4())
 
 # Option 2: Deterministic from your data (recommended)
-key = f"payout-{invoice_id}-{beneficiary_id}"
+key = f"payout-{invoice_id}-{payee_id}"
 
 # Option 3: Hash of the request body
 key = hashlib.sha256(json.dumps(payout_data).encode()).hexdigest()
@@ -88,12 +88,12 @@ key = hashlib.sha256(json.dumps(payout_data).encode()).hexdigest()
 |-----------|---------------|
 | `POST` requests (create operations) | `GET`, `PUT`, `DELETE` requests (already naturally idempotent) |
 | Payout creation | Payout cancellation (already idempotent) |
-| Beneficiary creation | Listing and retrieval |
+| Payee creation | Listing and retrieval |
 | Webhook subscription creation | |
 | Batch upload | |
 
 ## Behavior details
 
-- **Same key + same body** → Returns original response with `X-Idempotent-Replayed: true`
-- **Same key + different body** → Returns `409 Conflict` error (key reuse with different payload)
-- **Different key + same body** → Creates a new resource (keys are unique identifiers, not deduplication)
+- **Same key + same body** -- Returns original response with `X-Idempotent-Replayed: true`
+- **Same key + different body** -- Returns `409 Conflict` error (key reuse with different payload)
+- **Different key + same body** -- Creates a new resource (keys are unique identifiers, not deduplication)

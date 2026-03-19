@@ -1,26 +1,27 @@
 ---
-title: "Beneficiaries"
-sidebarTitle: "Beneficiaries"
+title: "Payees"
+sidebarTitle: "Payees"
 description: "Manage the recipients of your payouts — individuals and businesses with their payment details."
 ---
 
 ## Overview
 
-A **beneficiary** is the recipient of a payout. You create a beneficiary once with their identity and payment details, then reference them by ID whenever you send a payout.
+A **payee** is the recipient of a payout. You create a payee once with their identity and payment details, then reference them by ID whenever you send a payout.
 
-Beneficiaries can be:
+Payees can be:
 - **Individuals** — a person receiving funds (freelancer, contractor, customer refund)
 - **Businesses** — a company receiving funds (supplier, vendor, partner)
 
-## Creating a beneficiary
+## Creating a payee
 
 <CodeGroup>
 
 ```bash Individual
-curl https://api.antonpayments.com/v1/beneficiaries \
+curl https://api.antonpayments.dev/v1/payees \
   -X POST \
   -H "Authorization: Bearer ak_test_..." \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-payee-jane-smith" \
   -d '{
     "type": "individual",
     "first_name": "Jane",
@@ -36,10 +37,11 @@ curl https://api.antonpayments.com/v1/beneficiaries \
 ```
 
 ```bash Business
-curl https://api.antonpayments.com/v1/beneficiaries \
+curl https://api.antonpayments.dev/v1/payees \
   -X POST \
   -H "Authorization: Bearer ak_test_..." \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-payee-acme-corp" \
   -d '{
     "type": "business",
     "company_name": "Acme Corp",
@@ -57,7 +59,7 @@ curl https://api.antonpayments.com/v1/beneficiaries \
 
 ## Payment details
 
-Beneficiaries need payment routing information. The required fields depend on the destination country and rail:
+Payees need payment routing information. The required fields depend on the destination country and rail:
 
 | Country/Rail | Required Fields |
 |-------------|----------------|
@@ -68,37 +70,46 @@ Beneficiaries need payment routing information. The required fields depend on th
 
 ## Instruments
 
-For beneficiaries that receive payments through multiple methods (e.g., bank account and mobile wallet), you can attach multiple **instruments** to a single beneficiary. See the [Instruments API](/api-reference/instruments/create-instrument-for-payee) for details.
+For payees that receive payments through multiple methods (e.g., bank account and mobile wallet), you can attach multiple **instruments** to a single payee. See the [Instruments API](/api-reference/instruments/create-instrument-for-payee) for details.
 
-## Beneficiary verification
+## Payee verification
 
-In production, beneficiaries undergo compliance screening when first used in a payout. This includes:
+In production, payees undergo compliance screening when first used in a payout. This includes:
 
 - **Name matching** — Verifying the name matches the bank account holder
 - **Sanctions screening** — OFAC, PEP, and global sanctions list checks
 - **Country checks** — Ensuring the destination country is not blocked
 
 <Info>
-  Beneficiary screening happens automatically during payout creation. You don't need to call a separate verification endpoint.
+  Payee screening happens automatically during payout creation. You don't need to call a separate verification endpoint.
 </Info>
 
-## Listing beneficiaries
+## Listing payees
 
-Retrieve all beneficiaries with pagination:
+Retrieve all payees with cursor-based pagination:
 
 ```bash
-curl "https://api.antonpayments.com/v1/beneficiaries?limit=20&offset=0" \
+curl "https://api.antonpayments.dev/v1/payees?limit=20" \
   -H "Authorization: Bearer ak_test_..."
 ```
 
-## Deleting beneficiaries
+To fetch the next page, pass the `next_cursor` value from the previous response:
+
+```bash
+curl "https://api.antonpayments.dev/v1/payees?limit=20&cursor=pye_def456" \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+See [Pagination](/concepts/pagination) for details.
+
+## Deleting payees
 
 <Warning>
-  Deleting a beneficiary is permanent. Any pending payouts to this beneficiary will still complete, but you won't be able to create new payouts to them.
+  Deleting a payee is permanent. Any pending payouts to this payee will still complete, but you won't be able to create new payouts to them.
 </Warning>
 
 ```bash
-curl https://api.antonpayments.com/v1/beneficiaries/ben_abc123 \
+curl https://api.antonpayments.dev/v1/payees/pye_abc123 \
   -X DELETE \
   -H "Authorization: Bearer ak_test_..."
 ```

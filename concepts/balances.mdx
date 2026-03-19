@@ -28,7 +28,7 @@ When you create a payout:
 ### All currencies
 
 ```bash
-curl https://api.antonpayments.com/v1/balances \
+curl https://api.antonpayments.dev/v1/balances \
   -H "Authorization: Bearer ak_test_..."
 ```
 
@@ -60,7 +60,7 @@ curl https://api.antonpayments.com/v1/balances \
 ### Single currency
 
 ```bash
-curl https://api.antonpayments.com/v1/balances/USD \
+curl https://api.antonpayments.dev/v1/balances/USD \
   -H "Authorization: Bearer ak_test_..."
 ```
 
@@ -81,8 +81,8 @@ If you try to create a payout with insufficient `available` balance, the API ret
 ```json
 {
   "error": {
-    "code": 400,
-    "message": "Insufficient balance: available USD 5000.00, required USD 10000.00"
+    "message": "Insufficient balance: available USD 5000.00, required USD 10000.00",
+    "code": "insufficient_balance"
   }
 }
 ```

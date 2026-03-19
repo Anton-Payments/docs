@@ -6,14 +6,32 @@ description: "Set up a webhook endpoint to receive real-time payout and event no
 
 ## Overview
 
-Webhooks let you react to events in real time instead of polling the API. This guide covers setting up a subscription, building an endpoint, and handling events reliably.
+Webhooks let you react to events in real time instead of polling the API. This guide covers setting up a subscription, verifying signatures, building a receiver endpoint, and handling events reliably.
+
+## Available events
+
+| Event | Description |
+|-------|-------------|
+| `payout.created` | A new payout has been created |
+| `payout.screening` | Compliance screening has started |
+| `payout.processing` | Payout approved and submitted to rail |
+| `payout.sent` | Rail confirmed dispatch |
+| `payout.completed` | Funds delivered to payee |
+| `payout.failed` | Payout could not be completed |
+| `payout.returned` | Funds returned after delivery attempt |
+| `payout.cancelled` | Payout was cancelled |
+| `payee.created` | A new payee was created |
+| `payee.updated` | Payee details were modified |
+| `payee.deleted` | A payee was deleted |
+| `batch.completed` | All payouts in a batch have resolved |
+| `batch.failed` | Batch processing encountered errors |
 
 ## 1. Create a webhook subscription
 
 Register your endpoint URL and choose which events to listen for:
 
 ```bash
-curl https://api.antonpayments.com/v1/webhooks \
+curl https://api.antonpayments.dev/v1/webhooks \
   -X POST \
   -H "Authorization: Bearer ak_test_..." \
   -H "Content-Type: application/json" \
@@ -22,7 +40,8 @@ curl https://api.antonpayments.com/v1/webhooks \
     "events": [
       "payout.completed",
       "payout.failed",
-      "payout.returned"
+      "payout.returned",
+      "payee.created"
     ]
   }'
 ```
@@ -32,32 +51,92 @@ curl https://api.antonpayments.com/v1/webhooks \
   "data": {
     "id": "wbh_cng3q8s6ek9kc5qg1h4g",
     "url": "https://your-server.com/webhooks/anton",
-    "events": ["payout.completed", "payout.failed", "payout.returned"],
+    "events": ["payout.completed", "payout.failed", "payout.returned", "payee.created"],
+    "signing_secret": "whsec_k8x2mN9pQr7...",
     "status": "active",
     "created_at": "2026-02-14T10:00:00Z"
   }
 }
 ```
 
-## 2. Build your endpoint
+<Warning>
+  Store the `signing_secret` securely. You will need it to verify webhook signatures. It is only returned once at creation time.
+</Warning>
+
+## 2. Verify webhook signatures
+
+Every webhook delivery includes an HMAC-SHA256 signature in the `Anton-Signature` header. Always verify this signature before processing the event to confirm it originated from Anton.
+
+The signature header contains a timestamp and signature:
+
+```
+Anton-Signature: t=1708000000,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd
+```
+
+### Verification logic
+
+1. Extract the timestamp (`t`) and signature (`v1`) from the header
+2. Construct the signed payload: `{timestamp}.{raw_request_body}`
+3. Compute HMAC-SHA256 using your signing secret
+4. Compare the computed signature with the received signature
+5. Reject if the timestamp is more than 5 minutes old (replay protection)
+
+## 3. Build your endpoint
 
 Your webhook endpoint must:
 - Accept `POST` requests with a `Content-Type: application/json` body
+- Verify the `Anton-Signature` header on every request
 - Return a `2xx` status code within 30 seconds
-- Be publicly accessible (not behind a VPN or firewall)
+- Be publicly accessible over HTTPS
 
 <CodeGroup>
 
 ```javascript Express.js
 const express = require("express");
-const app = express();
+const crypto = require("crypto");
 
-app.use(express.json());
+const app = express();
+const SIGNING_SECRET = process.env.ANTON_WEBHOOK_SECRET;
+
+// Use raw body for signature verification
+app.use("/webhooks/anton", express.raw({ type: "application/json" }));
+
+function verifySignature(payload, header, secret) {
+  const parts = Object.fromEntries(
+    header.split(",").map((p) => p.split("="))
+  );
+  const timestamp = parts["t"];
+  const signature = parts["v1"];
+
+  // Reject if timestamp is older than 5 minutes
+  const age = Math.floor(Date.now() / 1000) - parseInt(timestamp);
+  if (age > 300) {
+    throw new Error("Webhook timestamp too old");
+  }
+
+  const signedPayload = `${timestamp}.${payload}`;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex");
+
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    throw new Error("Invalid webhook signature");
+  }
+}
 
 app.post("/webhooks/anton", (req, res) => {
-  const event = req.body;
+  try {
+    verifySignature(
+      req.body.toString(),
+      req.headers["anton-signature"],
+      SIGNING_SECRET
+    );
+  } catch (err) {
+    return res.status(401).json({ error: err.message });
+  }
 
-  console.log(`Received event: ${event.type} for ${event.data.id}`);
+  const event = JSON.parse(req.body);
 
   switch (event.type) {
     case "payout.completed":
@@ -74,9 +153,14 @@ app.post("/webhooks/anton", (req, res) => {
       // Credit the funds back in your system
       handlePayoutReturn(event.data);
       break;
+
+    case "payee.created":
+      // Sync payee to your system
+      syncPayee(event.data);
+      break;
   }
 
-  // Always return 200 quickly — do heavy processing async
+  // Always return 200 quickly -- do heavy processing async
   res.status(200).json({ received: true });
 });
 
@@ -84,28 +168,55 @@ app.listen(3000);
 ```
 
 ```python FastAPI
-from fastapi import FastAPI, Request
+import hashlib
+import hmac
+import time
+
+from fastapi import FastAPI, Request, HTTPException
 
 app = FastAPI()
 
+SIGNING_SECRET = os.environ["ANTON_WEBHOOK_SECRET"]
+
+
+def verify_signature(payload: bytes, header: str, secret: str):
+    parts = dict(p.split("=", 1) for p in header.split(","))
+    timestamp = parts["t"]
+    signature = parts["v1"]
+
+    # Reject if timestamp is older than 5 minutes
+    age = int(time.time()) - int(timestamp)
+    if age > 300:
+        raise HTTPException(status_code=401, detail="Webhook timestamp too old")
+
+    signed_payload = f"{timestamp}.{payload.decode()}"
+    expected = hmac.new(
+        secret.encode(), signed_payload.encode(), hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+
 @app.post("/webhooks/anton")
 async def handle_webhook(request: Request):
-    event = await request.json()
+    body = await request.body()
+    signature_header = request.headers.get("anton-signature")
 
-    print(f"Received event: {event['type']} for {event['data']['id']}")
+    verify_signature(body, signature_header, SIGNING_SECRET)
+
+    event = await request.json()
 
     match event["type"]:
         case "payout.completed":
-            # Mark the invoice as paid in your system
             await mark_invoice_paid(event["data"]["reference"])
         case "payout.failed":
-            # Alert your team and flag for retry
             await notify_payout_failed(event["data"])
         case "payout.returned":
-            # Credit the funds back in your system
             await handle_payout_return(event["data"])
+        case "payee.created":
+            await sync_payee(event["data"])
 
-    # Always return 200 quickly
     return {"received": True}
 ```
 
@@ -113,68 +224,141 @@ async def handle_webhook(request: Request):
 package main
 
 import (
-    "encoding/json"
-    "log"
-    "net/http"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
+var signingSecret = os.Getenv("ANTON_WEBHOOK_SECRET")
+
 type WebhookEvent struct {
-    ID        string          `json:"id"`
-    Type      string          `json:"type"`
-    CreatedAt string          `json:"created_at"`
-    Data      json.RawMessage `json:"data"`
+	ID        string          `json:"id"`
+	Type      string          `json:"type"`
+	CreatedAt string          `json:"created_at"`
+	Data      json.RawMessage `json:"data"`
+}
+
+func verifySignature(payload []byte, header string, secret string) error {
+	parts := make(map[string]string)
+	for _, p := range strings.Split(header, ",") {
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) == 2 {
+			parts[kv[0]] = kv[1]
+		}
+	}
+
+	timestamp := parts["t"]
+	signature := parts["v1"]
+
+	// Reject if timestamp is older than 5 minutes
+	ts, _ := strconv.ParseInt(timestamp, 10, 64)
+	if time.Now().Unix()-ts > 300 {
+		return fmt.Errorf("webhook timestamp too old")
+	}
+
+	signedPayload := fmt.Sprintf("%s.%s", timestamp, string(payload))
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signedPayload))
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		return fmt.Errorf("invalid webhook signature")
+	}
+	return nil
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-    var event WebhookEvent
-    if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-        http.Error(w, "bad request", 400)
-        return
-    }
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
 
-    log.Printf("Received event: %s", event.Type)
+	if err := verifySignature(body, r.Header.Get("Anton-Signature"), signingSecret); err != nil {
+		http.Error(w, err.Error(), 401)
+		return
+	}
 
-    switch event.Type {
-    case "payout.completed":
-        // Mark the invoice as paid
-    case "payout.failed":
-        // Alert your team
-    case "payout.returned":
-        // Handle the return
-    }
+	var event WebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		http.Error(w, "bad request", 400)
+		return
+	}
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]bool{"received": true})
+	log.Printf("Received event: %s", event.Type)
+
+	switch event.Type {
+	case "payout.completed":
+		// Mark the invoice as paid
+	case "payout.failed":
+		// Alert your team
+	case "payout.returned":
+		// Handle the return
+	case "payee.created":
+		// Sync the payee
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"received": true})
 }
 
 func main() {
-    http.HandleFunc("/webhooks/anton", handleWebhook)
-    log.Fatal(http.ListenAndServe(":3000", nil))
+	http.HandleFunc("/webhooks/anton", handleWebhook)
+	log.Fatal(http.ListenAndServe(":3000", nil))
 }
 ```
 
 </CodeGroup>
 
-## 3. Handle failures gracefully
+## 4. Handle failures gracefully
 
 <Steps>
   <Step title="Return 200 immediately">
     Acknowledge receipt quickly. If processing takes time, queue it for async handling. Anton times out after 30 seconds and will retry.
   </Step>
   <Step title="Make it idempotent">
-    You may receive the same event more than once (retries). Use the `event.id` to deduplicate — store processed event IDs and skip duplicates.
+    You may receive the same event more than once (retries). Use the `event.id` to deduplicate -- store processed event IDs and skip duplicates.
   </Step>
-  <Step title="Handle out-of-order">
+  <Step title="Handle out-of-order delivery">
     Events might arrive out of order. A `payout.completed` could arrive before `payout.processing`. Use the `created_at` timestamp or the payout's actual status to determine the true state.
   </Step>
 </Steps>
 
-## 4. Monitor deliveries
+## Retry and delivery behavior
+
+Anton retries failed webhook deliveries with exponential backoff:
+
+| Attempt | Delay |
+|---------|-------|
+| 1 | Immediate |
+| 2 | 1 minute |
+| 3 | 5 minutes |
+| 4 | 30 minutes |
+| 5 | 2 hours |
+| 6 | 8 hours |
+
+After 6 failed attempts, the event is marked as failed. You can view failed deliveries and manually retry them via the API or merchant portal.
+
+A delivery is considered failed if:
+- Your endpoint returns a non-2xx status code
+- The request times out after 30 seconds
+- A connection cannot be established
+
+## 5. Monitor deliveries
 
 Check the delivery history for a webhook event:
 
 ```bash
-curl https://api.antonpayments.com/v1/webhooks/events/evt_abc123/deliveries \
+curl https://api.antonpayments.dev/v1/webhooks/events/evt_abc123/deliveries \
   -H "Authorization: Bearer ak_test_..."
 ```
 
@@ -197,16 +381,22 @@ Register this temporary URL as your webhook endpoint in sandbox.
 ## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Respond fast" icon="bolt">
+  <Card title="Respond fast">
     Return `200` within 5 seconds. Queue heavy processing for later.
   </Card>
-  <Card title="Deduplicate" icon="fingerprint">
+  <Card title="Verify signatures">
+    Always validate the `Anton-Signature` header. Reject requests with invalid or missing signatures.
+  </Card>
+  <Card title="Deduplicate">
     Track event IDs to prevent processing the same event twice.
   </Card>
-  <Card title="Log everything" icon="pencil">
+  <Card title="Log everything">
     Log the full event payload for debugging and audit.
   </Card>
-  <Card title="Set up alerts" icon="bell">
-    Monitor for delivery failures — if your endpoint goes down, events queue up.
+  <Card title="Set up alerts">
+    Monitor for delivery failures -- if your endpoint goes down, events queue up.
+  </Card>
+  <Card title="Use HTTPS">
+    Your webhook endpoint must use HTTPS with a valid TLS certificate.
   </Card>
 </CardGroup>
