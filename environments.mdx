@@ -1,60 +1,94 @@
 ---
 title: "Environments"
 sidebarTitle: "Environments"
-description: "Anton Payments provides sandbox and production environments for development and live operations."
+description: "Anton Payments provides isolated sandbox and production environments. API objects in one environment are not accessible from the other."
+mode: "wide"
 ---
 
-## Overview
+Anton has two environments — sandbox and production. They run the same API with the same endpoints, validation, and behavior. The difference is whether real money moves and real compliance checks execute.
 
-Anton Payments has two environments. Both have identical APIs — the only difference is whether real money moves.
+Each environment is completely isolated. API keys, beneficiaries, payouts, balances, and webhook subscriptions created in one environment do not exist in the other.
 
-| Environment | Base URL | API Key Prefix | Real Money |
-|-------------|----------|----------------|------------|
-| **Sandbox** | `https://api.staging.antonpayments.com` | `ak_test_` | No |
-| **Production** | `https://api.antonpayments.com` | `ak_live_` | Yes |
+| | Sandbox | Production |
+|---|---|---|
+| **Base URL** | `https://api.staging.antonpayments.com` | `https://api.antonpayments.com` |
+| **API key prefix** | `ak_test_` | `ak_live_` |
+| **Compliance screening** | Simulated (auto-pass) | Real OFAC, PEP, and sanctions checks |
+| **Funds** | Pre-loaded test balances | Real money — must fund account |
+| **Payout delivery** | Instant simulation | Real rail processing (minutes to days) |
+| **Webhooks** | Delivered normally | Delivered normally |
+| **Rate limits** | Relaxed | Enforced per plan |
+
+---
 
 ## Sandbox
 
-The sandbox environment is for development and testing. It mirrors production behavior exactly — same endpoints, same validation, same compliance screening — but no real funds move.
+The sandbox is your development and testing environment. It behaves identically to production — same endpoints, same request/response formats, same validation rules — so code that works in sandbox will work in production without changes.
 
-**What works in sandbox:**
-- Full payout lifecycle (created → completed)
-- Beneficiary creation and validation
-- Webhook delivery to your endpoints
-- Batch upload and processing
-- Balance queries (seeded test balances)
-- Compliance screening simulation
+### What you can do in sandbox
 
-**What's different in sandbox:**
-- Payouts complete instantly (no real rail processing delay)
-- Compliance screening auto-approves (no real OFAC/PEP checks)
-- Balances are pre-funded with test amounts
-- No real money moves — ever
+- Create beneficiaries and attach payment instruments
+- Submit payouts and observe the full lifecycle
+- Upload and process batch payouts
+- Register webhook subscriptions and receive deliveries
+- Query balances and transaction history
+- Test error handling with invalid inputs
 
-<Tip>
-  Use sandbox to build and test your integration end-to-end. Only switch to production when you've completed the [going live checklist](/guides/going-live).
-</Tip>
+### How sandbox differs from production
+
+<AccordionGroup>
+  <Accordion title="Compliance screening is simulated" icon="shield-check" defaultOpen>
+    All payouts pass compliance screening automatically. No real OFAC, PEP, or sanctions checks are performed. In production, payouts can be held for manual review or rejected by the screening engine.
+  </Accordion>
+  <Accordion title="Payouts settle instantly" icon="clock">
+    Sandbox payouts move through every lifecycle status — `screening`, `processing`, `sent`, `completed` — but transitions happen in seconds rather than minutes or days. Use this to verify your status handling logic without waiting.
+  </Accordion>
+  <Accordion title="Balances are pre-funded" icon="wallet">
+    Your sandbox account comes with test balances in supported currencies. These reset periodically. In production, you must fund your account before submitting payouts.
+  </Accordion>
+  <Accordion title="No real money moves" icon="ban">
+    Nothing submitted in sandbox results in a real payment. You cannot accidentally send real funds from the sandbox environment.
+  </Accordion>
+</AccordionGroup>
+
+### Sandbox access
+
+Sandbox access is provisioned after your merchant application is approved or by your account manager. It is not self-service. See [Going Live](/guides/going-live) for the full onboarding process.
+
+---
 
 ## Production
 
-Production processes real payouts with real compliance checks. Payouts are routed to real rail providers and funds are delivered to real bank accounts.
-
-To use production:
-1. Complete the onboarding process and get approved
-2. Fund your account balances
-3. Use `ak_live_` API keys
-4. Point your integration to `https://api.antonpayments.com`
+Production processes real payouts through real payment rails. Compliance checks run against live sanctions lists. Funds are delivered to real bank accounts, mobile wallets, and crypto addresses.
 
 <Warning>
-  **Production payouts are irreversible** once they reach `sent` status. Double-check beneficiary details and amounts before creating payouts.
+  **Production payouts are irreversible** once they reach `sent` status. Verify beneficiary details and amounts before submitting. Use [idempotency keys](/concepts/idempotency) on every request to prevent duplicates.
 </Warning>
 
-## Local development
+### Requirements
 
-For local development, you can run the Anton API locally:
+You must complete all of the following before submitting production payouts:
 
-| Service | URL |
-|---------|-----|
-| API | `http://localhost:8080` |
+1. **Approved merchant application** — KYB verification, document review, and compliance approval
+2. **Certification call** — technical walkthrough of your integration with our team
+3. **Funded account** — wire funds to your production account and confirm balances via the API
+4. **Production API keys** — generate `ak_live_` keys from the merchant portal
 
-The local environment uses dev mode authentication, which is simpler for development but not suitable for testing production auth flows.
+For the full checklist, see [Going Live](/guides/going-live).
+
+---
+
+## Identifying your environment
+
+You can always determine which environment you are using by checking your API key prefix:
+
+```
+ak_test_...  →  Sandbox
+ak_live_...  →  Production
+```
+
+Using a sandbox key against the production URL (or vice versa) will return a `401 Unauthorized` error. Keys are scoped to their environment and cannot cross over.
+
+<Note>
+  **Keep environments separate.** Use environment variables to manage your base URL and API keys. Never hardcode either — and never use production keys in development or CI.
+</Note>
