@@ -1,111 +1,199 @@
 ---
 title: "Going Live"
 sidebarTitle: "Going Live"
-description: "Checklist for moving your Anton Payments integration from sandbox to production."
+description: "The path from first API call to processing real payouts — onboarding, certification, and production readiness."
+mode: "wide"
 ---
 
-## Overview
-
-Before processing real payouts, complete this checklist to ensure your integration is production-ready and compliant.
-
-## Pre-launch checklist
-
-### 1. Account setup
+Anton processes real money across regulated corridors. Going live is not flipping a switch — it is a structured process that protects you, your recipients, and the platform. Every merchant follows the same path.
 
 <Steps>
-  <Step title="Complete onboarding">
-    Finish the merchant application with all required business details, documents, and beneficial owner information. Your application must be approved before you can access production.
+  <Step title="Onboarding">
+    Complete the merchant application and get approved.
   </Step>
-  <Step title="Fund your account">
-    Wire funds to your Anton production account. Confirm balances appear correctly via the API.
+  <Step title="Sandbox Development">
+    Build and test your integration against the sandbox environment.
   </Step>
-  <Step title="Generate production API keys">
-    Create production keys (`ak_live_...`) from the dashboard. Store them securely in your environment variables or secrets manager.
+  <Step title="Certification Call">
+    Walk through your integration with our team.
+  </Step>
+  <Step title="Fund Your Account">
+    Wire funds and confirm balances via the API.
+  </Step>
+  <Step title="Move to Production">
+    Switch to production credentials and go live.
   </Step>
 </Steps>
 
-### 2. Integration quality
+---
+
+## 1. Onboarding
+
+Before you write any code, your business needs to be approved. The onboarding process collects the information we need for KYB verification, compliance screening, and corridor eligibility.
 
 <AccordionGroup>
-  <Accordion title="Use production base URL" icon="globe" defaultOpen>
-    Switch from `https://api.staging.antonpayments.com` to `https://api.antonpayments.com`.
+  <Accordion title="Submit your merchant application" icon="file-lines" defaultOpen>
+    Complete the 8-step application through the merchant portal. This includes business details, registered address, ownership structure, and intended use of the platform.
   </Accordion>
-  <Accordion title="Use production API keys" icon="key" defaultOpen>
-    Replace `ak_test_...` keys with `ak_live_...`. Never use test keys in production.
+  <Accordion title="Upload required documents" icon="folder-open">
+    Provide incorporation documents, proof of address, and beneficial owner identification through the merchant portal. Documents are stored securely and reviewed by our compliance team.
   </Accordion>
-  <Accordion title="Idempotency keys on all POST requests" icon="fingerprint">
-    Every payout creation should include an `Idempotency-Key` header to prevent duplicates.
+  <Accordion title="Respond to any RFIs" icon="comments">
+    If our team needs additional information, you will receive a Request for Information (RFI) in the merchant portal. Respond promptly — open RFIs block approval.
+  </Accordion>
+  <Accordion title="Approval and sandbox access" icon="circle-check">
+    Once approved, your sandbox environment is provisioned. You will receive sandbox API keys and access to the merchant portal.
+  </Accordion>
+</AccordionGroup>
+
+## 2. Sandbox Development
+
+Build your integration against the sandbox. Every API endpoint behaves identically to production — compliance checks are simulated, funds are test balances, and payouts settle instantly.
+
+### Integration requirements
+
+These are not suggestions. Every item below is validated during your certification call.
+
+<AccordionGroup>
+  <Accordion title="Idempotency keys on all mutations" icon="fingerprint" defaultOpen>
+    Every `POST` request must include an `Idempotency-Key` header. This prevents duplicate payouts if a request is retried due to network issues or timeouts. Use a unique, deterministic key per operation (e.g., your internal transaction ID). See [Idempotency](/concepts/idempotency).
+  </Accordion>
+  <Accordion title="Webhook integration" icon="bell" defaultOpen>
+    You must consume webhooks — polling alone is not sufficient for production. Register a webhook subscription, verify HMAC signatures on every delivery, and handle duplicate events by tracking processed event IDs. See [Handle Webhooks](/guides/handle-webhooks).
   </Accordion>
   <Accordion title="Error handling and retries" icon="rotate">
-    Implement exponential backoff for 5xx errors and respect `Retry-After` for 429 responses. Never retry 4xx errors (except 429).
-  </Accordion>
-  <Accordion title="Webhook signature verification" icon="shield-check">
-    Verify HMAC signatures on incoming webhooks. Never trust unverified webhook payloads.
-  </Accordion>
-  <Accordion title="Webhook idempotency" icon="clone">
-    Handle duplicate webhook deliveries. Store processed event IDs and skip duplicates.
+    Implement exponential backoff with jitter for `5xx` errors. Respect `Retry-After` headers on `429` responses. Never retry `4xx` errors (except `429`). Map error codes to appropriate actions in your system. See [Error Handling](/guides/error-handling).
   </Accordion>
   <Accordion title="Proper amount handling" icon="calculator">
-    Amounts are passed as strings, never floating-point. Ensure your code uses decimal/string arithmetic for money.
+    Amounts are strings, never floating-point. Use decimal or string arithmetic for all money operations. Floating-point rounding errors cause real financial discrepancies.
+  </Accordion>
+  <Accordion title="Payout lifecycle handling" icon="arrows-spin">
+    Your system must handle every payout status — not just `completed` and `failed`. Account for `screening`, `pending_approval`, `processing`, `returned`, and `cancelled`. Each status may require different logic in your system. See [Payouts](/concepts/payouts).
+  </Accordion>
+  <Accordion title="Balance checks before payouts" icon="wallet">
+    Query your balance before submitting payouts to ensure sufficient funds in the required currency. Payouts submitted without adequate balance will be rejected. See [Balances](/concepts/balances).
   </Accordion>
 </AccordionGroup>
 
-### 3. Security
+### Security requirements
 
 <AccordionGroup>
-  <Accordion title="API keys in environment variables" icon="lock" defaultOpen>
-    Never hardcode keys. Use environment variables or a secrets manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault).
+  <Accordion title="API keys in environment variables or secrets manager" icon="lock" defaultOpen>
+    Never hardcode keys. Use your platform's secrets management — AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, or equivalent. Rotate keys if you suspect exposure.
   </Accordion>
   <Accordion title="Server-side only" icon="server" defaultOpen>
-    API keys must only be used from backend servers. Never expose them in browser JavaScript, mobile apps, or frontend code.
+    API keys must only be used from backend servers. Never expose them in browser JavaScript, mobile apps, client-side code, or version control.
   </Accordion>
   <Accordion title="TLS everywhere" icon="shield">
-    All API calls must use HTTPS. The API rejects non-TLS connections in production.
+    All API calls must use HTTPS. The API rejects non-TLS connections. Your webhook receiver must also be HTTPS with a valid certificate.
   </Accordion>
-  <Accordion title="Webhook endpoint over HTTPS" icon="lock">
-    Your webhook receiver URL must be HTTPS with a valid TLS certificate.
-  </Accordion>
-  <Accordion title="No PII in logs" icon="eye-slash">
-    Ensure your application doesn't log beneficiary bank details, API keys, or other sensitive data.
+  <Accordion title="No sensitive data in logs" icon="eye-slash">
+    Ensure your application does not log beneficiary bank details, API keys, full account numbers, or other PII. Mask or omit sensitive fields in all logging and error reporting.
   </Accordion>
 </AccordionGroup>
 
-### 4. Monitoring
+## 3. Certification Call
+
+Once your sandbox integration is complete, schedule a certification call with our team. This is a technical walkthrough — not a sales call.
+
+<CardGroup cols={2}>
+  <Card title="What we review" icon="clipboard-check">
+    - End-to-end payout flow
+    - Webhook consumption and signature verification
+    - Idempotency key implementation
+    - Error handling and retry logic
+    - Security posture (key storage, TLS, logging)
+    - Balance and status management
+  </Card>
+  <Card title="What to prepare" icon="list-check">
+    - Working sandbox integration
+    - Sample payout logs showing full lifecycle
+    - Webhook delivery logs with signature verification
+    - Your team's questions about production behavior
+  </Card>
+</CardGroup>
+
+<Note>
+  **Schedule your call** by contacting your account manager or emailing [integrations@antonpayments.com](mailto:integrations@antonpayments.com). Certification typically takes one session — come prepared and it will be straightforward.
+</Note>
+
+## 4. Fund Your Account
+
+After certification, fund your production account before submitting your first live payout.
+
+<Steps>
+  <Step title="Receive funding instructions">
+    Your account manager will provide wire instructions for your production account, including the accepted currencies and minimum deposit.
+  </Step>
+  <Step title="Send the wire">
+    Initiate a wire transfer from your business bank account. Include your Anton merchant ID as a reference.
+  </Step>
+  <Step title="Confirm balances via the API">
+    Once the wire settles, verify your balances via the [Balances API](/api-reference/balances/list-balances). Funds typically appear within 1-2 business days depending on the corridor.
+  </Step>
+</Steps>
+
+## 5. Move to Production
+
+With certification complete and your account funded, switch to production.
 
 <AccordionGroup>
-  <Accordion title="Monitor webhook delivery" icon="bell">
-    Set up alerts for failed webhook deliveries. If your endpoint goes down, events queue up and you'll miss notifications.
+  <Accordion title="Swap your base URL" icon="globe" defaultOpen>
+    Update from `https://api.staging.antonpayments.com` to `https://api.antonpayments.com`.
   </Accordion>
-  <Accordion title="Track payout delivery rates" icon="chart-line">
-    Monitor the ratio of completed vs. failed payouts. A spike in failures could indicate an issue with beneficiary data or a rail provider.
+  <Accordion title="Use production API keys" icon="key" defaultOpen>
+    Replace `ak_test_...` keys with `ak_live_...`. Generate production keys from the merchant portal.
   </Accordion>
-  <Accordion title="Balance monitoring" icon="scale-balanced">
-    Alert when balances drop below a threshold so you can fund your account before payouts start failing.
+  <Accordion title="Register production webhook endpoints" icon="bell">
+    Create new webhook subscriptions pointing to your production webhook URLs. Sandbox subscriptions do not carry over.
   </Accordion>
-  <Accordion title="Error rate monitoring" icon="triangle-exclamation">
-    Track API error rates. A sudden increase in 4xx errors could indicate a code issue; 5xx errors could indicate a platform issue.
+  <Accordion title="Verify corridor availability" icon="map">
+    Confirm the corridors you need are active for your merchant account via the [Corridors API](/api-reference/corridors/list-corridors). Corridor availability may differ from sandbox.
   </Accordion>
 </AccordionGroup>
 
-## Sandbox vs. production differences
+### Sandbox vs. production
 
-| Aspect | Sandbox | Production |
-|--------|---------|------------|
+| | Sandbox | Production |
+|---|---|---|
 | **API URL** | `api.staging.antonpayments.com` | `api.antonpayments.com` |
 | **API keys** | `ak_test_...` | `ak_live_...` |
-| **Compliance** | Simulated (auto-pass) | Real OFAC, PEP, sanctions checks |
+| **Compliance** | Simulated screening (auto-pass) | Real OFAC, PEP, and sanctions checks |
 | **Funds** | Pre-loaded test balances | Real money — must fund account |
 | **Delivery** | Instant simulation | Real rail processing (minutes to days) |
 | **Webhooks** | Delivered normally | Delivered normally |
+| **Rate limits** | Relaxed | Enforced per plan |
 
-## Launch recommendation
+---
 
-<Tip>
-  **Start small.** Send a few small production payouts first to verify end-to-end flow works with real compliance checks and real rail delivery. Once confirmed, ramp up volume.
-</Tip>
+## Launch recommendations
+
+<Warning>
+  **Start small.** Do not batch your first production payouts. Send a small number of low-value payouts first and verify the full lifecycle — creation, screening, processing, delivery, and webhook confirmation — before ramping up volume.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Monitor delivery rates" icon="chart-line">
+    Track the ratio of completed vs. failed payouts from day one. A spike in failures could indicate issues with beneficiary data quality, corridor availability, or rail provider status.
+  </Card>
+  <Card title="Monitor webhook delivery" icon="signal">
+    Set up alerts for failed webhook deliveries. If your endpoint goes down, events queue and you lose real-time visibility. Implement a dead-letter process for missed events.
+  </Card>
+  <Card title="Watch your balances" icon="gauge-high">
+    Set up alerts when balances drop below a threshold. If your balance hits zero, payouts will be rejected until you fund. Don't let a funding gap interrupt operations.
+  </Card>
+  <Card title="Track API error rates" icon="triangle-exclamation">
+    Monitor your `4xx` and `5xx` rates. A sudden increase in client errors could indicate a code regression. An increase in server errors should be reported to Anton support immediately.
+  </Card>
+</CardGroup>
 
 ## Need help?
 
-Contact the Anton Payments team:
-- **Email:** support@antonpayments.com
-- **Dashboard:** [app.antonpayments.com](https://app.antonpayments.com)
+<CardGroup cols={2}>
+  <Card title="Integration support" icon="headset" href="mailto:integrations@antonpayments.com">
+    Technical questions, certification scheduling, and integration guidance.
+  </Card>
+  <Card title="Merchant portal" icon="browser" href="https://app.antonpayments.com">
+    Manage API keys, view payouts, monitor balances, and configure webhooks.
+  </Card>
+</CardGroup>
