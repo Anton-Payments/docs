@@ -45,7 +45,9 @@
     }
   },
   "integrations": {
-    "intercom": "cofsfa9j"
+    "intercom": {
+      "appId": "cofsfa9j"
+    }
   },
   "search": {
     "prompt": "Search docs..."
