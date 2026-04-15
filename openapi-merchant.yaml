@@ -61,6 +61,91 @@ tags:
     description: Reset and seed your sandbox environment.
 
 paths:
+  /v1/currencies:
+    get:
+      tags: [Reference Data]
+      summary: List supported currencies
+      operationId: listCurrencies
+      description: |
+        Return every currency Anton supports, across fiat, crypto, and stablecoin.
+        Use these codes when building payout or FX requests.
+      security: []
+      responses:
+        '200':
+          description: Supported currencies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Currency'
+              example:
+                data:
+                  - code: USD
+                    name: US Dollar
+                    decimals: 2
+                    symbol: "$"
+                    type: fiat
+                  - code: USDC
+                    name: USD Coin
+                    decimals: 6
+                    symbol: USDC
+                    type: stablecoin
+
+  /v1/countries:
+    get:
+      tags: [Reference Data]
+      summary: List supported countries
+      operationId: listCountries
+      description: |
+        Return every destination country Anton can deliver payouts to, along with
+        the currencies each country supports.
+      security: []
+      responses:
+        '200':
+          description: Supported countries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Country'
+
+  /v1/payment-methods:
+    get:
+      tags: [Reference Data]
+      summary: List supported payment methods
+      operationId: listPaymentMethods
+      description: |
+        Return the catalog of payment-method descriptors — each row is a credential
+        format (IBAN, UK bank, US bank, IPX proxies, crypto, card, mobile money)
+        with the countries where it's supported.
+
+        Use this endpoint to drive dynamic instrument-creation UI: pick a country,
+        filter to supported methods, prompt for the right credential fields.
+      security: []
+      responses:
+        '200':
+          description: Supported payment methods.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethodDescriptor'
+
   /v1/beneficiaries:
     post:
       tags: [Beneficiaries]
@@ -938,6 +1023,66 @@ components:
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
 
+    Currency:
+      type: object
+      required: [code, name, decimals, type]
+      properties:
+        code:
+          $ref: '#/components/schemas/CurrencyCode'
+        name:
+          type: string
+          example: US Dollar
+        decimals:
+          type: integer
+          description: Number of decimal places the currency supports. USD=2, JPY=0, BTC=8.
+          example: 2
+        symbol:
+          type: string
+          example: "$"
+        type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+
+    Country:
+      type: object
+      required: [iso2, iso3, name, supported_currencies]
+      properties:
+        iso2:
+          $ref: '#/components/schemas/CountryCode'
+        iso3:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: USA
+        name:
+          type: string
+          example: United States
+        supported_currencies:
+          type: array
+          description: Currencies Anton can deliver in this country.
+          items:
+            $ref: '#/components/schemas/CurrencyCode'
+
+    PaymentMethodDescriptor:
+      type: object
+      required: [code, name, rail_type]
+      description: A supported payment method, with the countries where it's available.
+      properties:
+        code:
+          $ref: '#/components/schemas/PaymentMethodCode'
+        name:
+          type: string
+          example: UK Bank Account
+        description:
+          type: string
+          example: Sort code + account number. Routes via Faster Payments, BACS, CHAPS.
+        rail_type:
+          type: string
+          enum: [fiat, crypto, stablecoin]
+        supported_countries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CountryCode'
+
     BeneficiaryUpdateRequest:
       type: object
       description: Mutable fields on a beneficiary. Fields not included are left unchanged.
@@ -988,7 +1133,7 @@ components:
         end_user_ip:
           type: string
 
-    PaymentMethod:
+    PaymentMethodCode:
       type: string
       description: |
         Credential format of a payment instrument — named by what data is stored,
@@ -1044,7 +1189,7 @@ components:
         with the exact credential schema required.
       properties:
         method:
-          $ref: '#/components/schemas/PaymentMethod'
+          $ref: '#/components/schemas/PaymentMethodCode'
         currency:
           $ref: '#/components/schemas/CurrencyCode'
         country:
@@ -1083,7 +1228,7 @@ components:
           type: string
           pattern: '^mer_[a-zA-Z0-9]+$'
         method:
-          $ref: '#/components/schemas/PaymentMethod'
+          $ref: '#/components/schemas/PaymentMethodCode'
         currency:
           $ref: '#/components/schemas/CurrencyCode'
         country:
