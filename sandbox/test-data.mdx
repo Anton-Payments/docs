@@ -1,0 +1,14 @@
+---
+title: "Test Data"
+description: "Reset your sandbox and seed realistic beneficiaries and payouts in one call."
+---
+
+<Note>
+  Placeholder. Combined page covering all three sandbox management endpoints:
+
+  - **`POST /v1/merchant/sandbox/reset`** — wipe all beneficiaries, payouts, batches, webhooks, and balances. Sandbox only; no-op in production.
+  - **`POST /v1/merchant/sandbox/seed-beneficiaries`** — create a curated set of sample beneficiaries across multiple countries and payment methods.
+  - **`POST /v1/merchant/sandbox/seed-payouts`** — create sample payouts in a mix of states (pending, completed, failed, cancelled) for UI and integration testing.
+
+  Should document exactly what each endpoint creates, request/response shapes, how often you can call them, and when you'd use each (e.g., CI test fixtures, demo environments, onboarding engineers).
+</Note>

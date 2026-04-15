@@ -10,7 +10,8 @@
   "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "dark": "/logo/dark.svg",
+    "href": "/introduction"
   },
   "appearance": {
     "default": "system"
@@ -41,7 +42,7 @@
       "display": "interactive"
     },
     "examples": {
-      "languages": ["bash", "javascript", "python", "go"]
+      "languages": ["bash", "javascript", "php", "go"]
     }
   },
   "search": {
@@ -53,35 +54,38 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "Get Started",
             "pages": [
               "introduction",
               "quickstart",
               "authentication",
-              "environments"
-            ]
-          },
-          {
-            "group": "Core Concepts",
-            "pages": [
-              "concepts/payouts",
-              "concepts/beneficiaries",
-              "concepts/balances",
-              "concepts/webhooks",
-              "concepts/pagination",
-              "concepts/errors",
-              "concepts/idempotency"
+              "environments",
+              "how-anton-evaluates-payouts"
             ]
           },
           {
             "group": "Guides",
             "pages": [
               "guides/send-a-payout",
+              "guides/crypto-payouts",
               "guides/manage-beneficiaries",
               "guides/handle-webhooks",
               "guides/batch-payouts",
-              "guides/error-handling",
+              "guides/fx-exchange",
               "guides/going-live"
+            ]
+          },
+          {
+            "group": "Sandbox",
+            "pages": [
+              "sandbox/overview",
+              "sandbox/test-data"
+            ]
+          },
+          {
+            "group": "Changelog",
+            "pages": [
+              "changelog"
             ]
           }
         ]
@@ -96,127 +100,15 @@
             ]
           },
           {
-            "group": "Reference Data",
+            "group": "Cross-Cutting",
             "pages": [
-              "api-reference/reference-data/list-currencies",
-              "api-reference/reference-data/list-countries",
-              "api-reference/reference-data/list-payment-methods"
-            ]
-          },
-          {
-            "group": "Payouts",
-            "pages": [
-              "api-reference/payouts/create-payout",
-              "api-reference/payouts/list-payouts",
-              "api-reference/payouts/get-payout",
-              "api-reference/payouts/list-payout-events",
-              "api-reference/payouts/cancel-payout"
-            ]
-          },
-          {
-            "group": "Payees",
-            "pages": [
-              "api-reference/payees/create-payee",
-              "api-reference/payees/list-payees",
-              "api-reference/payees/get-payee",
-              "api-reference/payees/update-payee",
-              "api-reference/payees/update-payee-pii",
-              "api-reference/payees/delete-payee"
-            ]
-          },
-          {
-            "group": "Instruments",
-            "pages": [
-              "api-reference/instruments/create-instrument-for-payee",
-              "api-reference/instruments/list-instruments-by-payee",
-              "api-reference/instruments/list-instruments",
-              "api-reference/instruments/get-instrument",
-              "api-reference/instruments/update-instrument",
-              "api-reference/instruments/delete-instrument"
-            ]
-          },
-          {
-            "group": "Balances",
-            "pages": [
-              "api-reference/balances/list-balances",
-              "api-reference/balances/get-balance"
-            ]
-          },
-          {
-            "group": "Accounts",
-            "pages": [
-              "api-reference/accounts/list-accounts",
-              "api-reference/accounts/get-account",
-              "api-reference/accounts/get-account-details",
-              "api-reference/accounts/list-account-transactions",
-              "api-reference/accounts/list-transactions"
-            ]
-          },
-          {
-            "group": "Batches",
-            "pages": [
-              "api-reference/batches/download-batch-template",
-              "api-reference/batches/upload-batch",
-              "api-reference/batches/list-batches",
-              "api-reference/batches/get-batch",
-              "api-reference/batches/confirm-batch",
-              "api-reference/batches/cancel-batch",
-              "api-reference/batches/list-batch-payouts",
-              "api-reference/batches/get-batch-errors",
-              "api-reference/batches/get-batch-results"
-            ]
-          },
-          {
-            "group": "Webhooks",
-            "pages": [
-              "api-reference/webhooks/create-webhook-subscription",
-              "api-reference/webhooks/list-webhook-subscriptions",
-              "api-reference/webhooks/get-webhook-subscription",
-              "api-reference/webhooks/get-webhook-secret",
-              "api-reference/webhooks/rotate-webhook-secret",
-              "api-reference/webhooks/test-webhook-subscription",
-              "api-reference/webhooks/deactivate-webhook-subscription",
-              "api-reference/webhooks/delete-webhook-subscription",
-              "api-reference/webhooks/list-webhook-events",
-              "api-reference/webhooks/get-webhook-event",
-              "api-reference/webhooks/list-webhook-event-deliveries"
-            ]
-          },
-          {
-            "group": "Documents",
-            "pages": [
-              "api-reference/documents/upload-document",
-              "api-reference/documents/list-documents"
-            ]
-          },
-          {
-            "group": "RFIs",
-            "pages": [
-              "api-reference/rfis/list-rfis",
-              "api-reference/rfis/get-rfi",
-              "api-reference/rfis/respond-to-rfi"
-            ]
-          },
-          {
-            "group": "Pricing",
-            "pages": [
-              "api-reference/pricing/list-merchant-pricing",
-              "api-reference/pricing/create-pricing-quote"
-            ]
-          },
-          {
-            "group": "FX",
-            "pages": [
-              "api-reference/fx/create-fx-quote",
-              "api-reference/fx/get-indicative-fx-rate",
-              "api-reference/fx/execute-fx-exchange",
-              "api-reference/fx/list-fx-exchanges"
-            ]
-          },
-          {
-            "group": "Corridors",
-            "pages": [
-              "api-reference/corridors/list-corridors"
+              "api-reference/idempotency",
+              "api-reference/pagination",
+              "api-reference/rate-limits",
+              "api-reference/errors",
+              "api-reference/webhook-events",
+              "api-reference/webhook-signing",
+              "api-reference/ip-allowlist"
             ]
           }
         ]
@@ -231,14 +123,18 @@
         },
         {
           "anchor": "Support",
-          "href": "mailto:support@antonpayments.com",
-          "icon": "envelope"
+          "href": "https://help.antonpayments.com",
+          "icon": "life-ring"
         }
       ]
     }
   },
   "navbar": {
     "links": [
+      {
+        "label": "Website",
+        "href": "https://www.antonpayments.com"
+      },
       {
         "label": "Dashboard",
         "href": "https://app.antonpayments.com"
@@ -253,8 +149,7 @@
   "footer": {
     "socials": {
       "github": "https://github.com/anton-payments",
-      "linkedin": "https://linkedin.com/company/antonpayments",
-      "x": "https://x.com/antonpayments"
+      "linkedin": "https://linkedin.com/company/antonpayments"
     }
   },
   "contextual": {

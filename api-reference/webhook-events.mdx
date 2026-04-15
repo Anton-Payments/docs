@@ -1,0 +1,426 @@
+---
+title: "Webhook Events"
+description: "Every event Anton emits, grouped by resource, with payload schemas."
+---
+
+Webhooks are HTTP POSTs Anton sends to a URL you control when something happens in your account — a payout moves through its lifecycle, a beneficiary is created, an FX exchange settles. Subscribe by calling `POST /v1/webhooks` with the URL and list of event types you want to receive.
+
+Deliveries are **at-least-once**. You may occasionally receive the same event twice — deduplicate on the envelope `id`. Events for the same resource are dispatched in the order they occur, but network retries mean they can arrive out of order at your endpoint. Failed deliveries retry with exponential backoff (30 seconds, 2 minutes, 8 minutes, 32 minutes, then hourly up to **5 attempts total**) before being abandoned.
+
+Every delivery is HMAC-signed — see [Webhook Signing](/api-reference/webhook-signing) for verification. Respond with any 2xx status within 30 seconds to acknowledge receipt.
+
+## Delivery envelope
+
+Every delivery has the same outer shape. `data` holds the resource-specific payload documented below.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9V",
+  "type": "payout.completed",
+  "created_at": "2026-04-15T14:30:00Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "status": "completed",
+    "...": "resource-specific fields"
+  }
+}
+```
+
+Each delivery also carries these HTTP headers:
+
+| Header | Description |
+|---|---|
+| `X-Webhook-ID` | The envelope `id` — use for deduplication. |
+| `X-Webhook-Event` | The event type, e.g. `payout.completed`. |
+| `X-Webhook-Timestamp` | Unix seconds at signing time. Used for verification. |
+| `X-Webhook-Signature` | `v1={hex-hmac-sha256}`. See [Webhook Signing](/api-reference/webhook-signing). |
+| `User-Agent` | `AntonPayments-Webhook/1.0` |
+
+## Event catalog
+
+<CardGroup cols={2}>
+  <Card title="Payout events" icon="money-bill-transfer" href="#payout-events">
+    10 events covering the full payout lifecycle.
+  </Card>
+  <Card title="Beneficiary events" icon="user" href="#beneficiary-events">
+    Beneficiary create, update, delete, and block.
+  </Card>
+  <Card title="Instrument events" icon="building-columns" href="#instrument-events">
+    Payment instrument create, update, delete.
+  </Card>
+  <Card title="Batch events" icon="file-csv" href="#batch-events">
+    Batch upload lifecycle.
+  </Card>
+  <Card title="FX events" icon="arrow-right-arrow-left" href="#fx-events">
+    Quote locks and exchange execution.
+  </Card>
+  <Card title="Test events" icon="flask" href="#test-events">
+    Fired by the test-delivery endpoint.
+  </Card>
+</CardGroup>
+
+## Payout events
+
+| Event type | Fires when |
+|---|---|
+| `payout.created` | A payout is successfully created via `POST /v1/payouts`. |
+| `payout.approved` | A pending payout is approved (maker-checker flow). |
+| `payout.processing` | The payout has been submitted to the underlying rail provider. |
+| `payout.sent` | The rail has confirmed funds are on the way to the beneficiary. |
+| `payout.completed` | The rail confirms funds have been delivered. |
+| `payout.failed` | Rail submission or execution failed terminally. |
+| `payout.cancelled` | The payout was cancelled before execution. |
+| `payout.returned` | The rail reported the funds were returned after sending. |
+| `payout.screening_failed` | Compliance screening blocked the payout. |
+| `payout.velocity_blocked` | A risk/velocity rule blocked the payout at create time. |
+
+The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.screening_failed` and `payout.velocity_blocked` use a compact shape with just `id`, `status`, and `reason`.
+
+<Note>
+  When a real-time risk score is available on the payout (available via the Anton risk engine), the lifecycle event payloads include a `risk` object summarising the score and contributing factors.
+</Note>
+
+### `payout.created`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9V",
+  "type": "payout.created",
+  "created_at": "2026-04-15T14:30:00Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "pending_screening",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "dest_amount": "458.25",
+    "dest_currency": "EUR",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "reference": "Invoice #1042",
+    "created_at": "2026-04-15T14:30:00Z"
+  }
+}
+```
+
+### `payout.processing`, `payout.sent`, `payout.completed`, `payout.failed`, `payout.returned`
+
+These share the same lifecycle payload shape. `rail_provider`, `rail_reference`, `completed_at`, and `failed_at` are populated when the rail reports them.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9W",
+  "type": "payout.completed",
+  "created_at": "2026-04-15T14:45:12Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "completed",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "dest_amount": "458.25",
+    "dest_currency": "EUR",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "reference": "Invoice #1042",
+    "rail_provider": "openpayd",
+    "rail_reference": "OP-2026-04-15-778812",
+    "created_at": "2026-04-15T14:30:00Z",
+    "updated_at": "2026-04-15T14:45:12Z",
+    "completed_at": "2026-04-15T14:45:12Z"
+  }
+}
+```
+
+### `payout.screening_failed`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9X",
+  "type": "payout.screening_failed",
+  "created_at": "2026-04-15T14:30:03Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "screening_failed",
+    "reason": "compliance screening flagged this payout"
+  }
+}
+```
+
+### `payout.velocity_blocked`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9Y",
+  "type": "payout.velocity_blocked",
+  "created_at": "2026-04-15T14:30:01Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "status": "velocity_blocked",
+    "reason": "payout blocked by risk policy"
+  }
+}
+```
+
+### `payout.approved`, `payout.cancelled`
+
+{/* TODO: Confirm exact payload shape for payout.approved and payout.cancelled — the event-type constants exist in internal/domain/webhook/model.go, but no dispatch site was located in the codebase audit. Document the payload once the corresponding handler wires Dispatch(). */}
+
+The `payout.approved` and `payout.cancelled` event types are defined but no dispatch site was found during the audit. These events may be wired up in a future release — subscribing to them today is safe but you should not expect to receive them.
+
+## Beneficiary events
+
+| Event type | Fires when |
+|---|---|
+| `beneficiary.created` | A beneficiary is created via `POST /v1/beneficiaries`. |
+| `beneficiary.updated` | A beneficiary is edited, archived, restored, or has its PII updated. |
+| `beneficiary.deleted` | A beneficiary is deleted. Payload contains only the id. |
+| `beneficiary.blocked` | A beneficiary is blocked (e.g. by compliance). |
+
+The payload for `beneficiary.created`, `beneficiary.updated`, and `beneficiary.blocked` is wrapped in a `data` object containing the beneficiary resource. Sensitive fields (BT token references, fingerprints, deletion timestamps) are never included.
+
+### `beneficiary.created`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UB1",
+  "type": "beneficiary.created",
+  "created_at": "2026-04-15T12:00:00Z",
+  "data": {
+    "data": {
+      "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+      "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+      "type": "individual",
+      "status": "active",
+      "display_name": "Jordan Rivera",
+      "country": "DE",
+      "external_ref": "crm-id-8814",
+      "metadata": {
+        "cost_center": "engineering"
+      },
+      "created_at": "2026-04-15T12:00:00Z",
+      "updated_at": "2026-04-15T12:00:00Z"
+    }
+  }
+}
+```
+
+<Note>
+  The outer `data` is the envelope wrapper; the inner `data` is the handler-level wrapper around the beneficiary resource. This is a quirk of the current dispatch path and is stable — parse as shown.
+</Note>
+
+### `beneficiary.updated`, `beneficiary.blocked`
+
+Same shape as `beneficiary.created` with the event type and resource state reflecting the new values.
+
+### `beneficiary.deleted`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UB4",
+  "type": "beneficiary.deleted",
+  "created_at": "2026-04-15T12:30:00Z",
+  "data": {
+    "data": {
+      "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1"
+    }
+  }
+}
+```
+
+## Instrument events
+
+| Event type | Fires when |
+|---|---|
+| `instrument.created` | An instrument is attached to a beneficiary via `POST /v1/beneficiaries/{id}/instruments`. |
+| `instrument.updated` | An instrument is edited. |
+| `instrument.deleted` | An instrument is deleted. Payload contains only the id. |
+
+### `instrument.created`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UC1",
+  "type": "instrument.created",
+  "created_at": "2026-04-15T12:05:00Z",
+  "data": {
+    "data": {
+      "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+      "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+      "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+      "method": "iban",
+      "currency": "EUR",
+      "country": "DE",
+      "label": "Commerzbank EUR",
+      "display_last4": "0194",
+      "display_bank": "Commerzbank",
+      "masked_account": "DE89 **** **** **** **** 0194",
+      "status": "active",
+      "is_default": true,
+      "created_at": "2026-04-15T12:05:00Z",
+      "updated_at": "2026-04-15T12:05:00Z"
+    }
+  }
+}
+```
+
+Credential tokens and fingerprints are never included — raw instrument credentials live only in the Basis Theory vault.
+
+### `instrument.updated`
+
+Same shape as `instrument.created` with the new values reflected.
+
+### `instrument.deleted`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UC4",
+  "type": "instrument.deleted",
+  "created_at": "2026-04-15T12:45:00Z",
+  "data": {
+    "data": {
+      "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2"
+    }
+  }
+}
+```
+
+## Batch events
+
+| Event type | Fires when |
+|---|---|
+| `batch.uploaded` | A CSV batch is uploaded and accepted for validation. |
+| `batch.completed` | A batch finished processing — all payouts dispatched. |
+| `batch.failed` | A batch was rejected or failed terminally. |
+
+{/* TODO: No dispatch sites for batch.uploaded/completed/failed were found during the audit — the constants exist in internal/domain/webhook/model.go but the batch worker does not yet call webhookSvc.Dispatch(). Populate the payload schemas once batch wiring lands; until then, subscribers will not receive these events. */}
+
+These event types are reserved but not currently dispatched. Subscribing is safe; no deliveries will be sent until batch webhook wiring is added.
+
+## FX events
+
+| Event type | Fires when |
+|---|---|
+| `fx.quote.created` | An FX quote is locked (binding commitment). Indicative quotes do not fire an event. |
+| `fx.exchange.created` | An FX exchange is executed and is pending settlement. |
+| `fx.exchange.completed` | The exchange has settled. |
+| `fx.exchange.failed` | The exchange failed to settle, or was stuck in pending beyond the retry budget. |
+
+### `fx.quote.created`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UD1",
+  "type": "fx.quote.created",
+  "created_at": "2026-04-15T13:00:00Z",
+  "data": {
+    "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UD2",
+    "sell_currency": "GBP",
+    "buy_currency": "EUR",
+    "sell_amount": "1000.00",
+    "buy_amount": "1173.40",
+    "customer_rate": "1.17340",
+    "locked": true,
+    "expires_at": "2026-04-15T13:05:00Z"
+  }
+}
+```
+
+### `fx.exchange.created`, `fx.exchange.completed`, `fx.exchange.failed`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UD3",
+  "type": "fx.exchange.completed",
+  "created_at": "2026-04-15T13:01:12Z",
+  "data": {
+    "quote_id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UD2",
+    "sell_currency": "GBP",
+    "buy_currency": "EUR",
+    "sell_amount": "1000.00",
+    "buy_amount": "1173.40",
+    "mid_market_rate": "1.17450",
+    "customer_rate": "1.17340",
+    "provider": "openpayd",
+    "provider_ref": "OP-FX-2026-04-15-41102",
+    "status": "completed"
+  }
+}
+```
+
+A `fx.exchange.failed` event fired by the status-polling worker (for exchanges that get stuck in `pending`) uses a compact payload:
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UD4",
+  "type": "fx.exchange.failed",
+  "created_at": "2026-04-15T13:11:00Z",
+  "data": {
+    "id": "fxe_01HX8Z9K0M2N3P4Q5R6S7T8UD5",
+    "sell_currency": "GBP",
+    "buy_currency": "EUR",
+    "sell_amount": "1000.00",
+    "buy_amount": "1173.40",
+    "status": "failed",
+    "reason": "exchange stuck in pending state"
+  }
+}
+```
+
+## Other reserved events
+
+The following event types are defined in the platform but are not currently dispatched. Subscribing is safe; deliveries will begin once the corresponding wiring lands.
+
+| Event type | Planned trigger |
+|---|---|
+| `balance.low` | A merchant balance falls below the configured low-balance threshold. |
+| `funding.credit` | Incoming funding is credited to a merchant balance. |
+| `screening.hit` | A sanctions/PEP screening produces a hit requiring review. |
+
+{/* TODO: Populate balance.low, funding.credit, and screening.hit payload schemas once the emitting code paths are wired. Event-type constants exist in internal/domain/webhook/model.go but no dispatch sites were found during the audit. */}
+
+## Test events
+
+### `test`
+
+Fired by `POST /v1/webhooks/{id}/test` to help you verify your endpoint is reachable and your signature verification works. The payload is a synthetic example with hard-coded identifiers — do not persist or act on it.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UE1",
+  "type": "test",
+  "created_at": "2026-04-15T15:00:00Z",
+  "data": {
+    "test": true,
+    "event_type": "test",
+    "data": {
+      "object": "payout",
+      "id": "pay_test000000000000001",
+      "status": "completed",
+      "source_amount": "100.00",
+      "source_currency": "USD",
+      "dest_amount": "85.00",
+      "dest_currency": "EUR",
+      "created_at": "2026-04-15T15:00:00Z"
+    }
+  }
+}
+```
+
+## Subscribing to events
+
+Create a subscription with the list of event types you want to receive. The signing `secret` is returned once, at creation time — store it securely.
+
+```bash
+curl https://api.antonpayments.dev/v1/webhooks \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/anton",
+    "events": ["payout.created", "payout.completed", "payout.failed"]
+  }'
+```
+
+Inspect past deliveries with `GET /v1/webhooks/events`, `GET /v1/webhooks/events/{id}`, and `GET /v1/webhooks/events/{id}/deliveries`. See [Webhook Signing](/api-reference/webhook-signing) for verification.

@@ -1,87 +1,65 @@
 ---
-title: "Introduction"
+title: "Anton Payments"
 sidebarTitle: "Introduction"
-subtitle: "One API to move money anywhere in the world."
-description: "Anton Payments is a cross-border payout infrastructure platform. Connect once, pay out globally via bank transfer, mobile money, cards, and stablecoins."
-mode: "wide"
+description: "AI-native cross-border payout infrastructure. Fiat, stablecoin, and crypto, routed across a global network of rails."
 ---
 
-Businesses use Anton to send payouts across borders without stitching together dozens of payment providers, banking partners, and compliance tools. You integrate once — we handle routing, screening, and delivery across every corridor.
+Anton Payments moves money. Fiat to fiat across borders, stablecoin to fiat, stablecoin to stablecoin, and stablecoin to other cryptocurrencies. Merchants fund payouts with the currency they already hold; Anton picks the rail, clears sanctions, scores risk, and settles.
 
-<CardGroup cols={3}>
-  <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Send your first payout in minutes using the sandbox.
-  </Card>
-  <Card title="API Reference" icon="code" href="/api-reference/introduction">
-    Explore every endpoint with interactive examples.
-  </Card>
-  <Card title="Going Live" icon="arrow-up-right" href="/guides/going-live">
-    Checklist for moving from sandbox to production.
-  </Card>
-</CardGroup>
+Most payout platforms bolt AI on top of static rule engines. **Anton is built the other way around** — risk scoring, smart routing, velocity control, and anomaly detection are the platform, not an add-on.
 
----
-
-## Why Anton?
+## What you can build
 
 <CardGroup cols={2}>
-  <Card title="Multi-rail routing" icon="route">
-    SWIFT, SEPA, ACH, FPS, mobile money, cards, and crypto — one integration, every rail. Anton selects the optimal path for each payout based on corridor, speed, and cost.
+  <Card title="Global payroll" icon="users">
+    Pay contractors in 100+ countries with a single API call. Anton handles identity verification, compliance screening, and rail selection.
   </Card>
-  <Card title="Compliance from day one" icon="shield-check">
-    OFAC and sanctions screening, PEP checks, velocity rules, and maker-checker approvals run automatically on every transaction. Built for SOC 2, PCI DSS, and ISO 27001.
+  <Card title="Marketplace disbursements" icon="store">
+    Settle seller balances in fiat or stablecoin. Batch thousands of payouts, track them via webhooks, and retry safely with idempotency guarantees.
   </Card>
-  <Card title="Real-time lifecycle tracking" icon="signal-stream">
-    Follow every payout from creation through screening, processing, and delivery. Webhooks fire on every state change — or poll anytime.
+  <Card title="Stablecoin treasury" icon="coins">
+    Fund your balance with USDC or USDT and pay out in whichever currency your beneficiary needs — fiat off-ramp or on-chain settlement.
   </Card>
-  <Card title="Double-entry ledger" icon="scale-balanced">
-    Every money movement produces balanced debit and credit entries. Reconciliation is automatic, not a monthly fire drill.
+  <Card title="Cross-border B2B" icon="building">
+    Move working capital across corridors with FX quote locking, settlement confirmation, and a full audit trail for every transaction.
   </Card>
 </CardGroup>
 
 ## How it works
 
 <Steps>
-  <Step title="Register a payee">
-    Store who you are paying — their bank account, mobile wallet, or crypto address. Payee details are tokenized and isolated per merchant. Create once, pay repeatedly.
+  <Step title="Onboard your business">
+    Complete KYB verification through the merchant dashboard. Our underwriting team reviews your account before you can move live funds.
   </Step>
-  <Step title="Submit a payout">
-    Call the Payouts API with the amount, currency, and destination. Anton screens the transaction against sanctions lists and your risk rules, selects the best rail, and submits.
+  <Step title="Create your first beneficiary">
+    Add the people or businesses you want to pay. Beneficiary PII is tokenized on creation — raw identifiers never hit Anton's database.
   </Step>
-  <Step title="Track and confirm">
-    Receive webhook events as the payout moves through each stage, or query the status endpoint. When funds land, you get confirmation with the settlement reference.
+  <Step title="Send a payout">
+    Call `POST /v1/payouts` with an amount, currency, and beneficiary. Anton screens it, scores it, routes it to the right rail, and settles.
+  </Step>
+  <Step title="Listen for webhooks">
+    Subscribe to `payout.*` events to know when a payout is processing, sent, completed, or needs review. Never poll.
   </Step>
 </Steps>
 
-<Note>
-  **Sandbox access** is available once your account is approved or provisioned by our team. Once enabled, every API endpoint works in sandbox mode with test data so you can integrate safely before going live. [Learn more &rarr;](/environments)
-</Note>
+## What makes Anton different
 
-## Core concepts
+**Compliance-first, day one.** Every payout is screened against OFAC, EU, UK, and UN sanctions lists. PII and payment instruments are isolated in a PCI-DSS vault — Anton's core database never stores raw account numbers or identity documents. SOC 2, PCI DSS, and ISO 27001 programs are active.
 
-<CardGroup cols={2}>
-  <Card title="Payouts" icon="money-bill-transfer" href="/concepts/payouts">
-    The core object — a money movement from your balance to a payee across any supported rail and corridor.
-  </Card>
-  <Card title="Payees" icon="users" href="/concepts/payees">
-    Your payment recipients. Store their details once with tokenized PII, then pay them on demand.
-  </Card>
-  <Card title="Balances" icon="wallet" href="/concepts/balances">
-    Your funded accounts by currency. Payouts debit from these balances in real time.
-  </Card>
-  <Card title="Webhooks" icon="bell" href="/concepts/webhooks">
-    Real-time event notifications for payout status changes, delivery confirmations, and compliance flags.
-  </Card>
-</CardGroup>
+**AI-native risk.** Every payout runs through the Anton Engine, a real-time scoring system that combines merchant-level velocity rules, cross-merchant trust signals, and anomaly detection. The verdict is reflected in the payout state machine: approved, held for review, or blocked.
+
+**Multi-rail by design.** Anton integrates with a network of bank, card, and on-chain settlement providers. You pick the corridor and currency; Anton picks the rail.
+
+## Start building
 
 <CardGroup cols={3}>
-  <Card title="Idempotency" icon="fingerprint" href="/concepts/idempotency">
-    Safe retries on every mutating endpoint.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Your first payout in five minutes.
   </Card>
-  <Card title="Pagination" icon="list" href="/concepts/pagination">
-    Cursor-based pagination on all list endpoints.
+  <Card title="Authentication" icon="key" href="/authentication">
+    API keys, environments, and secure usage.
   </Card>
-  <Card title="Errors" icon="triangle-exclamation" href="/concepts/errors">
-    Structured error responses with actionable codes.
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Every endpoint, every field, every response.
   </Card>
 </CardGroup>

@@ -1,0 +1,284 @@
+---
+title: "Webhook Signing"
+description: "Verify that every webhook delivery genuinely came from Anton."
+---
+
+Anton signs every webhook delivery with an HMAC-SHA256 signature derived from your subscription's signing secret. Verifying the signature on your endpoint is the only way to prove a request really came from Anton and not an attacker who discovered your URL.
+
+<Warning>
+  Treat an unverified webhook the same as an untrusted HTTP request. Do not act on the payload — do not mark payouts as settled, do not release funds, do not update beneficiaries — until the signature has been verified successfully.
+</Warning>
+
+## The signature scheme
+
+| Property | Value |
+|---|---|
+| Algorithm | HMAC-SHA256 |
+| Encoding | Lowercase hex |
+| Signed string | `{timestamp}.{body}` — Unix timestamp, a literal dot, and the raw request body |
+| Header carrying the signature | `X-Webhook-Signature`, prefixed with `v1=` |
+| Header carrying the timestamp | `X-Webhook-Timestamp` (Unix seconds, UTC) |
+| Secret format | `whsec_` followed by 64 hex characters |
+
+Every delivery also carries `X-Webhook-ID` (the event id, useful for deduplication) and `X-Webhook-Event` (the event type). The `User-Agent` is `AntonPayments-Webhook/1.0`.
+
+## Verification steps
+
+<Steps>
+  <Step title="Read the raw request body">
+    Capture the body as bytes **before** any JSON parsing or framework normalisation. Parsed-and-re-serialised JSON will not byte-match the string Anton signed.
+  </Step>
+  <Step title="Read the timestamp and signature headers">
+    Pull `X-Webhook-Timestamp` and `X-Webhook-Signature` from the request. Strip the `v1=` prefix on the signature.
+  </Step>
+  <Step title="Reject old timestamps">
+    If the timestamp is more than 5 minutes (300 seconds) away from your server's current time, reject the request. This prevents replays of captured deliveries.
+  </Step>
+  <Step title="Compute the expected signature">
+    Concatenate `{timestamp}.{body}`, compute `HMAC-SHA256` over it using your subscription's signing secret, and hex-encode the result.
+  </Step>
+  <Step title="Compare in constant time">
+    Compare the expected signature to the header value using a constant-time comparison (`hmac.compare_digest`, `crypto.timingSafeEqual`, `hash_equals`, `hmac.Equal`). Never use `==` — it leaks timing information.
+  </Step>
+  <Step title="Respond 2xx within 30 seconds">
+    Return any 2xx status to acknowledge receipt. Non-2xx responses are retried with exponential backoff up to 5 total attempts.
+  </Step>
+</Steps>
+
+## Verification code
+
+All examples read the raw body, enforce a 5-minute freshness window, and use a constant-time comparison.
+
+<CodeGroup>
+```bash verify.sh
+#!/usr/bin/env bash
+# Example: verify a webhook from the command line. In production, do this in
+# your application code — not in a shell script.
+
+SECRET="$WEBHOOK_SECRET"        # whsec_...
+TIMESTAMP="$1"                  # value of X-Webhook-Timestamp
+SIGNATURE="${2#v1=}"            # value of X-Webhook-Signature with v1= stripped
+BODY="$(cat)"                   # raw body piped on stdin
+
+NOW=$(date +%s)
+AGE=$(( NOW - TIMESTAMP ))
+if [ "$AGE" -gt 300 ] || [ "$AGE" -lt -300 ]; then
+  echo "reject: stale timestamp ($AGE seconds)" >&2
+  exit 1
+fi
+
+EXPECTED=$(printf '%s.%s' "$TIMESTAMP" "$BODY" \
+  | openssl dgst -sha256 -hmac "$SECRET" -hex \
+  | awk '{print $2}')
+
+# openssl does not provide a constant-time compare, so we fall back to
+# a length check plus a fixed-cost comparison in a higher-level language
+# when this matters. For non-production shells this is acceptable:
+if [ "$EXPECTED" = "$SIGNATURE" ]; then
+  echo "ok"
+else
+  echo "reject: signature mismatch" >&2
+  exit 1
+fi
+```
+
+```javascript verify.js
+// Node 18+. Express example — mount express.raw() on the webhook route so
+// req.body is a Buffer, not a parsed object.
+import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+const SECRET = process.env.WEBHOOK_SECRET; // whsec_...
+
+app.post(
+  "/webhooks/anton",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const timestamp = req.header("X-Webhook-Timestamp");
+    const signatureHeader = req.header("X-Webhook-Signature") || "";
+    const signature = signatureHeader.replace(/^v1=/, "");
+
+    if (!timestamp || !signature) {
+      return res.status(400).send("missing signature headers");
+    }
+
+    const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+    if (ageSeconds > 300) {
+      return res.status(400).send("stale timestamp");
+    }
+
+    const body = req.body; // Buffer — the raw bytes Anton signed
+    const signedString = `${timestamp}.${body.toString("utf8")}`;
+    const expected = crypto
+      .createHmac("sha256", SECRET)
+      .update(signedString)
+      .digest("hex");
+
+    const expectedBuf = Buffer.from(expected, "hex");
+    const actualBuf = Buffer.from(signature, "hex");
+    if (
+      expectedBuf.length !== actualBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, actualBuf)
+    ) {
+      return res.status(400).send("invalid signature");
+    }
+
+    const event = JSON.parse(body.toString("utf8"));
+    // ... handle event ...
+    res.status(200).send();
+  },
+);
+```
+
+```php verify.php
+<?php
+// Symfony / Laravel: read the raw body via $request->getContent() or
+// file_get_contents("php://input"). Don't use $_POST — it will be empty
+// for JSON payloads and wrong for form-encoded ones.
+
+$secret = getenv("WEBHOOK_SECRET"); // whsec_...
+$body = file_get_contents("php://input");
+$timestamp = $_SERVER["HTTP_X_WEBHOOK_TIMESTAMP"] ?? "";
+$signatureHeader = $_SERVER["HTTP_X_WEBHOOK_SIGNATURE"] ?? "";
+$signature = preg_replace("/^v1=/", "", $signatureHeader);
+
+if ($timestamp === "" || $signature === "") {
+    http_response_code(400);
+    exit("missing signature headers");
+}
+
+if (abs(time() - (int)$timestamp) > 300) {
+    http_response_code(400);
+    exit("stale timestamp");
+}
+
+$expected = hash_hmac("sha256", $timestamp . "." . $body, $secret);
+
+if (!hash_equals($expected, $signature)) {
+    http_response_code(400);
+    exit("invalid signature");
+}
+
+$event = json_decode($body, true);
+// ... handle event ...
+http_response_code(200);
+```
+
+```go verify.go
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+var secret = []byte(os.Getenv("WEBHOOK_SECRET")) // whsec_...
+
+func handleWebhook(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body", http.StatusBadRequest)
+		return
+	}
+
+	timestamp := r.Header.Get("X-Webhook-Timestamp")
+	signature := strings.TrimPrefix(r.Header.Get("X-Webhook-Signature"), "v1=")
+	if timestamp == "" || signature == "" {
+		http.Error(w, "missing signature headers", http.StatusBadRequest)
+		return
+	}
+
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		http.Error(w, "bad timestamp", http.StatusBadRequest)
+		return
+	}
+	if diff := time.Now().Unix() - ts; diff > 300 || diff < -300 {
+		http.Error(w, "stale timestamp", http.StatusBadRequest)
+		return
+	}
+
+	mac := hmac.New(sha256.New, secret)
+	fmt.Fprintf(mac, "%d.%s", ts, body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	expectedBytes, _ := hex.DecodeString(expected)
+	actualBytes, err := hex.DecodeString(signature)
+	if err != nil || !hmac.Equal(expectedBytes, actualBytes) {
+		http.Error(w, "invalid signature", http.StatusBadRequest)
+		return
+	}
+
+	var event struct {
+		ID        string          `json:"id"`
+		Type      string          `json:"type"`
+		CreatedAt string          `json:"created_at"`
+		Data      json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	// ... handle event ...
+	w.WriteHeader(http.StatusOK)
+}
+```
+</CodeGroup>
+
+## Rotating secrets
+
+Every subscription has one signing secret. The secret is returned once — in the response to `POST /v1/webhooks` — and never again. Store it in your secrets manager at creation time.
+
+<AccordionGroup>
+  <Accordion title="Retrieve the current secret">
+    ```bash
+    curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret \
+      -H "Authorization: Bearer ak_test_..."
+    ```
+
+    Response:
+
+    ```json
+    { "data": { "secret": "whsec_..." } }
+    ```
+  </Accordion>
+  <Accordion title="Rotate the secret">
+    ```bash
+    curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret/rotate \
+      -X POST \
+      -H "Authorization: Bearer ak_test_..."
+    ```
+
+    Response:
+
+    ```json
+    { "data": { "secret": "whsec_..." } }
+    ```
+
+    Rotation replaces the secret immediately. Any deliveries already in flight at the moment of rotation will be signed with the new secret as of the next attempt.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  Rotation is immediate — there is no overlap window during which both the old and new secret are accepted. Roll the new secret into your endpoint's configuration **before** calling rotate, or be prepared for a brief window where in-flight deliveries fail verification and retry.
+</Warning>
+
+## Common pitfalls
+
+- **Parsed JSON instead of raw bytes.** Frameworks that parse and re-serialise the body (Express's default `json()` middleware, some ASP.NET pipelines) will break verification — whitespace, key ordering, and number formatting all change. Capture the raw body before parsing.
+- **Wrong header case.** HTTP headers are case-insensitive, but some frameworks expose them under specific casing. Read `X-Webhook-Signature` / `X-Webhook-Timestamp` via your framework's header API, not by exact-match dictionary lookup.
+- **Forgetting to strip `v1=`.** The signature header is `v1={hex}`. Strip the prefix before hex-decoding.
+- **Trailing newlines or encoding changes.** A proxy or middleware that appends `\n` or transcodes the body will invalidate the signature.
+- **Using `==` or `strcmp`.** Byte-by-byte equality checks leak timing information. Always use a constant-time comparison.
+- **Not enforcing the timestamp window.** Without a freshness check, an attacker who captures one valid delivery can replay it indefinitely. Reject anything older than 5 minutes.
+- **Replying slowly.** Deliveries time out after 30 seconds. Acknowledge first, process asynchronously.

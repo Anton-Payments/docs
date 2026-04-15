@@ -1,0 +1,78 @@
+---
+title: "How Anton Evaluates Payouts"
+description: "Every payout moves through sanctions screening, velocity control, and AI risk scoring before a single dollar leaves your balance. Here's what happens — and how your integration should respond."
+---
+
+A payout created via `POST /v1/payouts` is not submitted to a rail immediately. Anton evaluates it first. The evaluation outcome is reflected in the payout's state — your application reads that state (and the webhook events that announce transitions) to decide what to do next.
+
+## What runs on every payout
+
+<Steps>
+  <Step title="Sanctions screening">
+    The beneficiary and, where applicable, the sending counterparty are checked against OFAC, EU, UK, UN, and other consolidated sanctions lists. A hit moves the payout to `screening_failed` — it will not be submitted.
+  </Step>
+  <Step title="Velocity evaluation">
+    Anton applies merchant-scoped velocity rules: daily and monthly caps, geographic limits, instrument-level thresholds. Exceeding a rule moves the payout to `velocity_blocked`.
+  </Step>
+  <Step title="Risk scoring">
+    The Anton Engine evaluates the payout against cross-merchant trust signals, beneficiary history, counterparty reputation, and real-time anomaly detection. A sufficiently risky payout moves to `manual_review` for a human decision.
+  </Step>
+  <Step title="Rail submission">
+    A payout that clears all three checks moves to `approved` and is queued for the rail. From here, `processing → sent → completed` are rail-driven and reflect settlement reality.
+  </Step>
+</Steps>
+
+## The payout state machine
+
+```
+created
+  ├─ pending_screening
+  │    ├─ screening_failed         (sanctions hit)
+  │    └─ pending_approval
+  │         ├─ approved
+  │         │    ├─ processing
+  │         │    └─ sent
+  │         │         ├─ completed
+  │         │         ├─ failed
+  │         │         └─ returned
+  │         └─ velocity_blocked
+  ├─ manual_review
+  │    ├─ approved
+  │    └─ cancelled
+  └─ cancelled
+```
+
+Every transition emits a `payout.*` webhook event. Every transition is recorded in the audit log.
+
+## What each terminal state means
+
+| State | Meaning | What you do |
+|---|---|---|
+| `completed` | Funds delivered to the beneficiary and settled. | Mark the payout done in your system. |
+| `failed` | The rail accepted the payout but settlement failed. | Review the failure reason, potentially retry with a different instrument. |
+| `returned` | Funds were returned by the receiving bank or counterparty. | Handle the return in your accounting — the original payout is final. |
+| `screening_failed` | Sanctions or compliance block. | Do not retry. Verify beneficiary details if the hit looks like a false positive. |
+| `velocity_blocked` | A merchant velocity rule rejected the payout. | Wait for the velocity window to reset, or contact support to raise a threshold. |
+| `cancelled` | Cancelled by the merchant or operations team. | Final. Create a new payout if you still need to send funds. |
+
+## What your integration should do
+
+**Subscribe to webhooks. Do not poll.** The payout lifecycle is event-driven. Polling wastes rate-limit budget and misses transitions.
+
+**Treat `manual_review` as a normal state.** Most legitimate payouts clear review in minutes. Surface a pending state to your end user; do not surface an error.
+
+**Respond to RFIs promptly.** If a payout enters `manual_review` and Anton needs more information — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. Your merchant responds through the dashboard or via `POST /v1/rfis/{id}/respond`. The payout cannot clear review until the RFI is closed.
+
+**Never retry a `screening_failed` payout with the same beneficiary.** It will fail again. Either correct the beneficiary's details or stop attempting to send to them.
+
+## What you can and can't control
+
+Screening, velocity, and engine evaluation run automatically on every live payout. You cannot disable them, override them at submission time, or skip them with a flag. This is a compliance requirement, not a limitation.
+
+For select merchants, Anton exposes programmatic access to:
+
+- The engine dashboard (`GET /v1/engine/dashboard`)
+- Per-payout and per-beneficiary engine verdicts
+- Merchant-scoped velocity rule management — list, create, update, simulate
+
+These endpoints are enabled on approval. [Contact us](https://help.antonpayments.com) if you want to inspect or tune risk signals programmatically.
