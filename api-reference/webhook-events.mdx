@@ -178,7 +178,7 @@ The `payout.approved` and `payout.cancelled` event types are defined but no disp
 | `beneficiary.deleted` | A beneficiary is deleted. Payload contains only the id. |
 | `beneficiary.blocked` | A beneficiary is blocked (e.g. by compliance). |
 
-The payload for `beneficiary.created`, `beneficiary.updated`, and `beneficiary.blocked` is wrapped in a `data` object containing the beneficiary resource. Sensitive fields (BT token references, fingerprints, deletion timestamps) are never included.
+The payload's `data` field contains the beneficiary resource. Sensitive fields (BT token references, fingerprints, deletion timestamps) are never included.
 
 ### `beneficiary.created`
 
@@ -188,27 +188,21 @@ The payload for `beneficiary.created`, `beneficiary.updated`, and `beneficiary.b
   "type": "beneficiary.created",
   "created_at": "2026-04-15T12:00:00Z",
   "data": {
-    "data": {
-      "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
-      "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
-      "type": "individual",
-      "status": "active",
-      "display_name": "Jordan Rivera",
-      "country": "DE",
-      "external_ref": "crm-id-8814",
-      "metadata": {
-        "cost_center": "engineering"
-      },
-      "created_at": "2026-04-15T12:00:00Z",
-      "updated_at": "2026-04-15T12:00:00Z"
-    }
+    "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "type": "individual",
+    "status": "active",
+    "display_name": "Jordan Rivera",
+    "country": "DE",
+    "external_ref": "crm-id-8814",
+    "metadata": {
+      "cost_center": "engineering"
+    },
+    "created_at": "2026-04-15T12:00:00Z",
+    "updated_at": "2026-04-15T12:00:00Z"
   }
 }
 ```
-
-<Note>
-  The outer `data` is the envelope wrapper; the inner `data` is the handler-level wrapper around the beneficiary resource. This is a quirk of the current dispatch path and is stable — parse as shown.
-</Note>
 
 ### `beneficiary.updated`, `beneficiary.blocked`
 
@@ -222,9 +216,7 @@ Same shape as `beneficiary.created` with the event type and resource state refle
   "type": "beneficiary.deleted",
   "created_at": "2026-04-15T12:30:00Z",
   "data": {
-    "data": {
-      "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1"
-    }
+    "id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1"
   }
 }
 ```
@@ -245,22 +237,20 @@ Same shape as `beneficiary.created` with the event type and resource state refle
   "type": "instrument.created",
   "created_at": "2026-04-15T12:05:00Z",
   "data": {
-    "data": {
-      "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
-      "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
-      "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
-      "method": "iban",
-      "currency": "EUR",
-      "country": "DE",
-      "label": "Commerzbank EUR",
-      "display_last4": "0194",
-      "display_bank": "Commerzbank",
-      "masked_account": "DE89 **** **** **** **** 0194",
-      "status": "active",
-      "is_default": true,
-      "created_at": "2026-04-15T12:05:00Z",
-      "updated_at": "2026-04-15T12:05:00Z"
-    }
+    "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "method": "iban",
+    "currency": "EUR",
+    "country": "DE",
+    "label": "Commerzbank EUR",
+    "display_last4": "0194",
+    "display_bank": "Commerzbank",
+    "masked_account": "DE89 **** **** **** **** 0194",
+    "status": "active",
+    "is_default": true,
+    "created_at": "2026-04-15T12:05:00Z",
+    "updated_at": "2026-04-15T12:05:00Z"
   }
 }
 ```
@@ -279,9 +269,7 @@ Same shape as `instrument.created` with the new values reflected.
   "type": "instrument.deleted",
   "created_at": "2026-04-15T12:45:00Z",
   "data": {
-    "data": {
-      "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2"
-    }
+    "id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2"
   }
 }
 ```
@@ -394,16 +382,14 @@ Fired by `POST /v1/webhooks/{id}/test` to help you verify your endpoint is reach
   "data": {
     "test": true,
     "event_type": "test",
-    "data": {
-      "object": "payout",
-      "id": "pay_test000000000000001",
-      "status": "completed",
-      "source_amount": "100.00",
-      "source_currency": "USD",
-      "dest_amount": "85.00",
-      "dest_currency": "EUR",
-      "created_at": "2026-04-15T15:00:00Z"
-    }
+    "object": "payout",
+    "id": "pay_test000000000000001",
+    "status": "completed",
+    "source_amount": "100.00",
+    "source_currency": "USD",
+    "dest_amount": "85.00",
+    "dest_currency": "EUR",
+    "created_at": "2026-04-15T15:00:00Z"
   }
 }
 ```
@@ -411,6 +397,10 @@ Fired by `POST /v1/webhooks/{id}/test` to help you verify your endpoint is reach
 ## Subscribing to events
 
 Create a subscription with the list of event types you want to receive. The signing `secret` is returned once, at creation time — store it securely.
+
+<Note>
+  The `url` must use `https://` and must be publicly reachable from the internet. Anton rejects plaintext `http://` endpoints, loopback addresses, RFC1918 private ranges, `.local` / `.internal` hostnames, and cloud metadata endpoints — these are refused with `webhook_url_not_https` or `webhook_url_private_address`. Plaintext `http://` is only accepted against a local development API. See [Errors → Webhook subscriptions](/api-reference/errors#webhook-subscriptions).
+</Note>
 
 ```bash
 curl https://api.antonpayments.dev/v1/webhooks \

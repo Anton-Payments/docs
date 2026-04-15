@@ -4,7 +4,7 @@ sidebarTitle: "Errors"
 description: "A complete reference for the error envelope, HTTP status codes, and every machine-readable error code returned by the Anton Payments API."
 ---
 
-Every non-2xx response returned by `/v1/*` carries a JSON error envelope describing what went wrong. Errors originating from business logic include a machine-readable `code` your client can branch on. Errors originating from middleware (authentication, rate limiting, idempotency, request timeouts) always include a human-readable `message` and may include a `code`. Always fall back to the HTTP status when a `code` is not present.
+Every non-2xx response returned by `/v1/*` carries the same JSON error envelope describing what went wrong. Every error — whether it originates in a handler or in middleware (authentication, permissions, rate limiting, idempotency, request timeouts) — includes a human-readable `message` and a machine-readable `code` your client can branch on.
 
 ## Standard error envelope
 
@@ -20,12 +20,8 @@ Every non-2xx response returned by `/v1/*` carries a JSON error envelope describ
 | Field | Type | Always present | Description |
 |---|---|---|---|
 | `error.message` | string | Yes | Human-readable description. Safe to log; never contains PII. For 5xx errors, this is always the string `internal server error` — the detailed error is recorded server-side and can be correlated via `X-Request-ID`. |
-| `error.code` | string | No | Machine-readable snake_case identifier. Present on errors that clients are expected to branch on (validation, rate limiting, idempotency, specific business rules). Absent for generic errors — fall back to HTTP status. |
+| `error.code` | string | Yes, for every documented error below | Machine-readable snake_case identifier. Safe to branch on. A small number of generic `400 Bad Request` responses (malformed JSON, unknown fields, malformed path parameters) may omit `code` — in that case fall back to the HTTP status. |
 | `error.details` | array or object | No | Additional context. Present on validation errors (see below). May be omitted from other error types. |
-
-<Note>
-  Some middleware errors (authentication failures, merchant status checks, permission denials) return an envelope that includes a `status` field containing the HTTP status text instead of a `code`. These can always be identified by HTTP status alone — `401`, `403` — and do not require code-based branching. TODO: The API team is standardizing middleware errors to use `code` as well; treat the absence of `code` on 401/403 as expected for now.
-</Note>
 
 ## Validation error envelope
 
@@ -82,7 +78,7 @@ HTTP/1.1 500 Internal Server Error
 Content-Type: application/json
 X-Request-ID: cu1h4o9s4g8p2m6f3v4g
 
-{"error":{"message":"internal server error"}}
+{"error":{"message":"internal server error","code":"internal_error"}}
 ```
 
 ## Error code catalog
@@ -91,26 +87,26 @@ The following codes are returned via the `code` field of the error envelope. Cod
 
 ### Authentication
 
-Errors from the authentication middleware do not currently include a `code`. Distinguish them by HTTP status and message.
-
-| HTTP | Typical `error.message` | Cause | Remediation |
-|---|---|---|---|
-| `401` | `missing Authorization header` | No `Authorization` header sent. | Add `Authorization: Bearer <token>`. |
-| `401` | `invalid Authorization header format` | Header is not `Bearer <token>`. | Use the `Bearer ` prefix. |
-| `401` | `invalid API key format` | Token does not begin with `ak_`. | Use a valid `ak_live_...` or `ak_test_...` key. |
-| `401` | `invalid API key` | Key was not found, is revoked, or has been deleted. | Rotate via the dashboard. |
-| `401` | `invalid or expired token` | JWT signature, expiry, or issuer is invalid. | Have the portal session refresh. |
-| `403` | `test API keys are not allowed in production` | An `ak_test_...` key was used against the production or staging environment. | Use a live key in production; keep test keys to sandbox. |
+| HTTP | `code` | Typical `error.message` | Cause | Remediation |
+|---|---|---|---|---|
+| `401` | `unauthorized` | `missing Authorization header` | No `Authorization` header sent. | Add `Authorization: Bearer <token>`. |
+| `401` | `unauthorized` | `invalid Authorization header format` | Header is not `Bearer <token>`. | Use the `Bearer ` prefix. |
+| `401` | `unauthorized` | `invalid or expired token` | JWT signature, expiry, or issuer is invalid. | Have the portal session refresh. |
+| `401` | `unauthorized` | `API keys are not accepted on this endpoint` | Used an API key on a JWT-only endpoint. | Use a WorkOS portal JWT. |
+| `401` | `invalid_api_key` | `invalid API key format` | Token does not begin with `ak_`. | Use a valid `ak_live_...` or `ak_test_...` key. |
+| `401` | `invalid_api_key` | `invalid API key` | Key was not found, is revoked, expired, or has been deleted. | Rotate via the dashboard. |
+| `403` | `key_environment_mismatch` | `test API keys are not allowed in production` | An `ak_test_...` key was used against the production or staging environment. | Use a live key in production; keep test keys to sandbox. |
 
 ### Authorization and access
 
-| HTTP | `error.message` | Cause | Remediation |
-|---|---|---|---|
-| `403` | `insufficient permissions` | The caller's role does not grant the required permission on this endpoint. | Have a user with the right role perform the action, or adjust team role assignments. |
-| `403` | `merchant account is suspended` | Operations account is in the `suspended` state. | Contact Anton support. |
-| `403` | `merchant account is terminated` | Operations account is in the `terminated` state. | Contact Anton support. |
-| `403` | `merchant account is not yet active` | Onboarding/provisioning is still in progress. | Finish onboarding; only `/v1/onboarding/*`, `/v1/documents/*`, and `/v1/rfis/*` are callable during this stage. |
-| `403` | `user not found or inactive` | The JWT subject does not resolve to an active user for this merchant. | Re-authenticate; confirm the user is active. |
+| HTTP | `code` | `error.message` | Cause | Remediation |
+|---|---|---|---|---|
+| `403` | `insufficient_permissions` | `insufficient permissions` | The caller's role does not grant the required permission on this endpoint. | Have a user with the right role perform the action, or adjust team role assignments. |
+| `403` | `merchant_suspended` | `merchant account is suspended` | Merchant account is in the `suspended` state. | Contact Anton support. |
+| `403` | `merchant_terminated` | `merchant account is terminated` | Merchant account is in the `terminated` state. | Contact Anton support. |
+| `403` | `merchant_not_active` | `merchant account is not yet active` | Onboarding/provisioning is still in progress. | Finish onboarding; only `/v1/onboarding/*`, `/v1/documents/*`, and `/v1/rfis/*` are callable during this stage. |
+| `403` | `merchant_not_found` | `merchant not found` | The authenticated merchant ID could not be resolved. | Re-authenticate; confirm the merchant exists. |
+| `403` | `user_not_found` | `user not found or inactive` | The JWT subject does not resolve to an active user for this merchant. | Re-authenticate; confirm the user is active. |
 
 ### MFA enforcement
 
@@ -198,12 +194,18 @@ No structured codes. Typical errors:
 
 ### Webhook subscriptions
 
-No structured codes. Notable validation messages on `POST /v1/webhooks`:
+Structured codes returned by `POST /v1/webhooks`:
 
-- `400 url is required`
-- `400 url must be a valid HTTP(S) URL`
-- `400 webhook URL must not point to a private address` — SSRF protection; Anton refuses to register private/loopback/link-local targets.
-- `400 at least one event type is required`
+| HTTP | `code` | Meaning | Remediation |
+|---|---|---|---|
+| `400` | `webhook_url_not_https` | The `url` field used a non-`https://` scheme. HTTP is rejected in production, staging, and sandbox — it is only permitted against local development APIs. | Use `https://` and a valid TLS certificate. |
+| `400` | `webhook_url_private_address` | The `url` host is a loopback, RFC1918/ULA private address, link-local address, `.local` / `.internal` hostname, or a cloud metadata endpoint (for example `169.254.169.254`). Anton refuses to register these targets (SSRF and credential-exfiltration defense). | Use a publicly reachable, internet-routable endpoint. |
+
+Other `400 Bad Request` responses on `POST /v1/webhooks` are returned without a `code`:
+
+- `url is required`
+- `url must be a valid URL`
+- `at least one event type is required`
 
 ### Sandbox-only
 
@@ -218,7 +220,7 @@ These codes are returned only by the `/v1/merchant/sandbox/*` routes, which are 
 
 | HTTP | `code` | Meaning | Remediation |
 |---|---|---|---|
-| `500` | (none) | Unexpected server error. `message` is always `internal server error` — the real cause is logged with the `X-Request-ID`. | Retry with exponential backoff. If the failure persists, share the `X-Request-ID` with support. |
+| `500` | `internal_error` | Unexpected server error. `message` is always `internal server error` — the real cause is logged with the `X-Request-ID`. | Retry with exponential backoff. If the failure persists, share the `X-Request-ID` with support. |
 | `504` | `timeout` | Handler exceeded the 25-second request timeout. | Retry. For large batches or reports, prefer asynchronous endpoints. |
 
 ## Retry semantics
@@ -232,7 +234,7 @@ Not every error is safe to retry. The table below is a safe default — apply st
 | Transient network errors (connection reset, DNS failure, TLS reset) | Yes | Treat the same as a 5xx. Retry with the same `Idempotency-Key`. |
 | `400`, `404`, `410`, `413`, `422 validation_error` | No | Fix the request. Retrying will fail identically. |
 | `401` | No | Re-authenticate first. Do not loop on 401. |
-| `403 insufficient permissions`, `403 mfa_enrollment_required`, `403 velocity_blocked` | No | Policy or permission issue. Resolve upstream before retrying. |
+| `403 insufficient_permissions`, `403 mfa_enrollment_required`, `403 velocity_blocked` | No | Policy or permission issue. Resolve upstream before retrying. |
 | `409 idempotency_conflict` | No | You sent a new payload under a used key. Generate a new key. |
 | `409` state conflicts (batch, payout, approval) | Conditional | Re-fetch the resource; retry only if the current state actually permits the action. |
 | `422 insufficient_balance` | No | Top up first. |
