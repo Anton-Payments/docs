@@ -69,7 +69,6 @@ paths:
       description: |
         Return every currency Anton supports, across fiat, crypto, and stablecoin.
         Use these codes when building payout or FX requests.
-      security: []
       responses:
         '200':
           description: Supported currencies.
@@ -104,7 +103,6 @@ paths:
       description: |
         Return every destination country Anton can deliver payouts to, along with
         the currencies each country supports.
-      security: []
       responses:
         '200':
           description: Supported countries.
@@ -131,7 +129,6 @@ paths:
 
         Use this endpoint to drive dynamic instrument-creation UI: pick a country,
         filter to supported methods, prompt for the right credential fields.
-      security: []
       responses:
         '200':
           description: Supported payment methods.
