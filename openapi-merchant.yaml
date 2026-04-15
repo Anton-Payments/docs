@@ -57,6 +57,8 @@ tags:
     description: Quote, lock, and execute currency exchanges between balances.
   - name: Corridors
     description: Active cross-border corridors for your merchant.
+  - name: Balance Alerts
+    description: Per-currency low-balance thresholds that drive the `balance.low` webhook event.
   - name: Sandbox
     description: Reset and seed your sandbox environment.
 
@@ -2436,6 +2438,117 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /v1/merchant/balance-alerts:
+    get:
+      tags: [Balance Alerts]
+      summary: List balance alert thresholds
+      operationId: listBalanceAlerts
+      description: |
+        Return every `balance.low` threshold configured for your merchant,
+        ordered by currency. A merchant with no configured thresholds returns
+        an empty array.
+
+        Each threshold record includes the configured amount, whether it's
+        enabled, and the current latch state (`currently_latched` — whether
+        a `balance.low` event has fired and not yet been cleared by a recovery
+        above the threshold).
+      responses:
+        '200':
+          description: Configured thresholds.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BalanceAlertThreshold'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/merchant/balance-alerts/{currency}:
+    parameters:
+      - name: currency
+        in: path
+        required: true
+        description: ISO 4217 currency code (or stablecoin / crypto symbol).
+        schema:
+          $ref: '#/components/schemas/CurrencyCode'
+    get:
+      tags: [Balance Alerts]
+      summary: Retrieve a balance alert threshold
+      operationId: getBalanceAlert
+      description: Return the configured threshold for a single currency.
+      responses:
+        '200':
+          description: Threshold.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceAlertThreshold'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`balance_alert_not_found` — no threshold configured for this currency.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags: [Balance Alerts]
+      summary: Create or replace a balance alert threshold
+      operationId: upsertBalanceAlert
+      description: |
+        Create or replace the `balance.low` threshold for a currency.
+
+        When the merchant's available balance in this currency crosses from
+        at-or-above `threshold_amount` to below it, Anton fires a `balance.low`
+        webhook event. The event fires once; the latch clears when the balance
+        rises back to at-or-above the threshold (no event on recovery). This
+        prevents webhook spam when the balance oscillates around the threshold.
+
+        Updates preserve latch state — so a merchant that changes their
+        threshold while latched stays latched until the balance crosses the
+        new threshold upward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceAlertUpsertRequest'
+      responses:
+        '200':
+          description: Threshold saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceAlertThreshold'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: |
+            - `invalid_threshold` — `threshold_amount` is negative or not a decimal.
+            - `balance_alert_upsert_failed` — persistence error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      tags: [Balance Alerts]
+      summary: Delete a balance alert threshold
+      operationId: deleteBalanceAlert
+      description: |
+        Remove the threshold for a currency. Deleting a non-existent threshold
+        succeeds — the endpoint is idempotent. After deletion, balance
+        mutations in this currency no longer fire `balance.low` events.
+      responses:
+        '204':
+          description: Threshold removed (or was never present).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /v1/merchant/sandbox/reset:
     post:
       tags: [Sandbox]
@@ -4618,6 +4731,54 @@ components:
           $ref: '#/components/schemas/Timestamp'
         created_at:
           $ref: '#/components/schemas/Timestamp'
+
+    BalanceAlertThreshold:
+      type: object
+      description: |
+        A per-(merchant, currency) `balance.low` threshold. Fires the
+        `balance.low` webhook once when the merchant's available balance drops
+        below `threshold_amount` and is not already latched; clears the latch
+        when the balance rises back to at-or-above the threshold.
+      required: [id, merchant_id, currency, threshold_amount, enabled, currently_latched, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        threshold_amount:
+          $ref: '#/components/schemas/Money'
+        enabled:
+          type: boolean
+          description: When `false`, the threshold is ignored by the evaluator.
+        currently_latched:
+          type: boolean
+          description: |
+            `true` when a `balance.low` event has fired and the balance has
+            not yet recovered above the threshold. Read-only — the dashboard
+            can use this to surface "currently alerting" status.
+        last_fired_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: When the most recent `balance.low` fired for this row.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    BalanceAlertUpsertRequest:
+      type: object
+      required: [threshold_amount]
+      properties:
+        threshold_amount:
+          $ref: '#/components/schemas/Money'
+          description: Non-negative decimal. Setting `0` means "alert whenever the balance is negative"; unusual but allowed.
+        enabled:
+          type: boolean
+          default: true
+          description: When `false`, the threshold is retained but ignored.
 
     PricingPlan:
       type: object

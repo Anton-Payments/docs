@@ -243,6 +243,15 @@
             ]
           },
           {
+            "group": "Balance Alerts",
+            "pages": [
+              "api-reference/balance-alerts/list-balance-alerts",
+              "api-reference/balance-alerts/get-balance-alert",
+              "api-reference/balance-alerts/upsert-balance-alert",
+              "api-reference/balance-alerts/delete-balance-alert"
+            ]
+          },
+          {
             "group": "Sandbox",
             "pages": [
               "api-reference/sandbox/reset-sandbox",
