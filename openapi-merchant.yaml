@@ -60,7 +60,173 @@ tags:
   - name: Sandbox
     description: Reset and seed your sandbox environment.
 
-paths: {}
+paths:
+  /v1/beneficiaries:
+    post:
+      tags: [Beneficiaries]
+      summary: Create a beneficiary
+      operationId: createBeneficiary
+      description: |
+        Create a person (`individual`) or business (`business`) you want to pay. PII
+        submitted in the request body is tokenized in Basis Theory on creation — only
+        a display name, country, and opaque token reference are stored in the Anton
+        database.
+
+        To retrieve the PII you submitted, use `GET /v1/beneficiaries/{id}/pii`.
+
+        This endpoint requires an `Idempotency-Key` header. Duplicate calls with the
+        same key return the original beneficiary; different bodies with the same key
+        return `409 idempotency_conflict`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeneficiaryCreateRequest'
+            examples:
+              individual:
+                summary: Individual beneficiary
+                value:
+                  type: individual
+                  country: GB
+                  external_ref: contractor-1042
+                  individual:
+                    first_name: Jane
+                    last_name: Smith
+                    email: jane@example.com
+                    phone: "+442079460000"
+                    date_of_birth: "1988-05-12"
+                    nationality: GB
+                    address:
+                      street_line_1: 10 Example Street
+                      city: London
+                      postal_code: SW1A 1AA
+                      country: GB
+              business:
+                summary: Business beneficiary
+                value:
+                  type: business
+                  country: DE
+                  business:
+                    legal_name: Example GmbH
+                    registration_number: HRB12345
+                    email: ap@example.de
+                    phone: "+493012345678"
+                    entity_type: llc
+                    incorporation_country: DE
+                    address:
+                      street_line_1: Beispielstraße 1
+                      city: Berlin
+                      postal_code: "10115"
+                      country: DE
+      responses:
+        '201':
+          description: Beneficiary created.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-Idempotent-Replayed:
+              $ref: '#/components/headers/X-Idempotent-Replayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '400':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Beneficiaries]
+      summary: List beneficiaries
+      operationId: listBeneficiaries
+      description: |
+        List beneficiaries scoped to your merchant. Results are cursor-paginated and
+        sorted by creation time descending.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          description: Filter by beneficiary status.
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, blocked]
+        - name: type
+          in: query
+          description: Filter by beneficiary type.
+          required: false
+          schema:
+            type: string
+            enum: [individual, business]
+        - name: country
+          in: query
+          description: Filter by ISO-3166 alpha-2 country code.
+          required: false
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+      responses:
+        '200':
+          description: Paginated list of beneficiaries.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/beneficiaries/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Beneficiary ID (prefixed `ben_`).
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+          example: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+    get:
+      tags: [Beneficiaries]
+      summary: Retrieve a beneficiary
+      operationId: getBeneficiary
+      description: Return a single beneficiary by ID. Returns `404` if the beneficiary does not exist or belongs to a different merchant.
+      responses:
+        '200':
+          description: Beneficiary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
 components:
   securitySchemes:
@@ -294,13 +460,198 @@ components:
     # TODO: populate full property lists as each endpoint group is written.
     # ---------------------------------------------------------------------
 
+    Address:
+      type: object
+      required: [street_line_1, city, postal_code, country]
+      properties:
+        street_line_1:
+          type: string
+          example: 10 Example Street
+        street_line_2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: London
+        state:
+          type: string
+          description: State, province, or region. Required in some countries (e.g. US, CA, AU).
+          example: Greater London
+        postal_code:
+          type: string
+          example: SW1A 1AA
+        country:
+          $ref: '#/components/schemas/CountryCode'
+
+    IndividualDetails:
+      type: object
+      required: [first_name, last_name, email, phone, date_of_birth, nationality, address]
+      description: PII for an `individual` beneficiary. Tokenized on creation.
+      properties:
+        first_name:
+          type: string
+          example: Jane
+        middle_name:
+          type: string
+          example: R
+        last_name:
+          type: string
+          example: Smith
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        phone:
+          type: string
+          description: E.164-formatted phone number.
+          example: "+442079460000"
+        date_of_birth:
+          type: string
+          description: YYYY-MM-DD.
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: "1988-05-12"
+        nationality:
+          $ref: '#/components/schemas/CountryCode'
+        address:
+          $ref: '#/components/schemas/Address'
+
+    BusinessDetails:
+      type: object
+      required: [legal_name, registration_number, email, phone, address]
+      description: PII for a `business` beneficiary. Tokenized on creation.
+      properties:
+        legal_name:
+          type: string
+          example: Example GmbH
+        trading_name:
+          type: string
+          description: Name the business trades as, if different from legal name.
+          example: Example
+        registration_number:
+          type: string
+          example: HRB12345
+        tax_id:
+          type: string
+          example: DE123456789
+        entity_type:
+          type: string
+          description: Legal entity form.
+          enum: [llc, corporation, partnership, sole_proprietorship, trust, other]
+        incorporation_country:
+          $ref: '#/components/schemas/CountryCode'
+        incorporation_date:
+          type: string
+          description: YYYY-MM-DD.
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          description: E.164-formatted phone number.
+          example: "+493012345678"
+        website:
+          type: string
+          format: uri
+          example: https://example.de
+        address:
+          $ref: '#/components/schemas/Address'
+
+    BeneficiaryCreateRequest:
+      type: object
+      required: [type, country]
+      description: |
+        Create a beneficiary. Supply exactly one of `individual` or `business` matching
+        the declared `type`.
+      properties:
+        type:
+          type: string
+          enum: [individual, business]
+          description: Whether this beneficiary is a person or a business.
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        external_ref:
+          type: string
+          description: Your own reference for this beneficiary. Stored as-is, not validated.
+          maxLength: 255
+          example: contractor-1042
+        metadata:
+          type: object
+          description: Arbitrary string map of your own labels. Stored as-is.
+          additionalProperties:
+            type: string
+          example:
+            department: engineering
+            cost_center: "4421"
+        individual:
+          $ref: '#/components/schemas/IndividualDetails'
+        business:
+          $ref: '#/components/schemas/BusinessDetails'
+        end_user_ip:
+          type: string
+          description: |
+            IP address of the merchant's end-user who initiated this action. Used for
+            risk signals. Accepts IPv4 or IPv6. Optional but recommended.
+          example: 203.0.113.42
+
     Beneficiary:
       type: object
       description: |
-        A person or business you pay. PII is tokenized on creation — raw identifiers
-        are never stored in the Anton database.
-      # TODO: full property list (id, merchant_id, type, country, individual, business,
-      # status, created_at, updated_at).
+        A person or business you pay. PII is tokenized in Basis Theory on creation —
+        raw identifiers are never returned in this response. Use
+        `GET /v1/beneficiaries/{id}/pii` to retrieve detokenized PII for a
+        beneficiary you own.
+      required: [id, merchant_id, type, status, display_name, country, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+          example: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        type:
+          type: string
+          enum: [individual, business]
+        status:
+          type: string
+          enum: [active, archived, blocked]
+          description: |
+            - `active` — usable for payouts.
+            - `archived` — soft-disabled by the merchant; not usable. Can be restored.
+            - `blocked` — blocked by compliance. Not usable and cannot be restored via the API.
+        display_name:
+          type: string
+          description: |
+            Derived from the tokenized PII on creation. For individuals, a concatenation
+            of name fields; for businesses, the legal name.
+          example: Jane Smith
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        external_ref:
+          type: string
+          nullable: true
+          description: Your own reference, if you supplied one at creation.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      example:
+        id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
+        type: individual
+        status: active
+        display_name: Jane Smith
+        country: GB
+        external_ref: contractor-1042
+        metadata:
+          department: engineering
+        created_at: "2026-04-15T14:30:00Z"
+        updated_at: "2026-04-15T14:30:00Z"
 
     Instrument:
       type: object
