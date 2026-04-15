@@ -1,364 +1,471 @@
 ---
 title: "Quickstart"
 sidebarTitle: "Quickstart"
-description: "Send your first payout in under 5 minutes using the Anton Payments API."
+description: "Send your first payout in five minutes. You'll create a beneficiary, attach a payment instrument, and fire a sandbox payout end to end."
 ---
 
-## Before you begin
-
-You need an Anton Payments account and a sandbox API key. If you do not have one yet, [contact our team](https://antonpayments.com/contact) to get provisioned.
+This walks you from an empty sandbox to a delivered payout. It takes about five minutes if you already have a sandbox API key.
 
 <Info>
-  **Sandbox mode** -- All examples in this guide use the sandbox environment (`api.antonpayments.dev`) and test API keys (`ak_test_...`). No real money moves. Switch to `api.antonpayments.com` and `ak_live_...` keys when you are ready for production.
+  Every request below uses the sandbox (`https://api.antonpayments.dev`) and a test key (`ak_test_...`). No real funds move. Switch to `https://api.antonpayments.com` and an `ak_live_*` key when you're ready for production — see [Going Live](/guides/going-live).
 </Info>
+
+## Before you start
+
+You need:
+
+- A sandbox API key from the [merchant dashboard](https://app.antonpayments.com). Sandbox access is available before KYB — you do not need an approved merchant account to finish this quickstart.
+- `curl`, Node 18+, PHP 8+, or Go 1.21+ — any one is enough.
+
+Store the key in an environment variable so the examples below work verbatim:
+
+```bash
+export ANTON_API_KEY=ak_test_your_sandbox_key_here
+```
 
 ---
 
-## Step 1: Get your API key
-
-API keys are created in the [merchant portal](https://app.antonpayments.com). Navigate to **Settings > API Keys** and generate a sandbox key. The key is displayed once at creation time -- save it immediately.
-
-Your key will look like this:
-
-```
-ak_test_7f3a9b2c...
-```
-
-Test that it works by fetching your merchant profile:
+## Step 1: Verify your key
 
 <CodeGroup>
 
 ```bash cURL
 curl https://api.antonpayments.dev/v1/merchant \
-  -H "Authorization: Bearer ak_test_your_key_here"
+  -H "Authorization: Bearer $ANTON_API_KEY"
 ```
 
-```javascript Node.js
+```javascript JavaScript
 const response = await fetch("https://api.antonpayments.dev/v1/merchant", {
-  headers: {
-    "Authorization": "Bearer ak_test_your_key_here",
-  },
+  headers: { Authorization: `Bearer ${process.env.ANTON_API_KEY}` },
 });
-
 const { data } = await response.json();
 console.log(data.id);
 ```
 
-```python Python
-import requests
-
-response = requests.get(
-    "https://api.antonpayments.dev/v1/merchant",
-    headers={"Authorization": "Bearer ak_test_your_key_here"},
-)
-
-merchant = response.json()
-print(merchant["data"]["id"])
+```php PHP
+$ch = curl_init("https://api.antonpayments.dev/v1/merchant");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer " . getenv("ANTON_API_KEY")],
+]);
+$data = json_decode(curl_exec($ch), true);
+curl_close($ch);
+echo $data["id"];
 ```
 
 ```go Go
 req, _ := http.NewRequest("GET", "https://api.antonpayments.dev/v1/merchant", nil)
-req.Header.Set("Authorization", "Bearer ak_test_your_key_here")
-
-resp, err := http.DefaultClient.Do(req)
+req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
+resp, _ := http.DefaultClient.Do(req)
+defer resp.Body.Close()
 ```
 
 </CodeGroup>
 
 <Check>
-  If you get back your merchant profile, you are authenticated and ready to go.
+  If you get back your merchant profile, you're authenticated and ready to go.
 </Check>
 
 ---
 
-## Step 2: Create a payee
+## Step 2: Create a beneficiary
 
-Before you can send money, you need to register the recipient. A payee stores the recipient's identity and payment instrument details.
+A **beneficiary** is who you're paying — a person or business. Personal details (name, address, DOB) are tokenized in Basis Theory on creation; Anton's database never holds them in plaintext.
 
 <CodeGroup>
 
 ```bash cURL
-curl https://api.antonpayments.dev/v1/payees \
+curl https://api.antonpayments.dev/v1/beneficiaries \
   -X POST \
-  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: create-payee-jane-001" \
+  -H "Idempotency-Key: ben-quickstart-0001" \
   -d '{
     "type": "individual",
-    "first_name": "Jane",
-    "last_name": "Smith",
-    "email": "jane@example.com",
     "country": "GB",
+    "external_ref": "quickstart-jane",
+    "individual": {
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "email": "jane@example.com",
+      "phone": "+442079460000",
+      "date_of_birth": "1988-05-12",
+      "nationality": "GB",
+      "address": {
+        "street_line_1": "10 Example Street",
+        "city": "London",
+        "postal_code": "SW1A 1AA",
+        "country": "GB"
+      }
+    }
+  }'
+```
+
+```javascript JavaScript
+const res = await fetch("https://api.antonpayments.dev/v1/beneficiaries", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.ANTON_API_KEY}`,
+    "Content-Type": "application/json",
+    "Idempotency-Key": "ben-quickstart-0001",
+  },
+  body: JSON.stringify({
+    type: "individual",
+    country: "GB",
+    external_ref: "quickstart-jane",
+    individual: {
+      first_name: "Jane",
+      last_name: "Smith",
+      email: "jane@example.com",
+      phone: "+442079460000",
+      date_of_birth: "1988-05-12",
+      nationality: "GB",
+      address: {
+        street_line_1: "10 Example Street",
+        city: "London",
+        postal_code: "SW1A 1AA",
+        country: "GB",
+      },
+    },
+  }),
+});
+const { id: beneficiaryId } = await res.json();
+console.log(beneficiaryId); // ben_...
+```
+
+```php PHP
+$ch = curl_init("https://api.antonpayments.dev/v1/beneficiaries");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer " . getenv("ANTON_API_KEY"),
+        "Content-Type: application/json",
+        "Idempotency-Key: ben-quickstart-0001",
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "type" => "individual",
+        "country" => "GB",
+        "external_ref" => "quickstart-jane",
+        "individual" => [
+            "first_name" => "Jane",
+            "last_name" => "Smith",
+            "email" => "jane@example.com",
+            "phone" => "+442079460000",
+            "date_of_birth" => "1988-05-12",
+            "nationality" => "GB",
+            "address" => [
+                "street_line_1" => "10 Example Street",
+                "city" => "London",
+                "postal_code" => "SW1A 1AA",
+                "country" => "GB",
+            ],
+        ],
+    ]),
+]);
+$beneficiary = json_decode(curl_exec($ch), true);
+curl_close($ch);
+$beneficiaryId = $beneficiary["id"]; // ben_...
+```
+
+```go Go
+body := map[string]any{
+    "type":         "individual",
+    "country":      "GB",
+    "external_ref": "quickstart-jane",
+    "individual": map[string]any{
+        "first_name":    "Jane",
+        "last_name":     "Smith",
+        "email":         "jane@example.com",
+        "phone":         "+442079460000",
+        "date_of_birth": "1988-05-12",
+        "nationality":   "GB",
+        "address": map[string]any{
+            "street_line_1": "10 Example Street",
+            "city":          "London",
+            "postal_code":   "SW1A 1AA",
+            "country":       "GB",
+        },
+    },
+}
+buf, _ := json.Marshal(body)
+req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/beneficiaries", bytes.NewReader(buf))
+req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
+req.Header.Set("Content-Type", "application/json")
+req.Header.Set("Idempotency-Key", "ben-quickstart-0001")
+resp, _ := http.DefaultClient.Do(req)
+defer resp.Body.Close()
+
+var beneficiary struct{ ID string `json:"id"` }
+json.NewDecoder(resp.Body).Decode(&beneficiary)
+// beneficiary.ID == "ben_..."
+```
+
+</CodeGroup>
+
+Save the returned `id` (prefixed `ben_`). You'll use it in the next step.
+
+---
+
+## Step 3: Attach a payment instrument
+
+A **beneficiary** is the identity; an **instrument** is where the money goes — a bank account, wallet, or card. One beneficiary can have many instruments. Credentials (account numbers, wallet addresses, card PANs) are tokenized in Basis Theory on receipt.
+
+This example attaches a UK bank account. See [`GET /v1/payment-methods`](/api-reference/reference-data/list-payment-methods) for the complete per-country catalog.
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.antonpayments.dev/v1/beneficiaries/$BENEFICIARY_ID/instruments \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: ins-quickstart-0001" \
+  -d '{
+    "method": "uk_bank",
     "currency": "GBP",
-    "bank_account": {
+    "country": "GB",
+    "label": "Primary GBP account",
+    "is_default": true,
+    "credentials": {
       "account_number": "12345678",
       "sort_code": "123456"
     }
   }'
 ```
 
-```javascript Node.js
-const response = await fetch("https://api.antonpayments.dev/v1/payees", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ak_test_your_key_here",
-    "Content-Type": "application/json",
-    "Idempotency-Key": "create-payee-jane-001",
-  },
-  body: JSON.stringify({
-    type: "individual",
-    first_name: "Jane",
-    last_name: "Smith",
-    email: "jane@example.com",
-    country: "GB",
-    currency: "GBP",
-    bank_account: {
-      account_number: "12345678",
-      sort_code: "123456",
+```javascript JavaScript
+const res = await fetch(
+  `https://api.antonpayments.dev/v1/beneficiaries/${beneficiaryId}/instruments`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.ANTON_API_KEY}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "ins-quickstart-0001",
     },
-  }),
-});
-
-const { data } = await response.json();
-console.log(data.id); // pye_cng3q8s...
+    body: JSON.stringify({
+      method: "uk_bank",
+      currency: "GBP",
+      country: "GB",
+      label: "Primary GBP account",
+      is_default: true,
+      credentials: {
+        account_number: "12345678",
+        sort_code: "123456",
+      },
+    }),
+  },
+);
+const { id: instrumentId } = await res.json();
+console.log(instrumentId); // ins_...
 ```
 
-```python Python
-import requests
-
-response = requests.post(
-    "https://api.antonpayments.dev/v1/payees",
-    headers={
-        "Authorization": "Bearer ak_test_your_key_here",
-        "Idempotency-Key": "create-payee-jane-001",
-    },
-    json={
-        "type": "individual",
-        "first_name": "Jane",
-        "last_name": "Smith",
-        "email": "jane@example.com",
-        "country": "GB",
-        "currency": "GBP",
-        "bank_account": {
-            "account_number": "12345678",
-            "sort_code": "123456",
-        },
-    },
-)
-
-payee = response.json()
-print(payee["data"]["id"])  # pye_cng3q8s...
+```php PHP
+$url = "https://api.antonpayments.dev/v1/beneficiaries/{$beneficiaryId}/instruments";
+$ch = curl_init($url);
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer " . getenv("ANTON_API_KEY"),
+        "Content-Type: application/json",
+        "Idempotency-Key: ins-quickstart-0001",
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "method" => "uk_bank",
+        "currency" => "GBP",
+        "country" => "GB",
+        "label" => "Primary GBP account",
+        "is_default" => true,
+        "credentials" => [
+            "account_number" => "12345678",
+            "sort_code" => "123456",
+        ],
+    ]),
+]);
+$instrument = json_decode(curl_exec($ch), true);
+curl_close($ch);
+$instrumentId = $instrument["id"]; // ins_...
 ```
 
 ```go Go
-body := strings.NewReader(`{
-  "type": "individual",
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane@example.com",
-  "country": "GB",
-  "currency": "GBP",
-  "bank_account": {
-    "account_number": "12345678",
-    "sort_code": "123456"
-  }
-}`)
-
-req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/payees", body)
-req.Header.Set("Authorization", "Bearer ak_test_your_key_here")
+url := fmt.Sprintf("https://api.antonpayments.dev/v1/beneficiaries/%s/instruments", beneficiaryID)
+body := map[string]any{
+    "method":     "uk_bank",
+    "currency":   "GBP",
+    "country":    "GB",
+    "label":      "Primary GBP account",
+    "is_default": true,
+    "credentials": map[string]any{
+        "account_number": "12345678",
+        "sort_code":      "123456",
+    },
+}
+buf, _ := json.Marshal(body)
+req, _ := http.NewRequest("POST", url, bytes.NewReader(buf))
+req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
 req.Header.Set("Content-Type", "application/json")
-req.Header.Set("Idempotency-Key", "create-payee-jane-001")
+req.Header.Set("Idempotency-Key", "ins-quickstart-0001")
+resp, _ := http.DefaultClient.Do(req)
+defer resp.Body.Close()
 
-resp, err := http.DefaultClient.Do(req)
+var instrument struct{ ID string `json:"id"` }
+json.NewDecoder(resp.Body).Decode(&instrument)
+// instrument.ID == "ins_..."
 ```
 
 </CodeGroup>
 
-Save the `id` from the response -- you need it in the next step.
+Save the returned `id` (prefixed `ins_`).
 
 ---
 
-## Step 3: Create a payout
+## Step 4: Send a payout
 
-Send money to your payee. The payout goes through compliance screening and rail routing automatically.
+Now send a payout from your sandbox balance to the beneficiary's instrument. You specify both a `source_amount` (what you pay) and a `dest_amount` (what the beneficiary receives) plus `fixed_side` to tell Anton which is authoritative. For same-currency payouts these are identical.
 
 <CodeGroup>
 
 ```bash cURL
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
-  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: payout-inv-1042" \
+  -H "Idempotency-Key: pay-quickstart-0001" \
   -d '{
-    "payee_id": "pye_cng3q8s6ek9kc5qg1h1g",
-    "amount": "250.00",
-    "currency": "GBP",
-    "description": "Invoice #1042 payment",
-    "reference": "INV-1042"
+    "beneficiary_id": "'"$BENEFICIARY_ID"'",
+    "instrument_id": "'"$INSTRUMENT_ID"'",
+    "source_amount": "250.00",
+    "source_currency": "GBP",
+    "dest_amount": "250.00",
+    "dest_currency": "GBP",
+    "method": "faster_payment",
+    "rail_type": "fiat",
+    "fixed_side": "fixed_dest",
+    "purpose": "contractor_payment",
+    "reference": "INV-QS-001"
   }'
 ```
 
-```javascript Node.js
-const response = await fetch("https://api.antonpayments.dev/v1/payouts", {
+```javascript JavaScript
+const res = await fetch("https://api.antonpayments.dev/v1/payouts", {
   method: "POST",
   headers: {
-    "Authorization": "Bearer ak_test_your_key_here",
+    Authorization: `Bearer ${process.env.ANTON_API_KEY}`,
     "Content-Type": "application/json",
-    "Idempotency-Key": "payout-inv-1042",
+    "Idempotency-Key": "pay-quickstart-0001",
   },
   body: JSON.stringify({
-    payee_id: "pye_cng3q8s6ek9kc5qg1h1g",
-    amount: "250.00",
-    currency: "GBP",
-    description: "Invoice #1042 payment",
-    reference: "INV-1042",
+    beneficiary_id: beneficiaryId,
+    instrument_id: instrumentId,
+    source_amount: "250.00",
+    source_currency: "GBP",
+    dest_amount: "250.00",
+    dest_currency: "GBP",
+    method: "faster_payment",
+    rail_type: "fiat",
+    fixed_side: "fixed_dest",
+    purpose: "contractor_payment",
+    reference: "INV-QS-001",
   }),
 });
-
-const { data } = await response.json();
-console.log(data.id);     // pay_cng3q8s...
-console.log(data.status); // "created"
+const payout = await res.json();
+console.log(payout.id, payout.status); // pay_...  "pending_screening"
 ```
 
-```python Python
-import requests
-
-response = requests.post(
-    "https://api.antonpayments.dev/v1/payouts",
-    headers={
-        "Authorization": "Bearer ak_test_your_key_here",
-        "Idempotency-Key": "payout-inv-1042",
-    },
-    json={
-        "payee_id": "pye_cng3q8s6ek9kc5qg1h1g",
-        "amount": "250.00",
-        "currency": "GBP",
-        "description": "Invoice #1042 payment",
-        "reference": "INV-1042",
-    },
-)
-
-payout = response.json()
-print(payout["data"]["id"])      # pay_cng3q8s...
-print(payout["data"]["status"])  # "created"
+```php PHP
+$ch = curl_init("https://api.antonpayments.dev/v1/payouts");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer " . getenv("ANTON_API_KEY"),
+        "Content-Type: application/json",
+        "Idempotency-Key: pay-quickstart-0001",
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "beneficiary_id" => $beneficiaryId,
+        "instrument_id"  => $instrumentId,
+        "source_amount"  => "250.00",
+        "source_currency"=> "GBP",
+        "dest_amount"    => "250.00",
+        "dest_currency"  => "GBP",
+        "method"         => "faster_payment",
+        "rail_type"      => "fiat",
+        "fixed_side"     => "fixed_dest",
+        "purpose"        => "contractor_payment",
+        "reference"      => "INV-QS-001",
+    ]),
+]);
+$payout = json_decode(curl_exec($ch), true);
+curl_close($ch);
+echo $payout["id"] . " " . $payout["status"];
 ```
 
 ```go Go
-body := strings.NewReader(`{
-  "payee_id": "pye_cng3q8s6ek9kc5qg1h1g",
-  "amount": "250.00",
-  "currency": "GBP",
-  "description": "Invoice #1042 payment",
-  "reference": "INV-1042"
-}`)
-
-req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/payouts", body)
-req.Header.Set("Authorization", "Bearer ak_test_your_key_here")
+body := map[string]any{
+    "beneficiary_id":   beneficiaryID,
+    "instrument_id":    instrumentID,
+    "source_amount":    "250.00",
+    "source_currency":  "GBP",
+    "dest_amount":      "250.00",
+    "dest_currency":    "GBP",
+    "method":           "faster_payment",
+    "rail_type":        "fiat",
+    "fixed_side":       "fixed_dest",
+    "purpose":          "contractor_payment",
+    "reference":        "INV-QS-001",
+}
+buf, _ := json.Marshal(body)
+req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/payouts", bytes.NewReader(buf))
+req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
 req.Header.Set("Content-Type", "application/json")
-req.Header.Set("Idempotency-Key", "payout-inv-1042")
+req.Header.Set("Idempotency-Key", "pay-quickstart-0001")
+resp, _ := http.DefaultClient.Do(req)
+defer resp.Body.Close()
 
-resp, err := http.DefaultClient.Do(req)
+var payout struct{ ID, Status string }
+json.NewDecoder(resp.Body).Decode(&payout)
+// payout.ID == "pay_..."  payout.Status == "pending_screening"
 ```
 
 </CodeGroup>
 
-The payout moves through these statuses:
+The payout starts at `pending_screening`. In the sandbox, it moves through the full lifecycle in seconds:
 
 ```
-created -> pending_screening -> processing -> sent -> completed
+pending_screening → pending_approval → approved → processing → sent → completed
 ```
+
+Every transition fires a `payout.*` webhook event — see [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) for what each state means and how to handle `manual_review`.
 
 ---
 
-## Step 4: Track via webhooks
+## Step 5: Listen for webhooks (recommended)
 
-Polling works for testing, but production integrations should use webhooks. Register a webhook endpoint to receive real-time notifications on payout state changes.
-
-<CodeGroup>
+Polling works while you're developing, but production integrations should subscribe to webhooks. Create a subscription pointing at an HTTPS endpoint you control:
 
 ```bash cURL
 curl https://api.antonpayments.dev/v1/webhooks \
   -X POST \
-  -H "Authorization: Bearer ak_test_your_key_here" \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://your-server.com/webhooks/anton",
-    "events": ["payout.completed", "payout.failed", "payout.returned"]
+    "url": "https://your-app.example.com/webhooks/anton",
+    "events": [
+      "payout.completed",
+      "payout.failed",
+      "payout.returned",
+      "payout.screening_failed"
+    ]
   }'
 ```
 
-```javascript Node.js
-const response = await fetch("https://api.antonpayments.dev/v1/webhooks", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ak_test_your_key_here",
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    url: "https://your-server.com/webhooks/anton",
-    events: ["payout.completed", "payout.failed", "payout.returned"],
-  }),
-});
-
-const { data } = await response.json();
-console.log(data.id); // wh_abc123...
-```
-
-```python Python
-import requests
-
-response = requests.post(
-    "https://api.antonpayments.dev/v1/webhooks",
-    headers={"Authorization": "Bearer ak_test_your_key_here"},
-    json={
-        "url": "https://your-server.com/webhooks/anton",
-        "events": ["payout.completed", "payout.failed", "payout.returned"],
-    },
-)
-
-webhook = response.json()
-print(webhook["data"]["id"])  # wh_abc123...
-```
-
-```go Go
-body := strings.NewReader(`{
-  "url": "https://your-server.com/webhooks/anton",
-  "events": ["payout.completed", "payout.failed", "payout.returned"]
-}`)
-
-req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/webhooks", body)
-req.Header.Set("Authorization", "Bearer ak_test_your_key_here")
-req.Header.Set("Content-Type", "application/json")
-
-resp, err := http.DefaultClient.Do(req)
-```
-
-</CodeGroup>
-
-You can also poll the payout status directly while testing:
-
-```bash
-curl https://api.antonpayments.dev/v1/payouts/pay_cng3q8s6ek9kc5qg1h2g \
-  -H "Authorization: Bearer ak_test_your_key_here"
-```
-
-To list your recent payouts with cursor-based pagination:
-
-```bash
-curl "https://api.antonpayments.dev/v1/payouts?limit=10" \
-  -H "Authorization: Bearer ak_test_your_key_here"
-```
-
-The response includes `has_more` and `next_cursor` fields. To fetch the next page, pass the cursor:
-
-```bash
-curl "https://api.antonpayments.dev/v1/payouts?limit=10&cursor=pay_def456" \
-  -H "Authorization: Bearer ak_test_your_key_here"
-```
+The response includes a one-time `secret` (`whsec_...`). Store it securely — you'll use it to verify every delivery. See [Webhook Signing](/api-reference/webhook-signing) for the HMAC-SHA256 verification recipe.
 
 <Tip>
-  Webhooks are the recommended approach for production. Polling is acceptable during development, but webhook-driven architectures are more efficient and receive updates faster. See [Handle webhooks](/guides/handle-webhooks) for implementation details.
+  **Never poll in production.** Polling wastes your rate-limit budget and misses events. Webhook deliveries are signed, retried on failure, and replayable from the event history via `GET /v1/webhooks/events/{id}/deliveries`.
 </Tip>
 
 ---
@@ -366,16 +473,22 @@ curl "https://api.antonpayments.dev/v1/payouts?limit=10&cursor=pay_def456" \
 ## What's next?
 
 <CardGroup cols={2}>
-  <Card title="Payout lifecycle" icon="arrows-spin" href="/concepts/payouts">
-    Understand every status a payout can be in and what triggers transitions.
+  <Card title="Send a payout" icon="paper-plane" href="/guides/send-a-payout">
+    The full payout flow with economics, corridors, and FX.
   </Card>
   <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
-    Set up real-time notifications for payout events.
+    Set up real-time notifications with signed deliveries.
+  </Card>
+  <Card title="Manage beneficiaries" icon="users" href="/guides/manage-beneficiaries">
+    Deduplication, PII updates, archive/restore, and ops workflows.
+  </Card>
+  <Card title="How Anton evaluates payouts" icon="shield-halved" href="/how-anton-evaluates-payouts">
+    Screening, velocity, and the Anton Engine — what each state means.
   </Card>
   <Card title="Batch payouts" icon="layer-group" href="/guides/batch-payouts">
-    Send thousands of payouts at once via CSV upload.
+    Upload a CSV and send thousands of payouts in one call.
   </Card>
-  <Card title="Go live" icon="arrow-up-right" href="/guides/going-live">
-    Checklist for moving from sandbox to production.
+  <Card title="Go live" icon="rocket" href="/guides/going-live">
+    Checklist to promote your integration from sandbox to production.
   </Card>
 </CardGroup>

@@ -1,250 +1,155 @@
 ---
-title: "Manage Payees"
-sidebarTitle: "Manage Payees"
-description: "Best practices for creating, organizing, and managing payout recipients and their payment instruments."
+title: "Manage Beneficiaries"
+sidebarTitle: "Manage beneficiaries"
+description: "Create, update, search, archive, and delete the people and businesses you pay."
 ---
 
-## Overview
+A beneficiary is the identity of a payout recipient. Every beneficiary belongs to exactly one merchant — two merchants paying the same real person each create their own beneficiary record. PII submitted at creation is tokenized in Basis Theory; Anton's core database stores only a display name and country plus an opaque token reference.
 
-Payees are the recipients of your payouts. This guide covers best practices for managing them at scale -- creating different types, attaching multiple payment instruments, and handling common scenarios.
+This guide covers the full lifecycle — create, update, search, archive, restore, delete — plus the deduplication, PII rotation, and cross-merchant trust considerations you need for production.
 
-## Individual vs. business payees
+## Individuals vs businesses
 
-Choose the right type based on who you are paying:
+`type` on create determines which detail block you provide:
 
-| Type | Use when | Required fields |
-|------|----------|----------------|
-| `individual` | Paying a person (freelancer, contractor, employee, refund customer) | `first_name`, `last_name`, `country` |
-| `business` | Paying a company (supplier, vendor, partner) | `company_name`, `country` |
+- `individual` — requires `individual.*` fields: first/last name, email, phone, DOB (YYYY-MM-DD), nationality (ISO-2), and structured address.
+- `business` — requires `business.*` fields: legal name, registration number, email, phone, and address. Optional: trading name, tax ID, entity type, incorporation country/date, website.
 
-## Create a payee
+The API validates shape at creation; rail-specific validation (some rails require certain fields) surfaces later when a payout is submitted.
 
-<CodeGroup>
+## Creating a beneficiary
 
-```bash cURL
-curl https://api.antonpayments.dev/v1/payees \
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: ben-$INVOICE_ID" \
+  -d @beneficiary.json
+```
+
+The `Idempotency-Key` header is required. Use a value derived from your own business data so a network failure doesn't cause a duplicate record. See [Idempotency](/api-reference/idempotency).
+
+`external_ref` is your own reference — stored as-is, indexed for search. Use your HRIS ID, contractor ID, or vendor number.
+
+`metadata` is an arbitrary string-to-string map also stored as-is. Use it for tags like `department: engineering` or `cost_center: 4421`.
+
+## Deduplication across merchants
+
+Anton computes a content fingerprint from beneficiary PII and uses it internally to link the same real person across merchants for engine-level risk signals. You never see the fingerprint, but its existence means:
+
+- Within your own merchant: attempting to create a beneficiary with identical PII returns `422 duplicate_beneficiary`. Handle it by searching for an existing record with matching `external_ref` or PII and reusing that ID.
+- Across merchants: cross-merchant trust signals feed the Anton Engine's risk scoring on future payouts. You do not see this directly; it's a platform feature.
+
+## Updating non-PII fields
+
+`PUT /v1/beneficiaries/{id}` updates the mutable fields on a beneficiary: `display_name`, `country`, `external_ref`, and `metadata`. Fields omitted from the request body are left unchanged. Set `external_ref` to `null` to clear it.
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID \
+  -X PUT \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "type": "individual",
-    "first_name": "Alex",
-    "last_name": "Chen",
-    "email": "alex@example.com",
-    "country": "US"
+    "metadata": {
+      "department": "engineering",
+      "cost_center": "4421",
+      "tier": "premium"
+    }
   }'
 ```
 
-```javascript Node.js
-const response = await fetch("https://api.antonpayments.dev/v1/payees", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ak_test_...",
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    type: "individual",
-    first_name: "Alex",
-    last_name: "Chen",
-    email: "alex@example.com",
-    country: "US",
-  }),
-});
+**PII cannot be updated via this endpoint** — use the PII-specific endpoint below.
 
-const { data: payee } = await response.json();
-console.log(`Payee created: ${payee.id}`);
-```
+## Updating PII
 
-```python Python
-import requests
-
-response = requests.post(
-    "https://api.antonpayments.dev/v1/payees",
-    headers={"Authorization": "Bearer ak_test_..."},
-    json={
-        "type": "individual",
-        "first_name": "Alex",
-        "last_name": "Chen",
-        "email": "alex@example.com",
-        "country": "US",
-    },
-)
-
-payee = response.json()["data"]
-print(f"Payee created: {payee['id']}")
-```
-
-```go Go
-body := `{
-    "type": "individual",
-    "first_name": "Alex",
-    "last_name": "Chen",
-    "email": "alex@example.com",
-    "country": "US"
-}`
-
-req, _ := http.NewRequest("POST", "https://api.antonpayments.dev/v1/payees", strings.NewReader(body))
-req.Header.Set("Authorization", "Bearer ak_test_...")
-req.Header.Set("Content-Type", "application/json")
-
-resp, err := http.DefaultClient.Do(req)
-```
-
-</CodeGroup>
-
-```json Response
-{
-  "data": {
-    "id": "pye_cng3q8s6ek9kc5qg1h1g",
-    "type": "individual",
-    "first_name": "Alex",
-    "last_name": "Chen",
-    "email": "alex@example.com",
-    "country": "US",
-    "status": "active",
-    "created_at": "2026-02-14T10:00:00Z"
-  }
-}
-```
-
-## Adding payment instruments
-
-A payee can have multiple **instruments** -- different ways to receive payment. For example, a contractor might have both a US bank account and a UK bank account.
+Tokens in Basis Theory are immutable. Updating PII replaces the entire token — you send the full detail block, Anton re-tokenizes, and the old token is dropped:
 
 ```bash
-# US bank account
-curl https://api.antonpayments.dev/v1/payees/pye_cng3q8s6ek9kc5qg1h1g/instruments \
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/pii \
+  -X PUT \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @updated-pii.json
+```
+
+Supply the detail block matching the beneficiary's `type` (`individual` or `business`). The `display_name` on the beneficiary record is re-derived from the new PII. The change is audit-logged (SOC 2 CC8.1).
+
+Common reasons to update PII:
+
+- Contractor legal name change
+- Business changes registered address
+- Beneficiary provides a corrected DOB or ID number
+
+## Retrieving PII
+
+`GET /v1/beneficiaries/{id}/pii` detokenizes and returns the full PII blob. This is an audited, security-sensitive operation — every access generates a PCI DSS 10.2.1 audit entry.
+
+Use this to pre-populate edit forms or verify what you submitted.
+
+## Archive vs delete
+
+Two different disables:
+
+- **Archive** (`POST /v1/beneficiaries/{id}/archive`) — soft-disables the beneficiary. PII is preserved. The record is hidden from active listings and cannot be used on new payouts, but can be restored later. Historical payouts referencing the beneficiary remain unchanged. Requires `Idempotency-Key`.
+- **Delete** (`DELETE /v1/beneficiaries/{id}`) — soft-deletes the beneficiary. Permanent. Historical payouts still reference the ID for audit purposes.
+
+Prefer archive unless you know you will never need this beneficiary again. Restoring an archived beneficiary brings them back to `active`:
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/restore \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "bank_account",
-    "currency": "USD",
-    "details": {
-      "account_number": "9876543210",
-      "routing_number": "021000021"
-    }
-  }'
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Idempotency-Key: restore-$BEN_ID"
 ```
-
-```bash
-# UK bank account for the same payee
-curl https://api.antonpayments.dev/v1/payees/pye_cng3q8s6ek9kc5qg1h1g/instruments \
-  -X POST \
-  -H "Authorization: Bearer ak_test_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "bank_account",
-    "currency": "GBP",
-    "details": {
-      "account_number": "12345678",
-      "sort_code": "601234"
-    }
-  }'
-```
-
-When creating a payout, specify which instrument to use via the `instrument_id` field.
-
-## Listing payees
-
-Retrieve payees with cursor-based pagination:
-
-```bash
-# First page
-curl "https://api.antonpayments.dev/v1/payees?limit=50" \
-  -H "Authorization: Bearer ak_test_..."
-```
-
-```json Response
-{
-  "data": [
-    {
-      "id": "pye_cng3q8s6ek9kc5qg1h1g",
-      "type": "individual",
-      "first_name": "Alex",
-      "last_name": "Chen",
-      "status": "active"
-    }
-  ],
-  "has_more": true,
-  "next_cursor": "pye_cng3q8s6ek9kc5qg1h1g"
-}
-```
-
-```bash
-# Next page
-curl "https://api.antonpayments.dev/v1/payees?limit=50&cursor=pye_cng3q8s6ek9kc5qg1h1g" \
-  -H "Authorization: Bearer ak_test_..."
-```
-
-Continue paginating while `has_more` is `true`, passing `next_cursor` as the `cursor` parameter.
-
-## Listing instruments for a payee
-
-```bash
-curl https://api.antonpayments.dev/v1/payees/pye_cng3q8s6ek9kc5qg1h1g/instruments \
-  -H "Authorization: Bearer ak_test_..."
-```
-
-```json Response
-{
-  "data": [
-    {
-      "id": "ins_abc123",
-      "type": "bank_account",
-      "currency": "USD",
-      "status": "active"
-    },
-    {
-      "id": "ins_def456",
-      "type": "bank_account",
-      "currency": "GBP",
-      "status": "active"
-    }
-  ],
-  "has_more": false
-}
-```
-
-## Updating a payee
-
-```bash
-curl https://api.antonpayments.dev/v1/payees/pye_cng3q8s6ek9kc5qg1h1g \
-  -X PATCH \
-  -H "Authorization: Bearer ak_test_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "alex.chen@newdomain.com"
-  }'
-```
-
-## Deletion considerations
 
 <Warning>
-  Payee deletion is permanent and cannot be undone. Before deleting, ensure there are no active or pending payouts to this payee.
+  Beneficiaries `blocked` by compliance (status: `blocked`) cannot be restored via the API. Contact support if you believe a block was applied in error.
 </Warning>
 
-When you delete a payee:
-- **In-progress payouts** to that payee will still complete
-- **New payouts** to that payee will fail
-- **Historical data** (completed payouts) is preserved for audit
+## Searching and filtering
 
-## Best practices
+`GET /v1/beneficiaries` supports:
 
-<AccordionGroup>
-  <Accordion title="Validate bank details early">
-    Create payees and verify their instrument details well before you need to send a payout. This catches errors (wrong account number, invalid routing number) before time-sensitive payments.
-  </Accordion>
-  <Accordion title="Use email for notifications">
-    Include the payee's email when creating them. This allows Anton to send delivery confirmations where applicable.
-  </Accordion>
-  <Accordion title="One payee per recipient">
-    Do not create duplicate payees for the same person. Use instruments to add multiple payment methods to a single payee.
-  </Accordion>
-  <Accordion title="Store your mapping">
-    Keep a mapping between your internal user/vendor IDs and Anton payee IDs. This makes it easy to create payouts from your business logic.
-  </Accordion>
-  <Accordion title="Use metadata for internal tracking">
-    Attach metadata to payees with your internal identifiers. This simplifies reconciliation and lookup across systems.
-  </Accordion>
-</AccordionGroup>
+- `status` — `active` / `archived` / `blocked`
+- `type` — `individual` / `business`
+- `country` — ISO-2 code
+- Cursor pagination: `limit` (max 100) and `cursor`
+
+For search-by-attribute, filter on `external_ref` (you store this) or fetch and filter client-side. Anton does not expose full-text search on PII.
+
+## Instruments — beneficiaries without instruments can't be paid
+
+A beneficiary alone can't receive money; they need an instrument. See [Send a Payout — Step 3](/guides/send-a-payout) for attaching one. Call `GET /v1/beneficiaries/{id}/instruments` to list the instruments attached to a given beneficiary.
+
+## Webhooks
+
+Subscribe to the `beneficiary.*` events to react to lifecycle changes out-of-band:
+
+- `beneficiary.created`
+- `beneficiary.updated` (fires on edit, archive, restore, AND PII update)
+- `beneficiary.deleted` (payload is just the id)
+- `beneficiary.blocked` (compliance block)
+
+See [Webhook Events](/api-reference/webhook-events) for payload schemas.
+
+## Common errors
+
+| Code | HTTP | Meaning | Action |
+|---|---|---|---|
+| `duplicate_beneficiary` | 422 | Exact PII match already exists under your merchant. | Search by `external_ref` or PII; reuse the existing ID. |
+| `missing_beneficiary_details` | 400 | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`. |
+| `invalid_display_name` | 422 | Name fields empty or invalid characters. | Fix name; a minimum of first + last is required for individuals. |
+| `beneficiary_not_found` | 404 | ID doesn't exist or belongs to a different merchant. | Check the ID and prefix. |
+| `beneficiary_pii_update_failed` | 422 | PII update hit a validation or tokenization error. | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" icon="paper-plane" href="/guides/send-a-payout">
+    Once you have beneficiaries and instruments, fire your first payout.
+  </Card>
+  <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
+    React to `beneficiary.*` and `payout.*` events in real time.
+  </Card>
+</CardGroup>

@@ -1,14 +1,135 @@
 ---
-title: "Test Data"
-description: "Reset your sandbox and seed realistic beneficiaries and payouts in one call."
+title: "Sandbox Test Data"
+sidebarTitle: "Test data"
+description: "Reset your sandbox to a clean state and seed realistic beneficiaries, instruments, and payouts with a single call each."
 ---
 
-<Note>
-  Placeholder. Combined page covering all three sandbox management endpoints:
+The sandbox gives you three endpoints to manage test data for your merchant:
 
-  - **`POST /v1/merchant/sandbox/reset`** — wipe all beneficiaries, payouts, batches, webhooks, and balances. Sandbox only; no-op in production.
-  - **`POST /v1/merchant/sandbox/seed-beneficiaries`** — create a curated set of sample beneficiaries across multiple countries and payment methods.
-  - **`POST /v1/merchant/sandbox/seed-payouts`** — create sample payouts in a mix of states (pending, completed, failed, cancelled) for UI and integration testing.
+- `POST /v1/merchant/sandbox/reset` — wipe and optionally reseed
+- `POST /v1/merchant/sandbox/seed-beneficiaries` — generate sample beneficiaries across multiple countries and methods
+- `POST /v1/merchant/sandbox/seed-payouts` — generate sample payouts in mixed states for UI and webhook testing
 
-  Should document exactly what each endpoint creates, request/response shapes, how often you can call them, and when you'd use each (e.g., CI test fixtures, demo environments, onboarding engineers).
-</Note>
+All three are **sandbox-only** — calling them against production returns `403 sandbox_only`. They're scoped to your merchant — you can't affect another merchant's data.
+
+## Reset
+
+Four reset scopes:
+
+| `?scope=` | What it does |
+|---|---|
+| `balances` (default) | Wipe `merchant_accounts` + sandbox transactions, re-seed fresh balances. Beneficiaries, instruments, and payouts stay. |
+| `all` | Wipe payouts, instruments, beneficiaries, and sandbox transactions. Re-seed currency balances only. |
+| `delete-all` | Wipe everything. No reseed. You land at zero state. |
+| `full-reset` | Wipe everything. Re-seed balances + sample beneficiaries + sample payouts. Equivalent to a fresh merchant with demo data. |
+
+```bash
+# Clean balances, keep your beneficiaries and payouts
+curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=balances" \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+
+# Nuclear option — fresh merchant state with demo data
+curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=full-reset" \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+Rate-limited to 10 resets per merchant per hour — enough for active development, tight enough to catch a runaway test suite.
+
+Response:
+
+```json
+{
+  "status": "reset",
+  "scope": "balances",
+  "merchant_id": "mer_01HX..."
+}
+```
+
+`delete-all` responds with `"status": "deleted"`.
+
+## Seed sample beneficiaries
+
+Creates a curated set of realistic beneficiaries across multiple countries and payment methods — useful for populating your UI or testing country-specific edge cases:
+
+```bash
+curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-beneficiaries \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "status": "seeded",
+  "created_count": 12
+}
+```
+
+The beneficiaries created include a mix of `individual` and `business` types, spanning several corridors — enough variety to exercise most payout flows without you having to construct PII by hand.
+
+## Seed sample payouts
+
+Creates payouts in a mix of states — `completed`, `failed`, `cancelled`, `manual_review`, and in-flight — so you can validate your UI and webhook handling against every outcome:
+
+```bash
+curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-payouts \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+```json
+{
+  "status": "seeded",
+  "created_count": 30
+}
+```
+
+**Requires seeded beneficiaries first.** Running seed-payouts with no beneficiaries returns `422 no_beneficiaries`. Call seed-beneficiaries first, or use `?scope=full-reset` on the reset endpoint which seeds both.
+
+## Using these in CI
+
+A recommended CI pattern:
+
+<Steps>
+  <Step title="Before each test run, reset">
+    `POST /v1/merchant/sandbox/reset?scope=delete-all` to guarantee a clean slate.
+  </Step>
+  <Step title="Seed any baseline data your tests assume">
+    If your tests need a starting population (e.g., dashboard snapshot tests), call `seed-beneficiaries` and `seed-payouts`.
+  </Step>
+  <Step title="Run your tests">
+    Exercise your real integration against the seeded state.
+  </Step>
+  <Step title="Between test suites, reset scoped to balances">
+    `?scope=balances` is faster than a full reset — keeps your seeded data, resets funding state.
+  </Step>
+</Steps>
+
+Rate limits apply across the hour: 10 resets per merchant per hour. In a heavy-test CI setup, either share a merchant across workers carefully, or provision multiple sandbox merchants.
+
+## Triggering specific scenarios (future)
+
+Sandbox seeders produce a curated distribution — payouts in mixed states, beneficiaries across corridors. For deterministic triggering of specific engine verdicts, screening hits, or rail failures, that's forthcoming functionality — when it lands it'll use the `?simulate=` query parameter on `POST /v1/payouts` (sandbox-only). Watch the [changelog](/changelog) for when it ships.
+
+## What's different from production
+
+See [Sandbox Overview](/sandbox/overview) for the full list. Key points:
+
+- Rail submission is mocked — no real banks are contacted
+- Timing is compressed — sandbox payouts transition to `completed` in seconds
+- Real OFAC screening runs, but you can trigger deterministic outcomes using specific test beneficiaries
+- All authentication, authorization, webhook signing, and state-machine behavior is identical to production
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Sandbox overview" icon="flask" href="/sandbox/overview">
+    What sandbox is, and how it differs from production.
+  </Card>
+  <Card title="Going live" icon="rocket" href="/guides/going-live">
+    Checklist for promoting from sandbox to production.
+  </Card>
+</CardGroup>

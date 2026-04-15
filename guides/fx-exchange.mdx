@@ -1,13 +1,190 @@
 ---
 title: "FX & Currency Exchange"
-description: "Quote, lock, and execute foreign exchange between merchant balances."
+sidebarTitle: "FX & exchange"
+description: "Get indicative rates, lock a quote, execute an exchange between currencies — and understand how cross-currency payouts use all three."
 ---
 
-<Note>
-  Placeholder. Guide covers:
-  - When you need FX (funding a payout in a currency you don't hold)
-  - Indicative rate vs lockable quote (`GET /v1/fx/rate` vs `POST /v1/fx/quote`)
-  - Executing an exchange between balances (`POST /v1/fx/exchange`)
-  - Quote expiry and reconciliation
-  - Listing exchange history
-</Note>
+Three related surfaces sit under `/v1/fx`:
+
+- **Indicative rate** (`GET /v1/fx/rate`) — read-only, cheap, non-binding. For display.
+- **Lockable quote** (`POST /v1/fx/quote`) — binding rate for a short window. Use when you need price certainty before committing.
+- **Exchange** (`POST /v1/fx/exchange`) — executes a locked quote, moves funds between your own merchant balances in different currencies.
+
+Plus — cross-currency payouts automatically use FX under the hood when you submit `POST /v1/payouts` with different `source_currency` and `dest_currency`.
+
+## When you need each
+
+| You want to... | Use |
+|---|---|
+| Show a customer what a payout will cost them in their currency | `GET /v1/fx/rate` |
+| Lock in a rate before showing "send" to the customer | `POST /v1/fx/quote` then `POST /v1/fx/exchange` |
+| Convert your own balance from one currency to another | `POST /v1/fx/quote` then `POST /v1/fx/exchange` |
+| Send a payout that debits one of your currencies and credits another on the beneficiary's side | `POST /v1/payouts` with different source/dest currencies — FX is automatic |
+
+## Indicative rates
+
+For display-only use. Two currencies, optional sell amount:
+
+```bash
+curl "https://api.antonpayments.dev/v1/fx/rate?sell_currency=USD&buy_currency=EUR&sell_amount=1000" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "sell_currency": "USD",
+  "buy_currency": "EUR",
+  "mid_market_rate": "0.9215",
+  "customer_rate": "0.9173",
+  "fx_markup_bps": 45,
+  "sell_amount": "1000.00",
+  "buy_amount": "917.30",
+  "rate_timestamp": "2026-04-15T14:30:00Z"
+}
+```
+
+- `mid_market_rate` — raw interbank rate
+- `customer_rate` — mid-market adjusted by your pricing plan's FX markup (`fx_markup_bps`)
+- `buy_amount` — computed using `customer_rate`
+
+Rate-limited to 30 per minute per IP. The rate is not locked — by the time you execute, it may have moved.
+
+## Lockable quotes
+
+When you need certainty:
+
+```bash
+curl https://api.antonpayments.dev/v1/fx/quote \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sell_currency": "USD",
+    "buy_currency": "EUR",
+    "buy_amount": "1000.00",
+    "locked": true
+  }'
+```
+
+Supply either `sell_amount` OR `buy_amount` — Anton computes the other side at the quoted rate. The response includes an `id` (`fxq_...`) and an `expires_at`. Execute before that moment.
+
+```json
+{
+  "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFX",
+  "sell_currency": "USD",
+  "buy_currency": "EUR",
+  "sell_amount": "1089.91",
+  "buy_amount": "1000.00",
+  "customer_rate": "0.9175",
+  "mid_market_rate": "0.9215",
+  "fx_markup_bps": 45,
+  "expires_at": "2026-04-15T14:32:00Z",
+  "locked": true
+}
+```
+
+Lockable quotes are rate-limited at 30/min per IP.
+
+## Executing an exchange
+
+Exchange is idempotent:
+
+```bash
+curl https://api.antonpayments.dev/v1/fx/exchange \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fxx-$CUSTOMER_ORDER_ID" \
+  -d '{"quote_id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFX"}'
+```
+
+The exchange:
+
+- Debits `sell_amount` from your merchant balance in `sell_currency`.
+- Credits `buy_amount` to your merchant balance in `buy_currency`.
+- Records an `fx.exchange.*` webhook event and an audit entry.
+
+If the quote has expired, you get `410 quote_expired` — request a new quote. Rate-limited at 10/min per IP.
+
+## FX on cross-currency payouts
+
+You typically don't call `/v1/fx/*` explicitly when sending a payout — Anton handles it transparently:
+
+```bash
+curl https://api.antonpayments.dev/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Idempotency-Key: pay-xborder-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "beneficiary_id": "ben_...",
+    "instrument_id": "ins_...",
+    "source_amount": "550.00",
+    "source_currency": "USD",
+    "dest_amount": "500.00",
+    "dest_currency": "EUR",
+    "method": "sepa",
+    "fixed_side": "fixed_dest",
+    "purpose": "supplier_payment",
+    "reference": "PO-8821"
+  }'
+```
+
+Anton computes the required `source_amount` using current pricing (rate + markup + fee + buffer), debits your USD balance, converts, and pays the beneficiary in EUR via SEPA.
+
+The returned `Payout` carries FX detail — `exchange_rate`, `fee`, `fee_currency`, `buffer_amount`, `buffer_currency`. The `buffer_amount` is a cross-currency rate buffer held during processing and released on settlement.
+
+**When to lock separately**: if your application needs to show the exact `source_amount` to the end user before they confirm, pre-lock via `POST /v1/fx/quote` and surface the quote's `customer_rate`. The payout will use the same corridor pricing but isn't bound to the quote unless you execute against the locked quote explicitly (via the merchant account funding path — typically dashboard-driven).
+
+## Listing exchange history
+
+```bash
+curl "https://api.antonpayments.dev/v1/fx/exchanges?sell_currency=USD&limit=50" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+Filters: `sell_currency`, `buy_currency`, `created_after`, `created_before`. Cursor-paginated.
+
+Each exchange has a `status` (`pending` / `completed` / `failed`) and, if it was created to fund a cross-currency payout, a `payout_id`.
+
+## What can go wrong
+
+<AccordionGroup>
+  <Accordion title="422 insufficient_balance on exchange">
+    Your sell-currency balance can't cover the exchange. Fund your balance or size the exchange down.
+  </Accordion>
+  <Accordion title="410 quote_expired">
+    The lock window passed. Request a new quote — the rate may have moved in either direction.
+  </Accordion>
+  <Accordion title="422 currency_not_supported">
+    Anton doesn't currently support FX in the requested pair. See `GET /v1/currencies` for what's available.
+  </Accordion>
+  <Accordion title="503 locked_rate_unavailable">
+    Upstream provider can't honor the locked rate. Rare. Retry after a short delay.
+  </Accordion>
+  <Accordion title="502 fx_rates_unavailable">
+    Upstream rate feed is down. Honor Retry-After if present and back off.
+  </Accordion>
+</AccordionGroup>
+
+## Subscribe to FX webhooks
+
+- `fx.quote.created`
+- `fx.exchange.created`
+- `fx.exchange.completed`
+- `fx.exchange.failed`
+
+See [Webhook Events](/api-reference/webhook-events) for payload schemas.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" icon="paper-plane" href="/guides/send-a-payout">
+    Including cross-currency payouts that use FX transparently.
+  </Card>
+  <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
+    React to `fx.*` events on your balance-sheet reconciliation.
+  </Card>
+</CardGroup>

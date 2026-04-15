@@ -1,232 +1,176 @@
 ---
 title: "Batch Payouts"
-sidebarTitle: "Batch Payouts"
-description: "Send hundreds or thousands of payouts at once by uploading a CSV file."
+sidebarTitle: "Batch payouts"
+description: "Upload a CSV or XLSX of many payouts in a single call. Anton validates, you confirm, Anton processes."
 ---
 
-## Overview
+<Note>
+  **Editability note:** this guide was drafted from the OpenAPI spec. If the product/engineering team has an updated batch flow (file schema, row limits, validation rules), edit inline — each H2 is self-contained.
+</Note>
 
-Batch payouts let you process many payouts in a single operation. Upload a CSV file with payout details, review the parsed results, confirm to execute, and track progress as individual payouts are processed.
+Batch payouts let you send thousands of payments in one upload. The flow is three phases: **upload → validate → confirm → process**. You can't skip steps; Anton requires you to explicitly confirm after seeing the validation summary.
 
-This is ideal for:
-- Payroll runs
-- Marketplace seller payouts
-- Monthly commission payments
-- Recurring supplier payments
+## When to use batches
 
-## Batch lifecycle
+- **Payroll** — one upload per pay cycle
+- **Marketplace disbursements** — nightly seller settlements
+- **Contractor payments** — monthly or bi-weekly payouts to many contractors
 
-<Steps>
-  <Step title="Upload">
-    Upload a CSV file with payout details. Anton validates every row and reports errors.
-  </Step>
-  <Step title="Validate">
-    Anton parses the file, validates payee IDs, instruments, amounts, and currencies. Errors are reported per row.
-  </Step>
-  <Step title="Confirm">
-    Review the validation results and confirm the batch to begin processing.
-  </Step>
-  <Step title="Process">
-    Individual payouts are created and submitted through the standard payout lifecycle (screening, approval, rail submission).
-  </Step>
-  <Step title="Complete">
-    The batch reaches a terminal state once all individual payouts have resolved (completed, failed, or returned).
-  </Step>
-</Steps>
+For single-digit payouts per call, stick with `POST /v1/payouts`.
 
-## 1. Get the CSV template
+## The file format
+
+Download the template to start:
 
 ```bash
-curl https://api.antonpayments.dev/v1/batches/template \
-  -H "Authorization: Bearer ak_test_..." \
+curl "https://api.antonpayments.dev/v1/batches/template" \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
   -o batch-template.csv
 ```
 
-### CSV column headers
+The template contains the canonical column order and example rows. Column order matters — Anton parses by position as well as name. Supported formats: **CSV** and **XLSX**.
 
-The template uses the following columns:
+Each row is one payout instruction. Key columns include:
 
-| Column | Required | Description |
-|--------|----------|-------------|
-| `payee_id` | Yes | The payee receiving the payout (e.g., `pye_abc123`) |
-| `instrument_id` | Yes | The payment instrument to use (e.g., `ins_abc123`) |
-| `amount` | Yes | Payout amount as a decimal string (e.g., `500.00`) |
-| `currency` | Yes | Three-letter ISO currency code (e.g., `USD`, `GBP`, `EUR`) |
-| `description` | No | Human-readable description of the payout |
-| `reference` | No | Your internal reference for reconciliation |
+- `external_ref` — your beneficiary reference (used to match existing beneficiaries or create new ones)
+- Beneficiary identity fields — populated only when creating a new beneficiary from the row
+- `source_amount` or `dest_amount` — decimal string
+- `dest_currency`, `dest_country`
+- `method`, `reference`, `purpose`
+- Method-specific credential columns (e.g., `iban`, `sort_code`, `wallet_address`)
 
-### Example CSV
+Consult the downloaded template for the exact schema; do not reorder columns.
 
-```csv
-payee_id,instrument_id,amount,currency,description,reference
-pye_abc123,ins_001,500.00,USD,January salary,PAY-001
-pye_def456,ins_002,1200.00,GBP,Consulting fee,PAY-002
-pye_ghi789,ins_003,350.00,EUR,Commission,PAY-003
-```
-
-## 2. Upload the batch
+## Upload a batch
 
 ```bash
-curl https://api.antonpayments.dev/v1/batches \
+curl "https://api.antonpayments.dev/v1/batches" \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
-  -F "file=@payouts.csv"
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -F "file=@payroll-2026-04-30.csv"
 ```
 
-```json Response
-{
-  "data": {
-    "id": "batch_cng3q8s6ek9kc5qg1h5g",
-    "status": "pending_review",
-    "total_rows": 150,
-    "valid_rows": 148,
-    "error_rows": 2,
-    "total_amount": "125000.00",
-    "currency": "USD",
-    "created_at": "2026-02-14T10:00:00Z"
-  }
-}
-```
+- Max file size: 32 MB
+- Max rows: contact support for current limits
 
-## 3. Check for errors
+The response returns the batch in `uploaded` status. Anton queues an async validation job — polling the batch endpoint will show the status moving through `uploaded → validating → validated` (or `validation_failed`).
 
-If there are validation errors, retrieve the details:
+Duplicate uploads of the exact same file within 24 hours return `409 duplicate_file` — use `Idempotency-Key` on the upload if you want deterministic retries (the file hash already acts as one, but explicit keys give clearer error handling).
+
+## Watch for validation
+
+Validation is asynchronous. Poll or subscribe to webhooks:
 
 ```bash
-curl https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g/errors \
-  -H "Authorization: Bearer ak_test_..."
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
 ```
 
-```json Response
-{
-  "data": [
-    {
-      "row": 45,
-      "field": "amount",
-      "message": "Amount must be greater than 0"
-    },
-    {
-      "row": 102,
-      "field": "payee_id",
-      "message": "Payee not found: pye_invalid"
-    }
-  ]
-}
-```
+When `status` moves to `validated`, the response includes a `summary` block:
 
-You have two options:
-- Fix the errors in your CSV and re-upload as a new batch
-- Confirm the batch with only the valid rows (error rows are skipped)
+- `new_beneficiaries` / `matched_beneficiaries` / `existing_beneficiaries`
+- Method mix (count of rows per payment method)
+- Estimated debits per funding currency
+- FX markup in basis points
+- Balance-sufficiency check per currency
 
-## 4. Confirm the batch
+Review these before confirming. The batch has an `expires_at` — confirm before it expires, or the validated batch is marked `expired` and you have to re-upload.
+
+## Inspect errors before confirming
+
+Row-level validation errors and warnings:
 
 ```bash
-curl https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g/confirm \
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/errors" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
+```
+
+Errors block specific rows; warnings don't. Typical errors:
+
+- Missing required columns
+- Invalid currency / country codes
+- Amount formatting (non-decimal, too many digits)
+- Beneficiary mismatch (PII conflicts with existing record at same `external_ref`)
+- Unsupported method for the destination country
+
+Fix errors in your source file and re-upload — batches are immutable once uploaded.
+
+## Confirm a validated batch
+
+Confirmation is irrevocable — once confirmed, Anton creates payouts from valid rows and starts processing.
+
+```bash
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/confirm" \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
-  -H "Idempotency-Key: batch-confirm-2026-02-14"
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Idempotency-Key: confirm-$BATCH_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"source_currency": "USD"}'
 ```
 
-This creates individual payouts for all valid rows. Each payout goes through normal screening and processing.
+The `source_currency` in the body is the default funding currency for rows that didn't specify one. Omit to let Anton use your account default.
 
-## 5. Track progress
+<Warning>
+  Once a batch is `confirmed` you cannot cancel the batch as a whole via `POST /v1/batches/{id}/cancel` — that only works from pre-processing states. Individual payouts within the batch can still be cancelled via `POST /v1/payouts/{id}/cancel` up until they reach `processing`.
+</Warning>
+
+## Watch processing
+
+Status progression after confirmation:
+
+```
+confirmed → processing → completed | partial | failed
+```
+
+- `completed` — every valid row became a successful payout
+- `partial` — some rows succeeded, some failed during processing
+- `failed` — all rows failed
+
+Subscribe to `batch.completed` and `batch.failed` webhook events rather than polling.
+
+## Inspect per-row results
+
+Once processing finishes, pull the per-row outcomes:
 
 ```bash
-# Batch status
-curl https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g \
-  -H "Authorization: Bearer ak_test_..."
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/results" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
 ```
 
-```json Response
-{
-  "data": {
-    "id": "batch_cng3q8s6ek9kc5qg1h5g",
-    "status": "processing",
-    "total_rows": 150,
-    "valid_rows": 148,
-    "error_rows": 2,
-    "completed_count": 95,
-    "failed_count": 3,
-    "pending_count": 50,
-    "total_amount": "125000.00",
-    "currency": "USD"
-  }
-}
-```
+Each result has the original row number, outcome (`success` / `failed` / `skipped` / `pending`), and the created `payout_id` (if any). Use this to reconcile your source file with what actually shipped.
+
+For the created payouts themselves:
 
 ```bash
-# Individual payouts in the batch (cursor-based pagination)
-curl "https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g/payouts?limit=50" \
-  -H "Authorization: Bearer ak_test_..."
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/payouts" \
+  -H "Authorization: Bearer $ANTON_API_KEY"
 ```
 
-```json Response
-{
-  "data": [
-    {
-      "id": "pay_abc123",
-      "payee_id": "pye_abc123",
-      "amount": "500.00",
-      "currency": "USD",
-      "status": "completed"
-    },
-    {
-      "id": "pay_def456",
-      "payee_id": "pye_def456",
-      "amount": "1200.00",
-      "currency": "GBP",
-      "status": "processing"
-    }
-  ],
-  "has_more": true,
-  "next_cursor": "pay_def456"
-}
-```
+These are normal `Payout` records — the full state machine applies, and each fires its own `payout.*` webhook events as it moves through processing and settlement.
 
-## Handling partial failures
+## Cancelling
 
-Batches can partially succeed. Some payouts may complete while others fail due to compliance screening, invalid instrument details, or rail errors.
-
-When a batch completes with failures:
-- The batch status becomes `completed` (not `failed`) as long as some payouts succeeded
-- Use the batch payouts endpoint to filter by status and identify failures
-- Failed payouts include error details explaining the reason
-- You can create new individual payouts to retry specific failures
+Before processing starts (states: `uploaded`, `validating`, `validated`, `validation_failed`, `confirmed` before worker picks it up), cancel the whole batch:
 
 ```bash
-# List only failed payouts in the batch
-curl "https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g/payouts?status=failed&limit=50" \
-  -H "Authorization: Bearer ak_test_..."
-```
-
-## Cancelling a batch
-
-Before confirmation, you can cancel the entire batch:
-
-```bash
-curl https://api.antonpayments.dev/v1/batches/batch_cng3q8s6ek9kc5qg1h5g/cancel \
+curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/cancel" \
   -X POST \
-  -H "Authorization: Bearer ak_test_..."
+  -H "Authorization: Bearer $ANTON_API_KEY"
 ```
 
-After confirmation, individual payouts can be cancelled (if they have not started processing) but the batch itself cannot be undone.
+Once `processing` starts, cancel individual payouts instead.
 
-## Limits and tips
+## Resumability
 
-<AccordionGroup>
-  <Accordion title="File size limits">
-    Maximum 10,000 rows per batch. For larger volumes, split into multiple batches.
-  </Accordion>
-  <Accordion title="Balance requirements">
-    Your available balance must cover the total batch amount at confirmation time. If insufficient, the confirmation will fail. Check your balance before confirming.
-  </Accordion>
-  <Accordion title="Use unique references">
-    Include a unique `reference` per row so you can match Anton payouts back to your source records. This is critical for reconciliation.
-  </Accordion>
-  <Accordion title="Webhook notifications">
-    Subscribe to `batch.completed` and `batch.failed` events. Each individual payout within the batch also generates its own `payout.*` webhook events.
-  </Accordion>
-  <Accordion title="Idempotency on confirm">
-    Always include an `Idempotency-Key` when confirming a batch. This prevents accidental double-confirmation if your request is retried.
-  </Accordion>
-</AccordionGroup>
+Anton tracks a per-batch `current_row_index` checkpoint — if the batch worker restarts mid-process, it resumes from the last successfully processed row rather than re-processing everything. You don't have to do anything for this to work; it's platform behavior.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a single payout" icon="paper-plane" href="/guides/send-a-payout">
+    For low-volume, per-event payout flows.
+  </Card>
+  <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
+    Subscribe to `batch.*` and `payout.*` events for real-time status.
+  </Card>
+</CardGroup>
