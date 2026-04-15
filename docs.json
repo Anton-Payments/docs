@@ -110,6 +110,145 @@
               "api-reference/webhook-signing",
               "api-reference/ip-allowlist"
             ]
+          },
+          {
+            "group": "Reference Data",
+            "pages": [
+              "GET /v1/currencies",
+              "GET /v1/countries",
+              "GET /v1/payment-methods"
+            ]
+          },
+          {
+            "group": "Beneficiaries",
+            "pages": [
+              "POST /v1/beneficiaries",
+              "GET /v1/beneficiaries",
+              "GET /v1/beneficiaries/{id}",
+              "PUT /v1/beneficiaries/{id}",
+              "DELETE /v1/beneficiaries/{id}",
+              "GET /v1/beneficiaries/{id}/pii",
+              "PUT /v1/beneficiaries/{id}/pii",
+              "POST /v1/beneficiaries/{id}/archive",
+              "POST /v1/beneficiaries/{id}/restore"
+            ]
+          },
+          {
+            "group": "Instruments",
+            "pages": [
+              "POST /v1/beneficiaries/{id}/instruments",
+              "GET /v1/beneficiaries/{id}/instruments",
+              "GET /v1/instruments",
+              "GET /v1/instruments/countries",
+              "GET /v1/instruments/methods",
+              "GET /v1/instruments/{id}",
+              "PUT /v1/instruments/{id}",
+              "DELETE /v1/instruments/{id}"
+            ]
+          },
+          {
+            "group": "Payouts",
+            "pages": [
+              "POST /v1/payouts",
+              "GET /v1/payouts",
+              "GET /v1/payouts/{id}",
+              "GET /v1/payouts/{id}/events",
+              "POST /v1/payouts/{id}/cancel"
+            ]
+          },
+          {
+            "group": "Batches",
+            "pages": [
+              "GET /v1/batches/template",
+              "POST /v1/batches",
+              "GET /v1/batches",
+              "GET /v1/batches/{id}",
+              "POST /v1/batches/{id}/confirm",
+              "POST /v1/batches/{id}/cancel",
+              "GET /v1/batches/{id}/payouts",
+              "GET /v1/batches/{id}/errors",
+              "GET /v1/batches/{id}/results"
+            ]
+          },
+          {
+            "group": "Balances",
+            "pages": [
+              "GET /v1/balances",
+              "GET /v1/balances/{currency}"
+            ]
+          },
+          {
+            "group": "Accounts",
+            "pages": [
+              "GET /v1/accounts",
+              "GET /v1/accounts/{currency}",
+              "GET /v1/accounts/{currency}/details",
+              "GET /v1/accounts/{currency}/transactions",
+              "GET /v1/transactions"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "POST /v1/webhooks",
+              "GET /v1/webhooks",
+              "GET /v1/webhooks/{id}",
+              "DELETE /v1/webhooks/{id}",
+              "GET /v1/webhooks/{id}/secret",
+              "POST /v1/webhooks/{id}/secret/rotate",
+              "POST /v1/webhooks/{id}/test",
+              "POST /v1/webhooks/{id}/deactivate",
+              "GET /v1/webhooks/events",
+              "GET /v1/webhooks/events/{id}",
+              "GET /v1/webhooks/events/{id}/deliveries"
+            ]
+          },
+          {
+            "group": "Documents",
+            "pages": [
+              "POST /v1/documents",
+              "GET /v1/documents",
+              "GET /v1/documents/{id}",
+              "GET /v1/documents/{id}/download"
+            ]
+          },
+          {
+            "group": "RFIs",
+            "pages": [
+              "GET /v1/rfis",
+              "GET /v1/rfis/{id}",
+              "POST /v1/rfis/{id}/respond"
+            ]
+          },
+          {
+            "group": "Pricing",
+            "pages": [
+              "GET /v1/pricing",
+              "POST /v1/pricing/quote"
+            ]
+          },
+          {
+            "group": "FX",
+            "pages": [
+              "POST /v1/fx/quote",
+              "GET /v1/fx/rate",
+              "POST /v1/fx/exchange",
+              "GET /v1/fx/exchanges"
+            ]
+          },
+          {
+            "group": "Corridors",
+            "pages": [
+              "GET /v1/corridors"
+            ]
+          },
+          {
+            "group": "Sandbox",
+            "pages": [
+              "POST /v1/merchant/sandbox/reset",
+              "POST /v1/merchant/sandbox/seed-beneficiaries",
+              "POST /v1/merchant/sandbox/seed-payouts"
+            ]
           }
         ]
       }
