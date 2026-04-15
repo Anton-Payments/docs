@@ -927,6 +927,348 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/batches/template:
+    get:
+      tags: [Batches]
+      summary: Download the batch CSV template
+      operationId: downloadBatchTemplate
+      description: |
+        Returns a ready-to-fill CSV template with the canonical header row and a
+        handful of example rows. Use this to anchor your batch format — column
+        order and casing matter.
+      responses:
+        '200':
+          description: CSV template.
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/batches:
+    post:
+      tags: [Batches]
+      summary: Upload a batch
+      operationId: uploadBatch
+      description: |
+        Upload a batch file (CSV or XLSX) containing many payout rows. The file
+        is stored, hashed for duplicate detection, and queued for asynchronous
+        validation. The response returns the batch in `uploaded` status; the
+        status transitions to `validating`, then `validated` (or
+        `validation_failed`) via webhook.
+
+        After `validated`, review `GET /v1/batches/{id}` and the summary, then
+        call `POST /v1/batches/{id}/confirm` to actually create the payouts.
+        Confirmation expires — see `expires_at` on the batch record.
+
+        Maximum file size: 32 MB. Maximum rows per batch: check current limits
+        with support.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or XLSX file. Filename is preserved.
+      responses:
+        '201':
+          description: Batch accepted and queued for validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '400':
+          description: Malformed upload — missing file, empty file, or unsupported format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: '`duplicate_file` — a batch with this exact file hash was uploaded in the last 24 hours.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: '`file_too_large` — file exceeds the 32 MB limit.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Batches]
+      summary: List batches
+      operationId: listBatches
+      description: Cursor-paginated list of batches for your merchant.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BatchStatus'
+      responses:
+        '200':
+          description: Paginated list of batches.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Batch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/batches/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: Retrieve a batch
+      operationId: getBatch
+      description: Return a single batch, including its validation summary (when available).
+      responses:
+        '200':
+          description: Batch record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/batches/{id}/confirm:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    post:
+      tags: [Batches]
+      summary: Confirm a validated batch
+      operationId: confirmBatch
+      description: |
+        Confirm a batch for processing. Only batches in `validated` status can be
+        confirmed; the batch moves to `confirmed` and then `processing` as payouts
+        are created from valid rows.
+
+        Confirmation is irrevocable — once a batch is `confirmed`, individual
+        payouts can still be cancelled (`POST /v1/payouts/{id}/cancel`) up until
+        they're submitted to a rail, but the batch itself proceeds.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_currency:
+                  $ref: '#/components/schemas/CurrencyCode'
+                  description: Override the default funding currency for rows that don't specify one.
+      responses:
+        '200':
+          description: Batch confirmed and queued for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            - `batch_not_validated` — batch is not in `validated` status.
+            - `batch_confirmation_expired` — the batch's `expires_at` has passed; re-upload the file.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/batches/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    post:
+      tags: [Batches]
+      summary: Cancel a batch
+      operationId: cancelBatch
+      description: |
+        Cancel a batch before processing begins. Valid from `uploaded`,
+        `validating`, `validated`, `validation_failed`, or `confirmed`. Once
+        `processing` begins, use per-payout cancellation instead.
+      responses:
+        '200':
+          description: Batch cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`batch_not_cancellable` — batch is already in a terminal state or is actively processing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/batches/{id}/payouts:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List payouts created from a batch
+      operationId: listBatchPayouts
+      description: |
+        Cursor-paginated list of payouts created by processing this batch. Row
+        order in the original file is preserved in the response.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Payouts created by this batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/batches/{id}/errors:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List validation errors and warnings for a batch
+      operationId: listBatchErrors
+      description: |
+        Return the row-level validation errors and warnings produced during the
+        `validating` phase. Each error or warning carries the row number and
+        field it applies to so you can point the merchant back to their source
+        file.
+      responses:
+        '200':
+          description: Errors and warnings keyed by row.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      errors:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BatchError'
+                      warnings:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BatchWarning'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/batches/{id}/results:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List per-row processing results
+      operationId: listBatchResults
+      description: |
+        Return the per-row outcome of `processing`. For each original row you
+        get the row number, outcome (`success`, `failed`, `skipped`, `pending`),
+        the created `payout_id` (if any), and a human-readable reason for any
+        non-success outcome.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Per-row results.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BatchRowResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /v1/instruments:
     get:
       tags: [Instruments]
@@ -2388,10 +2730,198 @@ components:
         created_at:
           $ref: '#/components/schemas/Timestamp'
 
+    BatchStatus:
+      type: string
+      enum:
+        - uploaded
+        - validating
+        - validated
+        - validation_failed
+        - confirmed
+        - processing
+        - completed
+        - partial
+        - failed
+        - cancelled
+
+    BatchError:
+      type: object
+      description: A row-level validation error.
+      required: [row, message]
+      properties:
+        row:
+          type: integer
+          description: 1-based row number in the original file.
+        field:
+          type: string
+          description: Header/column the error applies to. Empty for row-level issues.
+        message:
+          type: string
+
+    BatchWarning:
+      type: object
+      description: A non-blocking row-level warning.
+      required: [row, type, message]
+      properties:
+        row:
+          type: integer
+        type:
+          type: string
+          description: Category — e.g. `beneficiary_mismatch`, `duplicate_skip`, `duplicate_conflict`.
+        message:
+          type: string
+
+    BatchSummary:
+      type: object
+      description: Validation summary the merchant reviews before confirming.
+      properties:
+        new_beneficiaries:
+          type: integer
+          description: Beneficiaries that would be created from the file.
+        matched_beneficiaries:
+          type: integer
+          description: Rows that matched an existing beneficiary.
+        existing_beneficiaries:
+          type: integer
+          description: Distinct existing beneficiaries referenced.
+        methods:
+          type: object
+          description: Count of rows by payment method.
+          additionalProperties:
+            type: integer
+        estimated_debits:
+          type: array
+          items:
+            type: object
+            properties:
+              currency:
+                $ref: '#/components/schemas/CurrencyCode'
+              amount:
+                $ref: '#/components/schemas/Money'
+              fx_rows:
+                type: integer
+              same_currency_rows:
+                type: integer
+              rate_timestamp:
+                $ref: '#/components/schemas/Timestamp'
+        fx_markup_bps:
+          type: integer
+          description: FX markup applied to cross-currency rows, in basis points.
+        balance_check:
+          type: object
+          description: Balance sufficiency per funding currency.
+          additionalProperties:
+            type: object
+            properties:
+              available:
+                $ref: '#/components/schemas/Money'
+              estimated_debit:
+                $ref: '#/components/schemas/Money'
+              sufficient:
+                type: boolean
+
+    BatchRowResult:
+      type: object
+      required: [row, status]
+      properties:
+        row:
+          type: integer
+        status:
+          type: string
+          enum: [success, failed, skipped, pending]
+        payout_id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+        beneficiary_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+        instrument_id:
+          type: string
+          pattern: '^ins_[a-zA-Z0-9]+$'
+        error:
+          type: string
+          description: Free-form reason for `failed`.
+        skip_reason:
+          type: string
+          description: Reason for `skipped` (e.g. `duplicate`).
+
     Batch:
       type: object
-      description: CSV-driven bulk payout upload.
-      # TODO
+      description: |
+        A batch upload. Moves through `uploaded -> validating -> validated ->
+        confirmed -> processing -> completed | partial | failed`. Can be
+        cancelled from any pre-processing state.
+      required:
+        - id
+        - merchant_id
+        - uploaded_by
+        - status
+        - file_name
+        - file_format
+        - file_size
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+          example: bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        uploaded_by:
+          type: string
+          description: User ID of the operator who uploaded this batch.
+        status:
+          $ref: '#/components/schemas/BatchStatus'
+        file_name:
+          type: string
+          example: payroll_2026_04_15.csv
+        file_format:
+          type: string
+          enum: [csv, xlsx]
+        file_size:
+          type: integer
+          description: Bytes.
+        total_rows:
+          type: integer
+        valid_rows:
+          type: integer
+        invalid_rows:
+          type: integer
+        warning_rows:
+          type: integer
+        skipped_rows:
+          type: integer
+        processed_rows:
+          type: integer
+        summary:
+          $ref: '#/components/schemas/BatchSummary'
+        source_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+          description: Default funding currency used for rows that don't specify their own. Set at confirmation.
+        current_row_index:
+          type: integer
+          description: Resumability checkpoint — highest row index successfully processed.
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: Deadline for confirming a `validated` batch.
+        confirmed_at:
+          $ref: '#/components/schemas/Timestamp'
+        confirmed_by:
+          type: string
+        cancelled_at:
+          $ref: '#/components/schemas/Timestamp'
+        cancelled_by:
+          type: string
+        processing_started_at:
+          $ref: '#/components/schemas/Timestamp'
+        completed_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
 
     WebhookSubscription:
       type: object
