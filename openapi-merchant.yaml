@@ -1571,6 +1571,364 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Create a webhook subscription
+      operationId: createWebhookSubscription
+      description: |
+        Register an HTTPS endpoint to receive event notifications. Anton POSTs
+        signed JSON deliveries to the URL you supply every time an event from
+        the `events` list fires on your merchant account.
+
+        **Requirements:**
+        - The URL must use `https://` (enforced outside development environments).
+        - The URL must be publicly reachable — private, loopback, and metadata
+          addresses are rejected.
+
+        The response includes a `secret` — this is shown **once at creation**.
+        Store it in your secrets manager immediately; Anton cannot recover it
+        later. You can rotate the secret any time via
+        `POST /v1/webhooks/{id}/secret/rotate`.
+
+        See [Webhook Events](/api-reference/webhook-events) for the event catalog
+        and [Webhook Signing](/api-reference/webhook-signing) for verification.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscriptionCreateRequest'
+      responses:
+        '201':
+          description: Subscription created. Includes the one-time signing secret.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/WebhookSubscription'
+                  - type: object
+                    properties:
+                      secret:
+                        type: string
+                        description: Signing secret (`whsec_` + 64 hex). Shown once — store it now.
+                        example: whsec_0a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef
+        '400':
+          description: |
+            - `webhook_url_required` — `url` missing.
+            - `webhook_url_invalid` — `url` is malformed or hostless.
+            - `webhook_url_not_https` — HTTP scheme used outside development.
+            - `webhook_url_private_address` — URL resolves to a private / loopback / metadata address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Webhooks]
+      summary: List webhook subscriptions
+      operationId: listWebhookSubscriptions
+      description: Return all webhook subscriptions on your merchant account.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+      responses:
+        '200':
+          description: List of subscriptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+    get:
+      tags: [Webhooks]
+      summary: Retrieve a webhook subscription
+      operationId: getWebhookSubscription
+      responses:
+        '200':
+          description: Subscription.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook subscription
+      operationId: deleteWebhookSubscription
+      description: |
+        Permanently delete a subscription. Event history and past delivery
+        records are retained for audit, but no new deliveries will be attempted.
+        Prefer `POST /v1/webhooks/{id}/deactivate` if you may re-enable later.
+      responses:
+        '204':
+          description: Subscription deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/webhooks/{id}/secret:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+    get:
+      tags: [Webhooks]
+      summary: Retrieve the current signing secret
+      operationId: getWebhookSecret
+      description: |
+        Return the current HMAC signing secret for this subscription. Use this
+        if you lost the secret after creation — the endpoint is audited and
+        rate-limited for safety.
+      responses:
+        '200':
+          description: Current secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret]
+                properties:
+                  secret:
+                    type: string
+                    description: '`whsec_` + 64 hex.'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/webhooks/{id}/secret/rotate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+    post:
+      tags: [Webhooks]
+      summary: Rotate the signing secret
+      operationId: rotateWebhookSecret
+      description: |
+        Generate a fresh signing secret. The old secret is invalidated immediately.
+        There is no overlap window — any delivery in flight may be signed with
+        either secret depending on when it was queued; plan rotations for a
+        quiet period.
+
+        The new secret is shown **once** in the response. Store it now.
+      responses:
+        '200':
+          description: Rotated. Response carries the new secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret]
+                properties:
+                  secret:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/webhooks/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+    post:
+      tags: [Webhooks]
+      summary: Send a test delivery
+      operationId: testWebhookSubscription
+      description: |
+        Dispatch a synthetic `test` event to this subscription right now. Useful
+        for verifying signature verification, network reachability, and logging
+        pipelines without waiting for a real event.
+
+        Rate-limited.
+      responses:
+        '202':
+          description: Test event queued for delivery.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id:
+                    type: string
+                    pattern: '^evt_[a-zA-Z0-9]+$'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/webhooks/{id}/deactivate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+    post:
+      tags: [Webhooks]
+      summary: Deactivate a webhook subscription
+      operationId: deactivateWebhookSubscription
+      description: |
+        Stop delivering events to this subscription without deleting it. The
+        subscription moves to `inactive` and can be reactivated by updating its
+        status (contact support or wait for a re-activation endpoint).
+      responses:
+        '200':
+          description: Subscription deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/webhooks/events:
+    get:
+      tags: [Webhooks]
+      summary: List webhook events
+      operationId: listWebhookEvents
+      description: |
+        Return the history of webhook events generated on your merchant account.
+        Events persist independently of delivery — you can inspect and replay
+        them via `/deliveries` below.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/WebhookEventType'
+        - name: created_after
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: Paginated list of events.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WebhookEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/webhooks/events/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^evt_[a-zA-Z0-9]+$'
+    get:
+      tags: [Webhooks]
+      summary: Retrieve a webhook event
+      operationId: getWebhookEvent
+      responses:
+        '200':
+          description: Event with full payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/webhooks/events/{id}/deliveries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^evt_[a-zA-Z0-9]+$'
+    get:
+      tags: [Webhooks]
+      summary: List deliveries for an event
+      operationId: listWebhookDeliveries
+      description: |
+        Return every attempt Anton made to deliver this event to every
+        subscribed endpoint. Each attempt records the request headers, response
+        status, body, duration, and retry schedule — useful for debugging
+        failing integrations.
+      responses:
+        '200':
+          description: Delivery history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /v1/merchant/sandbox/reset:
     post:
       tags: [Sandbox]
@@ -2923,10 +3281,168 @@ components:
         updated_at:
           $ref: '#/components/schemas/Timestamp'
 
+    WebhookEventType:
+      type: string
+      description: |
+        See [Webhook Events](/api-reference/webhook-events) for the full catalog
+        and payload shapes. Some reserved event types (`balance.low` on some
+        paths) may be defined but not yet dispatched — subscribing to them is
+        safe but no deliveries arrive until they're wired up.
+      enum:
+        - payout.created
+        - payout.approved
+        - payout.processing
+        - payout.sent
+        - payout.completed
+        - payout.failed
+        - payout.cancelled
+        - payout.returned
+        - payout.screening_failed
+        - payout.velocity_blocked
+        - beneficiary.created
+        - beneficiary.updated
+        - beneficiary.deleted
+        - beneficiary.blocked
+        - instrument.created
+        - instrument.updated
+        - instrument.deleted
+        - batch.uploaded
+        - batch.completed
+        - batch.failed
+        - fx.quote.created
+        - fx.exchange.created
+        - fx.exchange.completed
+        - fx.exchange.failed
+        - funding.credit
+        - screening.hit
+        - balance.low
+        - test
+
+    WebhookSubscriptionCreateRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS URL that will receive deliveries.
+          example: https://example.com/webhooks/anton
+        events:
+          type: array
+          description: Event types this subscription should receive. Use `["*"]` to subscribe to everything.
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
     WebhookSubscription:
       type: object
       description: A registered webhook endpoint and its event filter.
-      # TODO
+      required: [id, merchant_id, url, events, status, version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+          example: wbh_01HX8Z9K0M2N3P4Q5R6S7T8UW
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        status:
+          type: string
+          enum: [active, inactive]
+        version:
+          type: string
+          description: API version this subscription pins to.
+          example: "2024-01-01"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    WebhookEvent:
+      type: object
+      description: A single webhook event record. The `payload` is the event-specific shape documented in [Webhook Events](/api-reference/webhook-events).
+      required: [id, merchant_id, type, payload, created_at]
+      properties:
+        id:
+          type: string
+          pattern: '^evt_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        type:
+          $ref: '#/components/schemas/WebhookEventType'
+        payload:
+          type: object
+          additionalProperties: true
+          description: Event-specific payload. See the Webhook Events catalog.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    WebhookDelivery:
+      type: object
+      description: A single delivery attempt of an event to a subscription endpoint.
+      required: [id, event_id, subscription_id, status, url, attempts, max_attempts, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        event_id:
+          type: string
+          pattern: '^evt_[a-zA-Z0-9]+$'
+        subscription_id:
+          type: string
+          pattern: '^wbh_[a-zA-Z0-9]+$'
+        status:
+          type: string
+          enum: [pending, success, failed, abandoned]
+        url:
+          type: string
+          description: Snapshot of the subscription URL at dispatch time.
+        request_headers:
+          type: object
+          additionalProperties:
+            type: string
+        response_status:
+          type: integer
+          description: HTTP status returned by your endpoint.
+        response_body:
+          type: string
+          description: Truncated response body captured from your endpoint.
+        response_headers:
+          type: object
+          additionalProperties:
+            type: string
+        attempts:
+          type: integer
+        max_attempts:
+          type: integer
+        next_retry_at:
+          $ref: '#/components/schemas/Timestamp'
+        error:
+          type: string
+          description: Transport-level error, if any (DNS, TLS, timeout, connection refused).
+        duration_ms:
+          type: integer
+          description: Response time for the most recent attempt, in milliseconds.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+        delivered_at:
+          $ref: '#/components/schemas/Timestamp'
 
     Balance:
       type: object
