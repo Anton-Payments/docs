@@ -2020,6 +2020,216 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /v1/fx/quote:
+    post:
+      tags: [FX]
+      summary: Create a lockable FX quote
+      operationId: createFXQuote
+      description: |
+        Request a lockable exchange rate between two currencies. Quotes have a
+        short expiry window; use the returned `id` on
+        `POST /v1/fx/exchange` to lock the rate before expiry.
+
+        Rate-limited to 30 per minute per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FXQuoteCreateRequest'
+      responses:
+        '201':
+          description: Quote created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FXQuote'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: '`currency_not_supported` or other pricing error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: '`fx_rates_unavailable` — upstream rate provider did not respond.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/fx/rate:
+    get:
+      tags: [FX]
+      summary: Retrieve an indicative rate
+      operationId: getIndicativeFXRate
+      description: |
+        Non-binding rate between two currencies. Cheaper than a lockable quote;
+        use for display purposes. Rate-limited to 30 per minute per IP.
+      parameters:
+        - name: sell_currency
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: buy_currency
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: sell_amount
+          in: query
+          description: Optional — amount to convert. When present, the response includes a `buy_amount`.
+          schema:
+            $ref: '#/components/schemas/Money'
+      responses:
+        '200':
+          description: Indicative rate.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sell_currency, buy_currency, mid_market_rate, customer_rate, fx_markup_bps]
+                properties:
+                  sell_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  buy_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  mid_market_rate:
+                    $ref: '#/components/schemas/Money'
+                  customer_rate:
+                    $ref: '#/components/schemas/Money'
+                    description: Mid-market adjusted by your pricing plan's FX markup.
+                  fx_markup_bps:
+                    type: integer
+                    description: Markup applied to mid-market, in basis points.
+                  sell_amount:
+                    $ref: '#/components/schemas/Money'
+                  buy_amount:
+                    $ref: '#/components/schemas/Money'
+                  rate_timestamp:
+                    $ref: '#/components/schemas/Timestamp'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: '`fx_rates_unavailable`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/fx/exchange:
+    post:
+      tags: [FX]
+      summary: Execute an FX exchange
+      operationId: executeFXExchange
+      description: |
+        Exchange a locked quote — debits the sell currency balance and credits
+        the buy currency balance. The quote must still be within its validity
+        window; expired quotes return `quote_expired`.
+
+        Rate-limited to 10 per minute per IP. Requires `Idempotency-Key`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quote_id]
+              properties:
+                quote_id:
+                  type: string
+                  pattern: '^fxq_[a-zA-Z0-9]+$'
+                  description: ID of a quote previously created via `POST /v1/fx/quote`.
+      responses:
+        '201':
+          description: Exchange executed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FXExchange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`quote_not_found` — the quote does not exist or belongs to a different merchant.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: '`quote_expired` — the quote is past its expiry window.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            - `quote_not_locked` — quote must be lockable.
+            - `insufficient_balance` — sell currency balance cannot cover the exchange.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: '`locked_rate_unavailable` — the locked rate can no longer be honored by the provider.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/fx/exchanges:
+    get:
+      tags: [FX]
+      summary: List FX exchanges
+      operationId: listFXExchanges
+      description: Cursor-paginated history of executed FX exchanges for your merchant.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: sell_currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: buy_currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: created_after
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: Paginated list of exchanges.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FXExchange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /v1/merchant/sandbox/seed-payouts:
     post:
       tags: [Sandbox]
@@ -3569,15 +3779,126 @@ components:
               help:
                 type: string
 
+    FXQuoteCreateRequest:
+      type: object
+      required: [sell_currency, buy_currency]
+      description: |
+        Supply either `sell_amount` OR `buy_amount` — the missing side is
+        computed from the locked rate.
+      properties:
+        sell_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        buy_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        sell_amount:
+          $ref: '#/components/schemas/Money'
+        buy_amount:
+          $ref: '#/components/schemas/Money'
+        locked:
+          type: boolean
+          description: Request a locked quote with a short expiry window. Defaults to true.
+          default: true
+
     FXQuote:
       type: object
-      description: A locked exchange rate between two currencies, valid for a short window.
-      # TODO
+      description: An FX rate quote, optionally locked for execution.
+      required:
+        - id
+        - merchant_id
+        - sell_currency
+        - buy_currency
+        - sell_amount
+        - buy_amount
+        - mid_market_rate
+        - customer_rate
+        - locked
+        - created_at
+      properties:
+        id:
+          type: string
+          pattern: '^fxq_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+        sell_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        buy_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        sell_amount:
+          $ref: '#/components/schemas/Money'
+        buy_amount:
+          $ref: '#/components/schemas/Money'
+        mid_market_rate:
+          $ref: '#/components/schemas/Money'
+        customer_rate:
+          $ref: '#/components/schemas/Money'
+          description: Mid-market adjusted by your pricing plan's FX markup.
+        inverse_rate:
+          $ref: '#/components/schemas/Money'
+        fx_markup_bps:
+          type: integer
+        fx_fee:
+          $ref: '#/components/schemas/Money'
+        fx_fee_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        provider:
+          type: string
+        provider_ref:
+          type: string
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        locked:
+          type: boolean
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
 
     FXExchange:
       type: object
       description: An executed currency exchange between two merchant balances.
-      # TODO
+      required:
+        - id
+        - merchant_id
+        - sell_currency
+        - buy_currency
+        - sell_amount
+        - buy_amount
+        - customer_rate
+        - status
+        - quote_id
+        - created_at
+      properties:
+        id:
+          type: string
+          pattern: '^fxx_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+        sell_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        buy_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        sell_amount:
+          $ref: '#/components/schemas/Money'
+        buy_amount:
+          $ref: '#/components/schemas/Money'
+        mid_market_rate:
+          $ref: '#/components/schemas/Money'
+        customer_rate:
+          $ref: '#/components/schemas/Money'
+        provider:
+          type: string
+        provider_ref:
+          type: string
+        quote_id:
+          type: string
+          pattern: '^fxq_[a-zA-Z0-9]+$'
+        payout_id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+          description: Set when the exchange was initiated to fund a cross-currency payout.
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
 
     PricingPlan:
       type: object
