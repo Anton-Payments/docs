@@ -1527,6 +1527,516 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/accounts:
+    get:
+      tags: [Accounts]
+      summary: List merchant funding accounts
+      operationId: listAccounts
+      description: |
+        Return your virtual funding accounts — one per currency Anton has
+        provisioned for you. Used for depositing funds into your merchant
+        balance.
+      responses:
+        '200':
+          description: Funding accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MerchantAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/accounts/{currency}:
+    parameters:
+      - name: currency
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/CurrencyCode'
+    get:
+      tags: [Accounts]
+      summary: Retrieve a funding account
+      operationId: getAccount
+      description: Return the funding account for a single currency.
+      responses:
+        '200':
+          description: Account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`account_not_found`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/accounts/{currency}/details:
+    parameters:
+      - name: currency
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/CurrencyCode'
+    get:
+      tags: [Accounts]
+      summary: Retrieve deposit details
+      operationId: getAccountDetails
+      description: |
+        Return the banking / deposit details for your funding account in this
+        currency — IBAN/BIC, sort code + account number, routing codes, etc.
+        Share these with the sender to fund your balance.
+      responses:
+        '200':
+          description: Account deposit details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/accounts/{currency}/transactions:
+    parameters:
+      - name: currency
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/CurrencyCode'
+    get:
+      tags: [Accounts]
+      summary: List transactions on a funding account
+      operationId: listAccountTransactions
+      description: |
+        Cursor-paginated list of transactions for this funding account — deposits
+        from external parties, payout debits, fee deductions, and FX transfers.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Transactions on this account.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MerchantTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/transactions:
+    get:
+      tags: [Accounts]
+      summary: List transactions across all accounts
+      operationId: listTransactions
+      description: |
+        Cursor-paginated list of transactions across every funding account you
+        hold. Filter by currency, type, or time range as needed.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: type
+          in: query
+          description: Transaction type — `credit`, `debit`, `fee`, `fx`, etc.
+          schema:
+            type: string
+        - name: created_after
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: Transactions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MerchantTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/documents:
+    post:
+      tags: [Documents]
+      summary: Upload a document
+      operationId: uploadDocument
+      description: |
+        Upload a supporting document — KYB evidence, beneficiary identity docs,
+        proof of source of funds for an RFI response, etc. Files are stored in
+        S3; only metadata is held in the database.
+
+        Supported types: PDF, JPEG, PNG. Maximum size: 20 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, category]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                category:
+                  type: string
+                  description: Document category (e.g. `kyb_incorporation`, `beneficiary_id`, `rfi_evidence`).
+                entity_type:
+                  type: string
+                  enum: [application, beneficiary, rfi]
+                  description: Entity this document is attached to.
+                entity_id:
+                  type: string
+                description:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Document uploaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          description: Missing file or unsupported MIME type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: '`file_too_large`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    get:
+      tags: [Documents]
+      summary: List documents
+      operationId: listDocuments
+      description: Cursor-paginated list of documents uploaded on your account.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [application, beneficiary, rfi]
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [uploaded, accepted, rejected]
+      responses:
+        '200':
+          description: Paginated list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/documents/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^doc_[a-zA-Z0-9]+$'
+    get:
+      tags: [Documents]
+      summary: Retrieve a document
+      operationId: getDocument
+      description: Return a document's metadata (but not its contents — see `/download`).
+      responses:
+        '200':
+          description: Document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/documents/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^doc_[a-zA-Z0-9]+$'
+    get:
+      tags: [Documents]
+      summary: Get a download URL
+      operationId: getDocumentDownloadURL
+      description: |
+        Return a short-lived pre-signed URL the merchant can GET to fetch the
+        document's bytes. The URL typically expires within a few minutes.
+      responses:
+        '200':
+          description: Pre-signed download URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expires_at]
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  expires_at:
+                    $ref: '#/components/schemas/Timestamp'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/rfis:
+    get:
+      tags: [RFIs]
+      summary: List RFIs
+      operationId: listRFIs
+      description: |
+        Cursor-paginated list of Requests for Information raised on your
+        merchant account. RFIs surface during payout review, beneficiary
+        onboarding, or periodic compliance checks.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, responded, resolved, escalated]
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [payout, beneficiary, merchant]
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/RFI'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/rfis/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^rfi_[a-zA-Z0-9]+$'
+    get:
+      tags: [RFIs]
+      summary: Retrieve an RFI
+      operationId: getRFI
+      responses:
+        '200':
+          description: RFI.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFI'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/rfis/{id}/respond:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^rfi_[a-zA-Z0-9]+$'
+    post:
+      tags: [RFIs]
+      summary: Respond to an RFI
+      operationId: respondToRFI
+      description: |
+        Submit a response to an open RFI. You can include supporting documents
+        by `document_id` (upload them first via `POST /v1/documents`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response]
+              properties:
+                response:
+                  type: string
+                  description: Free-form text response answering the RFI's questions.
+                document_ids:
+                  type: array
+                  description: IDs of supporting documents uploaded via `POST /v1/documents`.
+                  items:
+                    type: string
+                    pattern: '^doc_[a-zA-Z0-9]+$'
+      responses:
+        '200':
+          description: Response recorded. RFI moves to `responded` pending ops review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFI'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: '`rfi_respond_failed` — RFI is already resolved, expired, or in a state that cannot be responded to.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/pricing:
+    get:
+      tags: [Pricing]
+      summary: List merchant pricing plans
+      operationId: listMerchantPricing
+      description: |
+        Return the pricing plans active on your merchant account. Plans are
+        scoped by currency, country, and method — more specific plans take
+        priority.
+      responses:
+        '200':
+          description: Active plans.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PricingPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/pricing/quote:
+    post:
+      tags: [Pricing]
+      summary: Quote a fee for a hypothetical payout
+      operationId: createPricingQuote
+      description: |
+        Preview the fee that would apply for a given source/destination pair
+        and amount. Useful for surfacing fees to your end user before they
+        confirm a payout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_currency, dest_currency, amount]
+              properties:
+                source_currency:
+                  $ref: '#/components/schemas/CurrencyCode'
+                dest_currency:
+                  $ref: '#/components/schemas/CurrencyCode'
+                dest_country:
+                  $ref: '#/components/schemas/CountryCode'
+                method:
+                  $ref: '#/components/schemas/PayoutMethod'
+                amount:
+                  $ref: '#/components/schemas/Money'
+      responses:
+        '200':
+          description: Fee quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fee:
+                    $ref: '#/components/schemas/Money'
+                  fee_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  fee_type:
+                    type: string
+                    enum: [fixed, percentage, hybrid, tiered]
+                  plan_id:
+                    type: string
+                    pattern: '^prc_[a-zA-Z0-9]+$'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
   /v1/corridors:
     get:
       tags: [Corridors]
@@ -3900,17 +4410,272 @@ components:
         created_at:
           $ref: '#/components/schemas/Timestamp'
 
-    PricingPlan:
+    MerchantAccount:
       type: object
-      description: The fee schedule active on your merchant account.
-      # TODO
+      description: |
+        A virtual funding account provisioned for your merchant in a specific
+        currency. Used for depositing funds into your merchant balance.
+      required: [id, currency, status, provider]
+      properties:
+        id:
+          type: string
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        balance:
+          $ref: '#/components/schemas/Money'
+        available_balance:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          description: '`active` | `pending` | `suspended`, depending on provider state.'
+        provider:
+          type: string
+          description: The upstream banking provider backing this account.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
 
-    RFI:
+    AccountDetails:
       type: object
-      description: A Request for Information raised during review of a payout or onboarding.
-      # TODO
+      description: |
+        Banking details for receiving deposits into a funding account. Share
+        these with the sender; the exact fields present depend on the country
+        and provider.
+      required: [currency]
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        iban:
+          type: string
+        bic:
+          type: string
+        account_number:
+          type: string
+        sort_code:
+          type: string
+        bank_name:
+          type: string
+        holder_name:
+          type: string
+          description: Beneficiary name to use when initiating the deposit.
+        routing_codes:
+          type: object
+          additionalProperties:
+            type: string
+
+    MerchantTransaction:
+      type: object
+      description: A transaction on a merchant funding account.
+      required: [id, type, status, amount, currency, created_at]
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        type:
+          type: string
+          description: '`credit` | `debit` | `fee` | `fx` | provider-specific types.'
+        status:
+          type: string
+          description: '`pending` | `posted` | `failed`.'
+        amount:
+          $ref: '#/components/schemas/Money'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        reference:
+          type: string
+        counterparty_name:
+          type: string
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
 
     Document:
       type: object
-      description: A KYB or supporting document uploaded by the merchant.
-      # TODO
+      description: |
+        A supporting document uploaded by the merchant — KYB evidence,
+        beneficiary identity verification, RFI supporting material. Bytes live
+        in S3; this record is metadata only.
+      required: [id, merchant_id, category, status, file_name, content_type, file_size, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^doc_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        category:
+          type: string
+          description: Logical category — e.g. `kyb_incorporation`, `beneficiary_id`, `rfi_evidence`.
+        status:
+          type: string
+          enum: [uploaded, accepted, rejected]
+        file_name:
+          type: string
+        content_type:
+          type: string
+          description: MIME type.
+          example: application/pdf
+        file_size:
+          type: integer
+          description: Bytes.
+        entity_type:
+          type: string
+          enum: [application, beneficiary, rfi]
+        entity_id:
+          type: string
+        uploaded_by:
+          type: string
+        description:
+          type: string
+        reviewed_by:
+          type: string
+        reviewed_at:
+          $ref: '#/components/schemas/Timestamp'
+        rejection_reason:
+          type: string
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: Document expiry (e.g. passport expiry).
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    RFI:
+      type: object
+      description: |
+        A Request for Information raised by Anton's compliance team. Each RFI
+        asks specific questions about a payout, beneficiary, or merchant and
+        typically gates a held transaction until resolved.
+      required:
+        - id
+        - merchant_id
+        - status
+        - category
+        - urgency
+        - entity_type
+        - entity_id
+        - source
+        - subject
+        - description
+        - questions
+        - created_at
+      properties:
+        id:
+          type: string
+          pattern: '^rfi_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        status:
+          type: string
+          enum: [open, responded, resolved, escalated]
+        category:
+          type: string
+          description: Compliance category (e.g. `source_of_funds`, `identity_verification`).
+        urgency:
+          type: string
+          enum: [low, medium, high]
+        entity_type:
+          type: string
+          enum: [payout, beneficiary, merchant]
+        entity_id:
+          type: string
+        source:
+          type: string
+          enum: [internal, merchant, external]
+        provider:
+          type: string
+          description: Upstream rail/system that originated the RFI, if any.
+        provider_ref:
+          type: string
+        subject:
+          type: string
+        description:
+          type: string
+        questions:
+          type: array
+          items:
+            type: string
+        response:
+          type: string
+          description: Merchant's submitted response text.
+        responded_at:
+          $ref: '#/components/schemas/Timestamp'
+        document_ids:
+          type: array
+          items:
+            type: string
+            pattern: '^doc_[a-zA-Z0-9]+$'
+        resolved_at:
+          $ref: '#/components/schemas/Timestamp'
+        resolution_note:
+          type: string
+        outcome:
+          type: string
+          enum: [cleared, blocked]
+        due_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    PricingPlan:
+      type: object
+      description: A fee schedule active on your merchant account.
+      required: [id, name, active, fee_type, priority]
+      properties:
+        id:
+          type: string
+          pattern: '^prc_[a-zA-Z0-9]+$'
+        name:
+          type: string
+        active:
+          type: boolean
+        source_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+          description: Scope — applies only to payouts debiting this currency. Null for all.
+        dest_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        dest_country:
+          $ref: '#/components/schemas/CountryCode'
+        method:
+          $ref: '#/components/schemas/PayoutMethod'
+        fee_type:
+          type: string
+          enum: [fixed, percentage, hybrid, tiered]
+        fixed_fee:
+          $ref: '#/components/schemas/Money'
+        fixed_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        percentage_fee:
+          $ref: '#/components/schemas/Money'
+          description: Percentage expressed as a decimal (e.g. `"1.50"` = 1.5%).
+        min_fee:
+          $ref: '#/components/schemas/Money'
+        max_fee:
+          $ref: '#/components/schemas/Money'
+          description: '`0` = no cap.'
+        tiers:
+          type: array
+          description: Populated when `fee_type` is `tiered`.
+          items:
+            type: object
+            properties:
+              min_volume:
+                $ref: '#/components/schemas/Money'
+              max_volume:
+                $ref: '#/components/schemas/Money'
+              fixed_fee:
+                $ref: '#/components/schemas/Money'
+              percentage_fee:
+                $ref: '#/components/schemas/Money'
+        priority:
+          type: integer
+          description: Lower wins when multiple plans apply. Merchant-specific plans take priority over global templates.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
