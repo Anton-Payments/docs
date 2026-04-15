@@ -523,6 +523,335 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/payouts:
+    post:
+      tags: [Payouts]
+      summary: Create a payout
+      operationId: createPayout
+      description: |
+        Initiate a payout from your merchant balance to a beneficiary's payment
+        instrument. The payout goes through compliance screening, velocity
+        evaluation, and engine risk scoring before being submitted to a rail — see
+        [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) for the full
+        lifecycle.
+
+        The initial status is `created`. The payout transitions to
+        `pending_screening` within moments and its subsequent state changes are
+        delivered via `payout.*` webhook events. Do not poll.
+
+        Both `source_amount` and `dest_amount` must be provided along with
+        `fixed_side` (`fixed_source` or `fixed_dest`) indicating which amount is
+        authoritative. The other amount is recomputed on the backend using the
+        current corridor pricing. An FX quote may be locked via `POST /v1/fx/quote`
+        if you need rate certainty before submission.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayoutCreateRequest'
+            examples:
+              same_currency:
+                summary: Same-currency USD payout
+                value:
+                  beneficiary_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+                  instrument_id: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2
+                  source_amount: "500.00"
+                  source_currency: USD
+                  dest_amount: "500.00"
+                  dest_currency: USD
+                  method: ach
+                  rail_type: fiat
+                  fixed_side: fixed_dest
+                  purpose: contractor_payment
+                  reference: INV-1042
+              cross_currency:
+                summary: USD -> EUR SEPA
+                value:
+                  beneficiary_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+                  instrument_id: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2
+                  source_amount: "550.00"
+                  source_currency: USD
+                  dest_amount: "500.00"
+                  dest_currency: EUR
+                  method: sepa
+                  rail_type: fiat
+                  fee_bearer: merchant
+                  fixed_side: fixed_dest
+                  purpose: supplier_payment
+                  reference: PO-8821
+              stablecoin:
+                summary: USDC on Ethereum
+                value:
+                  beneficiary_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+                  instrument_id: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA3
+                  source_amount: "1000.00"
+                  source_currency: USDC
+                  dest_amount: "1000.00"
+                  dest_currency: USDC
+                  method: stablecoin
+                  rail_type: stablecoin
+                  fixed_side: fixed_dest
+                  purpose: contractor_payment
+                  reference: INV-1042
+      responses:
+        '201':
+          description: Payout created. Subsequent lifecycle is reported via webhooks.
+          headers:
+            X-Idempotent-Replayed:
+              $ref: '#/components/headers/X-Idempotent-Replayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Forbidden — common causes include merchant not approved, corridor not enabled, or velocity rule blocking (`velocity_blocked`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Beneficiary or instrument not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          description: |
+            Unprocessable — validation failed, insufficient balance, or beneficiary/
+            instrument not eligible (e.g. archived, disabled, wrong currency).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorEnvelope'
+                  - $ref: '#/components/schemas/ValidationErrorEnvelope'
+              examples:
+                insufficient_balance:
+                  value:
+                    error:
+                      code: insufficient_balance
+                      message: insufficient funds for this payout
+                validation:
+                  value:
+                    error:
+                      code: validation_error
+                      message: request failed validation
+                      details:
+                        - field: dest_currency
+                          message: must be a valid ISO-4217 currency code
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Payouts]
+      summary: List payouts
+      operationId: listPayouts
+      description: |
+        Cursor-paginated list of payouts for your merchant, sorted by `created_at`
+        descending.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          description: Filter by one or more statuses. Repeat the param to pass multiple values.
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/PayoutStatus'
+          style: form
+          explode: true
+        - name: beneficiary_id
+          in: query
+          schema:
+            type: string
+            pattern: '^ben_[a-zA-Z0-9]+$'
+        - name: instrument_id
+          in: query
+          schema:
+            type: string
+            pattern: '^ins_[a-zA-Z0-9]+$'
+        - name: batch_id
+          in: query
+          schema:
+            type: string
+            pattern: '^bat_[a-zA-Z0-9]+$'
+        - name: dest_currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: reference
+          in: query
+          description: Exact-match filter on the merchant's `reference` field.
+          schema:
+            type: string
+        - name: created_after
+          in: query
+          description: RFC 3339 timestamp. Returns payouts with `created_at >= this`.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          description: RFC 3339 timestamp. Returns payouts with `created_at < this`.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: Paginated list of payouts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/payouts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Payout ID (prefixed `pay_`).
+        schema:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+          example: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
+    get:
+      tags: [Payouts]
+      summary: Retrieve a payout
+      operationId: getPayout
+      description: Return a single payout by ID. Returns `404` if the payout does not exist or belongs to a different merchant.
+      responses:
+        '200':
+          description: Payout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/payouts/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+    get:
+      tags: [Payouts]
+      summary: List lifecycle events for a payout
+      operationId: listPayoutEvents
+      description: |
+        Return every status transition recorded for this payout, oldest first. Use
+        this to reconstruct a payout's timeline for support, accounting, or
+        debugging purposes. Note: the preferred way to react to events in real time
+        is via webhook subscriptions — polling this endpoint wastes rate-limit
+        budget.
+      responses:
+        '200':
+          description: Lifecycle events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayoutEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/payouts/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+    post:
+      tags: [Payouts]
+      summary: Cancel a payout
+      operationId: cancelPayout
+      description: |
+        Cancel a payout that has not yet been submitted to a rail. Cancellation is
+        only possible from `created`, `pending_screening`, `pending_approval`,
+        `pending_engine_review`, or `manual_review`. Once a payout reaches
+        `processing` or beyond, it cannot be cancelled via the API — contact
+        support if you need to halt a payout in flight.
+
+        Any debited source funds (source amount, fee, and cross-currency buffer)
+        are released back to the merchant balance on successful cancellation.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Free-form reason for cancellation. Recorded in the audit log.
+                  maxLength: 255
+                end_user_ip:
+                  type: string
+      responses:
+        '200':
+          description: Payout cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Payout is not in a cancellable state, or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/beneficiaries/{id}/instruments:
     parameters:
       - name: id
@@ -1275,12 +1604,356 @@ components:
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
 
+    PayoutStatus:
+      type: string
+      description: |
+        Payout lifecycle state. See the
+        [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) guide for
+        the full state machine and integration guidance.
+      enum:
+        - created
+        - pending_screening
+        - screening_failed
+        - pending_approval
+        - approved
+        - processing
+        - sent
+        - completed
+        - failed
+        - returned
+        - cancelled
+        - manual_review
+        - velocity_blocked
+        - pending_engine_review
+
+    PayoutMethod:
+      type: string
+      description: |
+        How the payout will be delivered. Distinct from an `Instrument`'s `method`
+        (which is the credential format) — this is the rail-family selection.
+      enum:
+        - bank_transfer
+        - wire
+        - sepa
+        - swift
+        - ach
+        - faster_payment
+        - mobile_money
+        - wallet
+        - on_chain
+        - layer2
+        - exchange
+        - stablecoin
+
+    RailType:
+      type: string
+      enum: [fiat, crypto, stablecoin]
+
+    Network:
+      type: string
+      description: Specific rail or chain. Populated by the rail adapter when the payout is submitted.
+      enum:
+        - swift
+        - sepa
+        - ach
+        - fps
+        - rtgs
+        - ethereum
+        - bitcoin
+        - tron
+        - solana
+        - polygon
+        - arbitrum
+        - optimism
+        - base
+        - avalanche
+        - bsc
+        - lightning
+        - stellar
+        - ripple
+
+    PayoutCreateRequest:
+      type: object
+      required:
+        - beneficiary_id
+        - instrument_id
+        - source_amount
+        - dest_amount
+        - dest_currency
+        - method
+        - purpose
+        - reference
+      properties:
+        beneficiary_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+        instrument_id:
+          type: string
+          pattern: '^ins_[a-zA-Z0-9]+$'
+          description: Must belong to the beneficiary named above and be in `active` status.
+        source_amount:
+          $ref: '#/components/schemas/Money'
+          description: Amount debited from your merchant balance (before fees).
+        source_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        dest_amount:
+          $ref: '#/components/schemas/Money'
+          description: Amount the beneficiary receives.
+        dest_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        method:
+          $ref: '#/components/schemas/PayoutMethod'
+        rail_type:
+          $ref: '#/components/schemas/RailType'
+          description: Hint for rail routing. Anton may override based on corridor availability.
+        fixed_side:
+          type: string
+          enum: [fixed_source, fixed_dest]
+          default: fixed_dest
+          description: Which amount is authoritative — Anton recomputes the other using current corridor pricing.
+        fee_bearer:
+          type: string
+          enum: [merchant, beneficiary]
+          default: merchant
+          description: Who absorbs the fee. `beneficiary` reduces the amount credited to them by the fee.
+        purpose:
+          type: string
+          maxLength: 255
+          description: |
+            Payment purpose code. Used for compliance reporting and corridor-specific
+            rail requirements. Examples — `contractor_payment`, `supplier_payment`,
+            `salary`, `refund`.
+          example: contractor_payment
+        reference:
+          type: string
+          maxLength: 100
+          description: Your own reference. Surfaces to the beneficiary where the rail supports it.
+          example: INV-1042
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        end_user_ip:
+          type: string
+          description: IP of the merchant's end-user who initiated the payout. Used for risk signals.
+
     Payout:
       type: object
       description: |
         A single payment from your merchant balance to a beneficiary's instrument.
-        Moves through a 13-state machine — see the How Anton Evaluates Payouts guide.
-      # TODO: full property list
+        Moves through a 13-state machine — see the
+        [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) guide.
+
+        Rail-specific fields (`rail_provider`, `rail_reference`, `network`,
+        `wallet_address`, `tx_hash`, etc.) populate as the payout moves through
+        `approved -> processing -> sent -> completed`.
+      required:
+        - id
+        - merchant_id
+        - beneficiary_id
+        - instrument_id
+        - status
+        - method
+        - source_amount
+        - source_currency
+        - dest_amount
+        - dest_currency
+        - rail_type
+        - purpose
+        - reference
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+          example: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        beneficiary_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+        instrument_id:
+          type: string
+          pattern: '^ins_[a-zA-Z0-9]+$'
+        batch_id:
+          type: string
+          nullable: true
+          pattern: '^bat_[a-zA-Z0-9]+$'
+          description: Set when the payout was created as part of a batch upload.
+        status:
+          $ref: '#/components/schemas/PayoutStatus'
+        method:
+          $ref: '#/components/schemas/PayoutMethod'
+        source_amount:
+          $ref: '#/components/schemas/Money'
+        source_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        dest_amount:
+          $ref: '#/components/schemas/Money'
+        dest_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        exchange_rate:
+          $ref: '#/components/schemas/Money'
+          description: Source-to-dest rate. Present on cross-currency payouts.
+        fee:
+          $ref: '#/components/schemas/Money'
+        fee_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        fee_bearer:
+          type: string
+          enum: [merchant, beneficiary]
+        fixed_side:
+          type: string
+          enum: [fixed_source, fixed_dest]
+        total_debited:
+          $ref: '#/components/schemas/Money'
+          description: Total drawn from your balance — `source_amount + fee + buffer` during processing. Buffer releases on finalization.
+        total_debited_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        fee_finalized:
+          type: boolean
+          description: Whether `fee` reflects the final rate from the rail.
+        buffer_amount:
+          $ref: '#/components/schemas/Money'
+          description: Cross-currency rate buffer held during processing, released on settlement.
+        buffer_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        pricing_plan_id:
+          type: string
+          description: Which pricing plan was used for the quote.
+        rail_type:
+          $ref: '#/components/schemas/RailType'
+        rail_provider:
+          type: string
+          description: External rail name. Populated at rail-submission time.
+          example: openpayd
+        rail_reference:
+          type: string
+          description: External provider reference. Useful for support tickets.
+        network:
+          $ref: '#/components/schemas/Network'
+        wallet_address:
+          type: string
+          description: Destination wallet address. Present for crypto/stablecoin payouts.
+        token_contract:
+          type: string
+          description: ERC-20 / TRC-20 contract address. Present for stablecoin payouts.
+        token_symbol:
+          type: string
+          example: USDC
+        tx_hash:
+          type: string
+          description: On-chain transaction hash. Present once `sent` for crypto/stablecoin payouts.
+        block_confirmations:
+          type: integer
+          description: Number of confirmations observed so far.
+        required_confirms:
+          type: integer
+          description: Confirmations required before the payout reaches `completed`.
+        network_fee:
+          $ref: '#/components/schemas/Money'
+          description: Gas / network fee. Deducted from the settlement, not from your balance.
+        network_fee_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        cancelled_reason:
+          type: string
+          description: Populated on `cancelled`, `failed`, `velocity_blocked`, `screening_failed`.
+        engine_unavailable_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: Present if the payout entered `pending_engine_review` because the Anton Engine was unreachable.
+        purpose:
+          type: string
+        reference:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+        screened_at:
+          $ref: '#/components/schemas/Timestamp'
+        screening_failed_at:
+          $ref: '#/components/schemas/Timestamp'
+        approved_at:
+          $ref: '#/components/schemas/Timestamp'
+        processed_at:
+          $ref: '#/components/schemas/Timestamp'
+        completed_at:
+          $ref: '#/components/schemas/Timestamp'
+        failed_at:
+          $ref: '#/components/schemas/Timestamp'
+        cancelled_at:
+          $ref: '#/components/schemas/Timestamp'
+      example:
+        id: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
+        merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
+        beneficiary_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        instrument_id: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2
+        status: processing
+        method: sepa
+        source_amount: "550.00"
+        source_currency: USD
+        dest_amount: "500.00"
+        dest_currency: EUR
+        exchange_rate: "0.9091"
+        fee: "5.00"
+        fee_currency: USD
+        fee_bearer: merchant
+        fixed_side: fixed_dest
+        total_debited: "557.50"
+        total_debited_currency: USD
+        fee_finalized: false
+        buffer_amount: "2.50"
+        buffer_currency: USD
+        rail_type: fiat
+        rail_provider: openpayd
+        rail_reference: OP-2026-04-15-778812
+        network: sepa
+        purpose: supplier_payment
+        reference: PO-8821
+        created_at: "2026-04-15T14:30:00Z"
+        updated_at: "2026-04-15T14:30:05Z"
+        screened_at: "2026-04-15T14:30:02Z"
+        approved_at: "2026-04-15T14:30:04Z"
+        processed_at: "2026-04-15T14:30:05Z"
+
+    PayoutEvent:
+      type: object
+      description: A single status transition recorded against a payout.
+      required: [id, payout_id, merchant_id, status, actor_type, occurred_at, created_at]
+      properties:
+        id:
+          type: string
+          pattern: '^pev_[a-zA-Z0-9]+$'
+        payout_id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        status:
+          $ref: '#/components/schemas/PayoutStatus'
+        previous_status:
+          $ref: '#/components/schemas/PayoutStatus'
+        actor_type:
+          type: string
+          description: Origin of the transition.
+          enum: [system, merchant, ops, rail, engine]
+        actor_id:
+          type: string
+          description: Identifier of the actor, if applicable.
+        metadata:
+          type: object
+          additionalProperties: true
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
 
     Batch:
       type: object
