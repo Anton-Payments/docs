@@ -114,140 +114,140 @@
           {
             "group": "Reference Data",
             "pages": [
-              "GET /v1/currencies",
-              "GET /v1/countries",
-              "GET /v1/payment-methods"
+              "api-reference/reference-data/list-currencies",
+              "api-reference/reference-data/list-countries",
+              "api-reference/reference-data/list-payment-methods"
             ]
           },
           {
             "group": "Beneficiaries",
             "pages": [
-              "POST /v1/beneficiaries",
-              "GET /v1/beneficiaries",
-              "GET /v1/beneficiaries/{id}",
-              "PUT /v1/beneficiaries/{id}",
-              "DELETE /v1/beneficiaries/{id}",
-              "GET /v1/beneficiaries/{id}/pii",
-              "PUT /v1/beneficiaries/{id}/pii",
-              "POST /v1/beneficiaries/{id}/archive",
-              "POST /v1/beneficiaries/{id}/restore"
+              "api-reference/beneficiaries/create-beneficiary",
+              "api-reference/beneficiaries/list-beneficiaries",
+              "api-reference/beneficiaries/get-beneficiary",
+              "api-reference/beneficiaries/update-beneficiary",
+              "api-reference/beneficiaries/delete-beneficiary",
+              "api-reference/beneficiaries/get-beneficiary-pii",
+              "api-reference/beneficiaries/update-beneficiary-pii",
+              "api-reference/beneficiaries/archive-beneficiary",
+              "api-reference/beneficiaries/restore-beneficiary"
             ]
           },
           {
             "group": "Instruments",
             "pages": [
-              "POST /v1/beneficiaries/{id}/instruments",
-              "GET /v1/beneficiaries/{id}/instruments",
-              "GET /v1/instruments",
-              "GET /v1/instruments/countries",
-              "GET /v1/instruments/methods",
-              "GET /v1/instruments/{id}",
-              "PUT /v1/instruments/{id}",
-              "DELETE /v1/instruments/{id}"
+              "api-reference/instruments/create-instrument-for-beneficiary",
+              "api-reference/instruments/list-instruments-for-beneficiary",
+              "api-reference/instruments/list-instruments",
+              "api-reference/instruments/list-instrument-countries",
+              "api-reference/instruments/list-instrument-methods",
+              "api-reference/instruments/get-instrument",
+              "api-reference/instruments/update-instrument",
+              "api-reference/instruments/delete-instrument"
             ]
           },
           {
             "group": "Payouts",
             "pages": [
-              "POST /v1/payouts",
-              "GET /v1/payouts",
-              "GET /v1/payouts/{id}",
-              "GET /v1/payouts/{id}/events",
-              "POST /v1/payouts/{id}/cancel"
+              "api-reference/payouts/create-payout",
+              "api-reference/payouts/list-payouts",
+              "api-reference/payouts/get-payout",
+              "api-reference/payouts/list-payout-events",
+              "api-reference/payouts/cancel-payout"
             ]
           },
           {
             "group": "Batches",
             "pages": [
-              "GET /v1/batches/template",
-              "POST /v1/batches",
-              "GET /v1/batches",
-              "GET /v1/batches/{id}",
-              "POST /v1/batches/{id}/confirm",
-              "POST /v1/batches/{id}/cancel",
-              "GET /v1/batches/{id}/payouts",
-              "GET /v1/batches/{id}/errors",
-              "GET /v1/batches/{id}/results"
+              "api-reference/batches/download-batch-template",
+              "api-reference/batches/upload-batch",
+              "api-reference/batches/list-batches",
+              "api-reference/batches/get-batch",
+              "api-reference/batches/confirm-batch",
+              "api-reference/batches/cancel-batch",
+              "api-reference/batches/list-batch-payouts",
+              "api-reference/batches/list-batch-errors",
+              "api-reference/batches/list-batch-results"
             ]
           },
           {
             "group": "Balances",
             "pages": [
-              "GET /v1/balances",
-              "GET /v1/balances/{currency}"
+              "api-reference/balances/list-balances",
+              "api-reference/balances/get-balance"
             ]
           },
           {
             "group": "Accounts",
             "pages": [
-              "GET /v1/accounts",
-              "GET /v1/accounts/{currency}",
-              "GET /v1/accounts/{currency}/details",
-              "GET /v1/accounts/{currency}/transactions",
-              "GET /v1/transactions"
+              "api-reference/accounts/list-accounts",
+              "api-reference/accounts/get-account",
+              "api-reference/accounts/get-account-details",
+              "api-reference/accounts/list-account-transactions",
+              "api-reference/accounts/list-transactions"
             ]
           },
           {
             "group": "Webhooks",
             "pages": [
-              "POST /v1/webhooks",
-              "GET /v1/webhooks",
-              "GET /v1/webhooks/{id}",
-              "DELETE /v1/webhooks/{id}",
-              "GET /v1/webhooks/{id}/secret",
-              "POST /v1/webhooks/{id}/secret/rotate",
-              "POST /v1/webhooks/{id}/test",
-              "POST /v1/webhooks/{id}/deactivate",
-              "GET /v1/webhooks/events",
-              "GET /v1/webhooks/events/{id}",
-              "GET /v1/webhooks/events/{id}/deliveries"
+              "api-reference/webhooks/create-webhook-subscription",
+              "api-reference/webhooks/list-webhook-subscriptions",
+              "api-reference/webhooks/get-webhook-subscription",
+              "api-reference/webhooks/delete-webhook-subscription",
+              "api-reference/webhooks/get-webhook-secret",
+              "api-reference/webhooks/rotate-webhook-secret",
+              "api-reference/webhooks/test-webhook-subscription",
+              "api-reference/webhooks/deactivate-webhook-subscription",
+              "api-reference/webhooks/list-webhook-events",
+              "api-reference/webhooks/get-webhook-event",
+              "api-reference/webhooks/list-webhook-deliveries"
             ]
           },
           {
             "group": "Documents",
             "pages": [
-              "POST /v1/documents",
-              "GET /v1/documents",
-              "GET /v1/documents/{id}",
-              "GET /v1/documents/{id}/download"
+              "api-reference/documents/upload-document",
+              "api-reference/documents/list-documents",
+              "api-reference/documents/get-document",
+              "api-reference/documents/get-document-download-url"
             ]
           },
           {
             "group": "RFIs",
             "pages": [
-              "GET /v1/rfis",
-              "GET /v1/rfis/{id}",
-              "POST /v1/rfis/{id}/respond"
+              "api-reference/rfis/list-rfis",
+              "api-reference/rfis/get-rfi",
+              "api-reference/rfis/respond-to-rfi"
             ]
           },
           {
             "group": "Pricing",
             "pages": [
-              "GET /v1/pricing",
-              "POST /v1/pricing/quote"
+              "api-reference/pricing/list-merchant-pricing",
+              "api-reference/pricing/create-pricing-quote"
             ]
           },
           {
             "group": "FX",
             "pages": [
-              "POST /v1/fx/quote",
-              "GET /v1/fx/rate",
-              "POST /v1/fx/exchange",
-              "GET /v1/fx/exchanges"
+              "api-reference/fx/create-fx-quote",
+              "api-reference/fx/get-indicative-fx-rate",
+              "api-reference/fx/execute-fx-exchange",
+              "api-reference/fx/list-fx-exchanges"
             ]
           },
           {
             "group": "Corridors",
             "pages": [
-              "GET /v1/corridors"
+              "api-reference/corridors/list-corridors"
             ]
           },
           {
             "group": "Sandbox",
             "pages": [
-              "POST /v1/merchant/sandbox/reset",
-              "POST /v1/merchant/sandbox/seed-beneficiaries",
-              "POST /v1/merchant/sandbox/seed-payouts"
+              "api-reference/sandbox/reset-sandbox",
+              "api-reference/sandbox/seed-sample-beneficiaries",
+              "api-reference/sandbox/seed-sample-payouts"
             ]
           }
         ]

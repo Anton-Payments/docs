@@ -49,10 +49,16 @@ Each delivery also carries these HTTP headers:
     Payment instrument create, update, delete.
   </Card>
   <Card title="Batch events" icon="file-csv" href="#batch-events">
-    Batch upload lifecycle.
+    Batch upload, completion, and failure.
   </Card>
   <Card title="FX events" icon="arrow-right-arrow-left" href="#fx-events">
     Quote locks and exchange execution.
+  </Card>
+  <Card title="Funding events" icon="money-bill-1" href="#funding-events">
+    Incoming funds credited to your balance.
+  </Card>
+  <Card title="Compliance events" icon="shield-halved" href="#compliance-events">
+    Screening hits that require manual review.
   </Card>
   <Card title="Test events" icon="flask" href="#test-events">
     Fired by the test-delivery endpoint.
@@ -163,11 +169,59 @@ These share the same lifecycle payload shape. `rail_provider`, `rail_reference`,
 }
 ```
 
-### `payout.approved`, `payout.cancelled`
+### `payout.approved`
 
-{/* TODO: Confirm exact payload shape for payout.approved and payout.cancelled — the event-type constants exist in internal/domain/webhook/model.go, but no dispatch site was located in the codebase audit. Document the payload once the corresponding handler wires Dispatch(). */}
+Fires when a payout transitions to `approved` — either because compliance screening cleared it or an ops reviewer approved the manual review case it was queued in. Arrives before `payout.processing` for the same payout.
 
-The `payout.approved` and `payout.cancelled` event types are defined but no dispatch site was found during the audit. These events may be wired up in a future release — subscribing to them today is safe but you should not expect to receive them.
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9W",
+  "type": "payout.approved",
+  "created_at": "2026-04-15T14:30:05Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "approved",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "dest_amount": "458.25",
+    "dest_currency": "EUR",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "reference": "Invoice #1042",
+    "created_at": "2026-04-15T14:30:00Z",
+    "updated_at": "2026-04-15T14:30:05Z"
+  }
+}
+```
+
+### `payout.cancelled`
+
+Fires when a payout is cancelled before being submitted to the rail. The payload includes the `previous_status` at the time of cancellation and the `released_amount` that was returned to the merchant's available balance.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9V",
+  "type": "payout.cancelled",
+  "created_at": "2026-04-15T14:31:00Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "cancelled",
+    "previous_status": "created",
+    "released_amount": "500.00",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "dest_amount": "458.25",
+    "dest_currency": "EUR",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "reference": "Invoice #1042",
+    "created_at": "2026-04-15T14:30:00Z",
+    "updated_at": "2026-04-15T14:31:00Z"
+  }
+}
+```
 
 ## Beneficiary events
 
@@ -278,13 +332,84 @@ Same shape as `instrument.created` with the new values reflected.
 
 | Event type | Fires when |
 |---|---|
-| `batch.uploaded` | A CSV batch is uploaded and accepted for validation. |
-| `batch.completed` | A batch finished processing — all payouts dispatched. |
-| `batch.failed` | A batch was rejected or failed terminally. |
+| `batch.uploaded` | A CSV or XLSX batch file is accepted by `POST /v1/batches`. Fires before validation begins. |
+| `batch.completed` | A batch finished processing with at least one successful row (includes partial success). |
+| `batch.failed` | A batch failed terminally — no rows could be processed, or every row failed. |
 
-{/* TODO: No dispatch sites for batch.uploaded/completed/failed were found during the audit — the constants exist in internal/domain/webhook/model.go but the batch worker does not yet call webhookSvc.Dispatch(). Populate the payload schemas once batch wiring lands; until then, subscribers will not receive these events. */}
+### `batch.uploaded`
 
-These event types are reserved but not currently dispatched. Subscribing is safe; no deliveries will be sent until batch webhook wiring is added.
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UE2",
+  "type": "batch.uploaded",
+  "created_at": "2026-04-15T15:10:00Z",
+  "data": {
+    "id": "batch_01HX8Z9K0M2N3P4Q5R6S7T8UF1",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "uploaded",
+    "file_name": "payouts-2026-04-15.csv",
+    "file_size": 48221,
+    "format": "csv",
+    "uploaded_at": "2026-04-15T15:10:00Z",
+    "uploaded_by": "usr_01HX8Z9K0M2N3P4Q5R6S7T8UG1"
+  }
+}
+```
+
+### `batch.completed`
+
+Fires when processing finishes with `status` of `completed` (all rows succeeded) or `partial` (some succeeded, some failed). Branch on the payload `status` field to distinguish full from partial success.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UE3",
+  "type": "batch.completed",
+  "created_at": "2026-04-15T15:18:00Z",
+  "data": {
+    "id": "batch_01HX8Z9K0M2N3P4Q5R6S7T8UF1",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "completed",
+    "file_name": "payouts-2026-04-15.csv",
+    "format": "csv",
+    "total_rows": 120,
+    "processed_rows": 120,
+    "valid_rows": 120,
+    "invalid_rows": 0,
+    "skipped_rows": 0,
+    "created_at": "2026-04-15T15:10:00Z",
+    "completed_at": "2026-04-15T15:18:00Z"
+  }
+}
+```
+
+### `batch.failed`
+
+Fires when a batch finishes with `status = failed` — either the file could not be processed at all (download/parse failure, empty file) or every row failed during processing. The payload includes an `errors` array describing the row-level failures when available.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UE4",
+  "type": "batch.failed",
+  "created_at": "2026-04-15T15:18:00Z",
+  "data": {
+    "id": "batch_01HX8Z9K0M2N3P4Q5R6S7T8UF1",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "failed",
+    "file_name": "payouts-2026-04-15.csv",
+    "format": "csv",
+    "total_rows": 120,
+    "processed_rows": 0,
+    "valid_rows": 0,
+    "invalid_rows": 120,
+    "skipped_rows": 0,
+    "created_at": "2026-04-15T15:10:00Z",
+    "completed_at": "2026-04-15T15:18:00Z",
+    "errors": [
+      { "row": 2, "field": "currency", "message": "unsupported currency: XYZ" }
+    ]
+  }
+}
+```
 
 ## FX events
 
@@ -356,17 +481,81 @@ A `fx.exchange.failed` event fired by the status-polling worker (for exchanges t
 }
 ```
 
-## Other reserved events
+## Funding events
 
-The following event types are defined in the platform but are not currently dispatched. Subscribing is safe; deliveries will begin once the corresponding wiring lands.
+### `funding.credit`
 
-| Event type | Planned trigger |
-|---|---|
-| `balance.low` | A merchant balance falls below the configured low-balance threshold. |
-| `funding.credit` | Incoming funding is credited to a merchant balance. |
-| `screening.hit` | A sanctions/PEP screening produces a hit requiring review. |
+Fires when incoming funds are received on a merchant account and credited to the internal balance. The payload carries the masked sender name only — Anton never forwards raw counterparty PII to webhook subscribers.
 
-{/* TODO: Populate balance.low, funding.credit, and screening.hit payload schemas once the emitting code paths are wired. Event-type constants exist in internal/domain/webhook/model.go but no dispatch sites were found during the audit. */}
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UF2",
+  "type": "funding.credit",
+  "created_at": "2026-04-15T16:00:00Z",
+  "data": {
+    "id": "opd_01HX8Z9K0M2N3P4Q5R6S7T8UF3",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "amount": "10000.00",
+    "currency": "USD",
+    "sender_name": "J*** S****",
+    "account_id": "opa_01HX8Z9K0M2N3P4Q5R6S7T8UF4",
+    "reference": "Invoice top-up",
+    "source_provider": "openpayd",
+    "credited_at": "2026-04-15T16:00:00Z"
+  }
+}
+```
+
+## Compliance events
+
+### `screening.hit`
+
+Fires when compliance screening returns a possible match that requires manual review. The payload intentionally omits the matched sanctions-list entry content — Anton treats that information as compliance-sensitive and does not surface match details to merchants to avoid tipping-off risk. Subscribers should treat this event as a signal that a review case is open for the payout; the payout itself transitions to `manual_review`.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UF5",
+  "type": "screening.hit",
+  "created_at": "2026-04-15T14:30:04Z",
+  "data": {
+    "payout_id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "screening_id": "scr_01HX8Z9K0M2N3P4Q5R6S7T8UF6",
+    "highest_score": 0.72,
+    "review_id": "rev_01HX8Z9K0M2N3P4Q5R6S7T8UF7",
+    "status": "manual_review"
+  }
+}
+```
+
+## Balance events
+
+### `balance.low`
+
+Fires when a merchant's available balance drops below a configured low-balance threshold. Thresholds are configured per `(merchant, currency)` pair in the dashboard — one threshold per pair. The event uses **latching** semantics to prevent spam while the balance oscillates around the threshold:
+
+- Fires once when the available balance transitions from at-or-above the threshold to below it.
+- Does not fire again while the balance remains below the threshold.
+- Re-arms automatically when the balance recovers to at-or-above the threshold. No recovery event is emitted.
+- The next dip below the threshold fires again.
+
+Delivery is best-effort and runs asynchronously from the balance mutation. A webhook failure never blocks the underlying payout, funding credit, or FX exchange.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UG1",
+  "type": "balance.low",
+  "created_at": "2026-04-15T17:22:00Z",
+  "data": {
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "currency": "USD",
+    "balance_amount": "87.42",
+    "threshold_amount": "100.00",
+    "latched_at": "2026-04-15T17:22:00Z"
+  }
+}
+```
 
 ## Test events
 
