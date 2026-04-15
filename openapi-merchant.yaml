@@ -927,6 +927,439 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/instruments:
+    get:
+      tags: [Instruments]
+      summary: List instruments
+      operationId: listInstruments
+      description: |
+        List payment instruments across all beneficiaries in your merchant scope.
+        Use the `beneficiary_id` filter to narrow to a single beneficiary (or call
+        `GET /v1/beneficiaries/{id}/instruments`, which returns the same result).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: beneficiary_id
+          in: query
+          schema:
+            type: string
+            pattern: '^ben_[a-zA-Z0-9]+$'
+        - name: method
+          in: query
+          schema:
+            $ref: '#/components/schemas/PaymentMethodCode'
+        - name: currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: country
+          in: query
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled]
+      responses:
+        '200':
+          description: Paginated list of instruments.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Instrument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/instruments/countries:
+    get:
+      tags: [Instruments]
+      summary: List countries available for instrument creation
+      operationId: listInstrumentCountries
+      description: |
+        Lightweight country list scoped to the countries Anton can deliver
+        payouts to. Use this to populate country dropdowns in an instrument-
+        creation form — paired with `/v1/instruments/methods` to build the
+        full method picker.
+
+        For the full reference catalog (including IS3 codes and currency
+        lists), use `/v1/countries` instead.
+      responses:
+        '200':
+          description: Supported instrument countries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [iso2, name]
+                      properties:
+                        iso2:
+                          $ref: '#/components/schemas/CountryCode'
+                        name:
+                          type: string
+
+  /v1/instruments/methods:
+    get:
+      tags: [Instruments]
+      summary: List payment-method schemas per country
+      operationId: listInstrumentMethods
+      description: |
+        Return the per-country method catalog with the exact credential-field
+        schema required for each method. Use this to drive dynamic instrument-
+        creation forms that know which fields to prompt for based on the
+        selected country and method.
+      parameters:
+        - name: country
+          in: query
+          description: Filter to methods available in a specific country.
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+      responses:
+        '200':
+          description: Per-country method schemas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InstrumentMethodSchema'
+
+  /v1/instruments/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ins_[a-zA-Z0-9]+$'
+    get:
+      tags: [Instruments]
+      summary: Retrieve an instrument
+      operationId: getInstrument
+      description: Return a single instrument by ID.
+      responses:
+        '200':
+          description: Instrument.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instrument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    put:
+      tags: [Instruments]
+      summary: Update an instrument
+      operationId: updateInstrument
+      description: |
+        Update the mutable fields on an instrument — `label`, `is_default`, and
+        `status`. Credentials cannot be updated; create a new instrument and
+        delete the old one to replace them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  maxLength: 255
+                is_default:
+                  type: boolean
+                status:
+                  type: string
+                  enum: [active, disabled]
+                end_user_ip:
+                  type: string
+      responses:
+        '200':
+          description: Instrument updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instrument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Instruments]
+      summary: Delete an instrument
+      operationId: deleteInstrument
+      description: |
+        Soft-delete an instrument. The instrument is removed from active listings
+        and cannot be used on new payouts. Historical payouts referencing it
+        remain accessible and unchanged.
+      responses:
+        '204':
+          description: Instrument deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/balances:
+    get:
+      tags: [Balances]
+      summary: List all balances
+      operationId: listBalances
+      description: |
+        Return your merchant balance in every currency you hold. Each balance
+        distinguishes between `available` (usable for new payouts), `pending`
+        (reserved for in-flight payouts), and `total`.
+      responses:
+        '200':
+          description: Balances across all currencies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Balance'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/balances/{currency}:
+    parameters:
+      - name: currency
+        in: path
+        required: true
+        description: ISO 4217 currency code (or stablecoin/crypto symbol).
+        schema:
+          $ref: '#/components/schemas/CurrencyCode'
+    get:
+      tags: [Balances]
+      summary: Retrieve a balance by currency
+      operationId: getBalance
+      description: Return your merchant balance in a single currency.
+      responses:
+        '200':
+          description: Balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No balance exists for this currency on your account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/corridors:
+    get:
+      tags: [Corridors]
+      summary: List active corridors
+      operationId: listCorridors
+      description: |
+        Return every active payout corridor on your merchant account. A corridor
+        is a (rail_type, currency, country, method, network) combination Anton
+        can deliver payouts through.
+
+        Use this to validate a (country, currency, method) combination before
+        attempting `POST /v1/payouts`. Corridors not listed here will return
+        `corridor_not_enabled`.
+      parameters:
+        - name: rail_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/RailType'
+        - name: currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: country
+          in: query
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+      responses:
+        '200':
+          description: Active corridors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Corridor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/merchant/sandbox/reset:
+    post:
+      tags: [Sandbox]
+      summary: Reset your sandbox environment
+      operationId: resetSandbox
+      description: |
+        Wipe sandbox data scoped to your merchant and optionally reseed. Only
+        available in sandbox environments; returns `403 sandbox_only` elsewhere.
+
+        Rate-limited to 10 resets per merchant per hour.
+
+        **Scopes:**
+        - `balances` (default) — reset currency balances. Beneficiaries, payouts,
+          and instruments are preserved.
+        - `all` — wipe payouts, instruments, beneficiaries, and sandbox
+          transactions; re-seed currency balances only.
+        - `delete-all` — wipe everything. No reseed; you land at zero state.
+        - `full-reset` — wipe everything and re-seed balances + sample
+          beneficiaries + sample payouts. Equivalent to a fresh merchant with
+          demo data.
+      parameters:
+        - name: scope
+          in: query
+          description: What to wipe and whether to re-seed.
+          schema:
+            type: string
+            enum: [balances, all, delete-all, full-reset]
+            default: balances
+      responses:
+        '200':
+          description: Reset complete.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [reset, deleted]
+                  scope:
+                    type: string
+                  merchant_id:
+                    type: string
+        '400':
+          description: '`invalid_scope` — the `scope` query parameter is not one of the accepted values.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`sandbox_only` — not available in the current environment.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/merchant/sandbox/seed-beneficiaries:
+    post:
+      tags: [Sandbox]
+      summary: Seed sample beneficiaries
+      operationId: seedSampleBeneficiaries
+      description: |
+        Create a curated set of sample beneficiaries across multiple countries
+        and payment methods. Useful as CI fixtures or demo data. Sandbox only.
+      responses:
+        '200':
+          description: Beneficiaries seeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: seeded
+                  created_count:
+                    type: integer
+                    example: 12
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`sandbox_only`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/merchant/sandbox/seed-payouts:
+    post:
+      tags: [Sandbox]
+      summary: Seed sample payouts
+      operationId: seedSamplePayouts
+      description: |
+        Create a mix of sample payouts across different statuses (pending,
+        completed, failed, cancelled, manual_review) for UI, webhook, and
+        integration testing. Sandbox only. Requires seeded beneficiaries — call
+        `POST /v1/merchant/sandbox/seed-beneficiaries` first if your sandbox is
+        empty.
+      responses:
+        '200':
+          description: Payouts seeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: seeded
+                  created_count:
+                    type: integer
+                    example: 30
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`sandbox_only`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: '`no_beneficiaries` — seed beneficiaries before payouts.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1968,12 +2401,127 @@ components:
     Balance:
       type: object
       description: Available, pending, and total funds in a single currency.
-      # TODO
+      required: [id, merchant_id, currency, available, pending, total, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^bal_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        available:
+          $ref: '#/components/schemas/Money'
+          description: Funds usable for new payouts.
+        pending:
+          $ref: '#/components/schemas/Money'
+          description: Funds reserved for in-flight payouts (debited but not yet settled).
+        total:
+          $ref: '#/components/schemas/Money'
+          description: '`available + pending`.'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      example:
+        id: bal_01HX8Z9K0M2N3P4Q5R6S7T8UBA1
+        merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
+        currency: USD
+        available: "12450.00"
+        pending: "550.00"
+        total: "13000.00"
+        updated_at: "2026-04-15T14:30:00Z"
 
     Corridor:
       type: object
-      description: An active source/destination currency pair available to your merchant.
-      # TODO
+      description: |
+        An active payout corridor — a (rail_type, currency, country, method,
+        network) combination Anton can deliver through. Corridors are
+        destination-only; the source currency is not part of the corridor
+        (Anton handles FX separately).
+      required: [id, rail_type, currency, country, method, active]
+      properties:
+        id:
+          type: string
+          pattern: '^cor_[a-zA-Z0-9]+$'
+        rail_type:
+          $ref: '#/components/schemas/RailType'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+          description: Destination country. `XX` for global crypto networks.
+        network:
+          $ref: '#/components/schemas/Network'
+        method:
+          type: string
+          description: Delivery method within the corridor (bank_transfer, on_chain, stablecoin, etc.).
+        active:
+          type: boolean
+        priority:
+          type: integer
+          description: Anton uses lowest priority first when multiple corridors match.
+        cutoff_time:
+          type: string
+          description: Daily cutoff for same-day processing (fiat rails, HH:MM UTC).
+        settlement_days:
+          type: integer
+          description: Expected settlement, in business days, for fiat corridors.
+        settlement_mins:
+          type: integer
+          description: Expected settlement, in minutes, for crypto/stablecoin corridors.
+        min_amount:
+          $ref: '#/components/schemas/Money'
+        max_amount:
+          $ref: '#/components/schemas/Money'
+        required_confirms:
+          type: integer
+          description: Block confirmations required for crypto corridors.
+
+    InstrumentMethodSchema:
+      type: object
+      description: |
+        Credential-field schema for a payment method in a specific country.
+        Use to drive dynamic instrument-creation forms.
+      required: [code, country, currency]
+      properties:
+        code:
+          $ref: '#/components/schemas/PaymentMethodCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        label:
+          type: string
+          description: Human-friendly label for this country+method pairing.
+          example: UK Bank Account (Faster Payments)
+        fields:
+          type: array
+          description: Credential fields to prompt for.
+          items:
+            type: object
+            required: [name, type, required]
+            properties:
+              name:
+                type: string
+                example: sort_code
+              label:
+                type: string
+                example: Sort code
+              type:
+                type: string
+                enum: [string, integer, enum]
+              required:
+                type: boolean
+              pattern:
+                type: string
+                description: Regex the value must match, if any.
+              enum:
+                type: array
+                items:
+                  type: string
+                description: Allowed values when `type=enum`.
+              help:
+                type: string
 
     FXQuote:
       type: object
