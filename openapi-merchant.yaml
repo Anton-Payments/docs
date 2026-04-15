@@ -227,6 +227,291 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
+    put:
+      tags: [Beneficiaries]
+      summary: Update a beneficiary
+      operationId: updateBeneficiary
+      description: |
+        Update mutable fields on a beneficiary: `display_name`, `country`, `external_ref`,
+        and `metadata`. PII cannot be updated via this endpoint — use
+        `PUT /v1/beneficiaries/{id}/pii` instead, since PII is tokenized.
+
+        Fields not present in the request body are left unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeneficiaryUpdateRequest'
+      responses:
+        '200':
+          description: Beneficiary updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Beneficiaries]
+      summary: Delete a beneficiary
+      operationId: deleteBeneficiary
+      description: |
+        Soft-deletes a beneficiary. The record is removed from active listings and
+        can no longer be used to initiate new payouts. Historical payouts referencing
+        this beneficiary remain unchanged and accessible.
+
+        Archiving is typically preferred over deletion — see
+        `POST /v1/beneficiaries/{id}/archive`. Archiving preserves the beneficiary
+        in a disabled state that can be restored later.
+      responses:
+        '204':
+          description: Beneficiary deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/beneficiaries/{id}/pii:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    get:
+      tags: [Beneficiaries]
+      summary: Retrieve beneficiary PII
+      operationId: getBeneficiaryPII
+      description: |
+        Detokenizes and returns the PII stored in Basis Theory for this beneficiary.
+        Every access is recorded in the merchant audit log (PCI DSS 10.2.1).
+
+        Use this to pre-populate edit forms or verify submitted identity data.
+      responses:
+        '200':
+          description: Beneficiary PII, detokenized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryPII'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    put:
+      tags: [Beneficiaries]
+      summary: Replace beneficiary PII
+      operationId: updateBeneficiaryPII
+      description: |
+        Replaces the PII stored in Basis Theory for this beneficiary. The entire PII
+        blob is replaced — partial updates are not supported, because tokens are
+        immutable.
+
+        Supply the detail block matching the beneficiary's `type` (`individual` or
+        `business`). The `display_name` on the beneficiary record is automatically
+        re-derived from the new PII.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeneficiaryPIIUpdateRequest'
+      responses:
+        '200':
+          description: Beneficiary PII replaced. Returns the updated beneficiary record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/beneficiaries/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Archive a beneficiary
+      operationId: archiveBeneficiary
+      description: |
+        Soft-disables a beneficiary. The record is preserved and can be restored later,
+        but it cannot be used to initiate new payouts while archived. PII remains
+        tokenized and accessible.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                end_user_ip:
+                  type: string
+                  description: IP address of the merchant's end-user who initiated this action.
+      responses:
+        '200':
+          description: Beneficiary archived. Returns the updated record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/beneficiaries/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Restore an archived beneficiary
+      operationId: restoreBeneficiary
+      description: |
+        Restores a previously archived beneficiary to active status. Beneficiaries
+        blocked by compliance cannot be restored via this endpoint — contact support.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                end_user_ip:
+                  type: string
+      responses:
+        '200':
+          description: Beneficiary restored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/beneficiaries/{id}/instruments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    get:
+      tags: [Instruments]
+      summary: List a beneficiary's instruments
+      operationId: listInstrumentsForBeneficiary
+      description: Return all payment instruments attached to this beneficiary.
+      responses:
+        '200':
+          description: List of instruments for the beneficiary.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Instrument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Instruments]
+      summary: Create an instrument for a beneficiary
+      operationId: createInstrumentForBeneficiary
+      description: |
+        Attach a payment instrument to a beneficiary. The credentials you submit
+        (bank account numbers, wallet addresses, card PANs) are tokenized in Basis
+        Theory on receipt — Anton's core database stores only a token reference, a
+        display-only masked value, and a content fingerprint used for cross-merchant
+        deduplication.
+
+        The request body shape depends on the `method` — each method has a distinct
+        credential schema. See the [Instruments methods endpoint](#tag/Reference-Data/operation/listPaymentMethods)
+        for the full per-country method catalog.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstrumentCreateRequest'
+      responses:
+        '201':
+          description: Instrument created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instrument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
 components:
   securitySchemes:
@@ -653,13 +938,197 @@ components:
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
 
+    BeneficiaryUpdateRequest:
+      type: object
+      description: Mutable fields on a beneficiary. Fields not included are left unchanged.
+      properties:
+        display_name:
+          type: string
+          maxLength: 255
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        external_ref:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: Set to `null` to clear.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Replaces the existing metadata map in full.
+        end_user_ip:
+          type: string
+
+    BeneficiaryPII:
+      type: object
+      description: |
+        Detokenized PII for a beneficiary. Returned by `GET /v1/beneficiaries/{id}/pii`.
+        Exactly one of `individual` or `business` is populated matching the
+        beneficiary's `type`.
+      properties:
+        type:
+          type: string
+          enum: [individual, business]
+        individual:
+          $ref: '#/components/schemas/IndividualDetails'
+        business:
+          $ref: '#/components/schemas/BusinessDetails'
+
+    BeneficiaryPIIUpdateRequest:
+      type: object
+      description: |
+        Replacement PII. Provide the detail block matching the beneficiary's type.
+        The entire PII blob is replaced — partial updates are not supported.
+      properties:
+        individual:
+          $ref: '#/components/schemas/IndividualDetails'
+        business:
+          $ref: '#/components/schemas/BusinessDetails'
+        end_user_ip:
+          type: string
+
+    PaymentMethod:
+      type: string
+      description: |
+        Credential format of a payment instrument — named by what data is stored,
+        not by the rail that delivers the funds. One credential type can route to
+        multiple rails (e.g. an IBAN can go via SEPA, SEPA Instant, TARGET2, SWIFT,
+        or CHAPS — the rail is selected at payout time).
+
+        Query `GET /v1/payment-methods` for the full country-specific catalog
+        including per-method credential schemas.
+      enum:
+        - iban
+        - uk_bank
+        - us_bank
+        - ca_bank
+        - au_bank
+        - nz_bank
+        - jp_bank
+        - in_bank
+        - za_bank
+        - ng_bank
+        - ph_bank
+        - cl_bank
+        - co_bank
+        - swift
+        - clabe
+        - cbu
+        - cci
+        - pix
+        - upi
+        - interac
+        - paynow
+        - fps_hk
+        - promptpay
+        - card
+        - crypto
+        - mobile_money
+
+    InstrumentCreateRequest:
+      type: object
+      required: [method]
+      description: |
+        Create an instrument attached to a beneficiary.
+
+        The `credentials` object shape varies by `method`. A few common shapes:
+
+        - `iban`: `{ "iban": "GB82WEST12345698765432", "bic": "WESTGB22" }` (BIC optional)
+        - `uk_bank`: `{ "account_number": "12345678", "sort_code": "123456" }`
+        - `us_bank`: `{ "routing_number": "026073150", "account_number": "...", "account_type": "checking" }`
+        - `crypto`: `{ "wallet_address": "0x...", "network": "ethereum", "token_symbol": "USDC" }`
+        - `card`: `{ "pan": "...", "expiry_month": 12, "expiry_year": 2028 }` (routed through PCI vault)
+
+        Call `GET /v1/payment-methods?country=XX` for the complete per-country catalog
+        with the exact credential schema required.
+      properties:
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        label:
+          type: string
+          description: Merchant-visible label for this instrument (e.g. "Payroll - primary account").
+          maxLength: 255
+        credentials:
+          type: object
+          description: Method-specific credential fields. Tokenized on receipt.
+          additionalProperties: true
+        is_default:
+          type: boolean
+          description: Make this the default instrument for the beneficiary. The previous default (if any) is unflagged.
+          default: false
+        end_user_ip:
+          type: string
+
     Instrument:
       type: object
       description: |
         A payment destination attached to a beneficiary. Credentials (account numbers,
-        wallet addresses, card PANs) are tokenized in Basis Theory and never exposed
-        through the API.
-      # TODO: full property list
+        wallet addresses, card PANs) are tokenized in Basis Theory and never returned
+        by the API. Only masked display fields and method metadata are exposed.
+      required: [id, beneficiary_id, merchant_id, method, status, is_default, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          pattern: '^ins_[a-zA-Z0-9]+$'
+          example: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2
+        beneficiary_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        label:
+          type: string
+          description: Merchant-visible label.
+        display_last4:
+          type: string
+          description: Last 4 characters of the primary credential (account number / PAN / wallet address), for display.
+        display_bank:
+          type: string
+          description: Bank name derived from routing details, for display.
+        display_network:
+          type: string
+          description: Card network or chain, for display (e.g. `visa`, `ethereum`).
+        masked_account:
+          type: string
+          description: Fully masked credential for list views.
+          example: "****5432"
+        status:
+          type: string
+          enum: [active, disabled]
+        is_default:
+          type: boolean
+          description: Whether this is the beneficiary's default instrument for payouts.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      example:
+        id: ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2
+        beneficiary_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
+        method: iban
+        currency: EUR
+        country: DE
+        label: Primary EUR account
+        display_last4: "5432"
+        display_bank: Deutsche Bank
+        masked_account: DE89****5432
+        status: active
+        is_default: true
+        created_at: "2026-04-15T14:30:00Z"
+        updated_at: "2026-04-15T14:30:00Z"
 
     Payout:
       type: object
