@@ -1,0 +1,181 @@
+---
+title: "Crypto & Stablecoin Payouts"
+sidebarTitle: "Crypto & stablecoin"
+description: "Pay beneficiaries on-chain or in stablecoins. The API surface is identical to fiat — the differences are in the instrument, the finality model, and the network details."
+---
+
+Anton handles four crypto-adjacent flows with the same API surface as fiat:
+
+- **Stablecoin → fiat** — you fund in USDC/USDT, beneficiary receives fiat. Anton converts on the way out.
+- **Stablecoin → stablecoin** — on-chain transfer between wallets.
+- **Stablecoin → other crypto** — convert and deliver in native crypto.
+- **Fiat → stablecoin** — fund in fiat, deliver USDC/USDT to a wallet.
+
+The programmatic flow is exactly the same as a fiat payout: create beneficiary → attach wallet instrument → send payout. The differences are in the instrument credentials, the `method` + `network`, and the finality model.
+
+## The wallet instrument
+
+A crypto/stablecoin instrument uses `method: "crypto"` on creation. Credentials are network-specific:
+
+```bash
+curl "https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/instruments" \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: ins-crypto-001" \
+  -d '{
+    "method": "crypto",
+    "currency": "USDC",
+    "label": "Primary USDC wallet (Ethereum)",
+    "is_default": true,
+    "credentials": {
+      "wallet_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1",
+      "network": "ethereum",
+      "token_symbol": "USDC"
+    }
+  }'
+```
+
+`network` values (see the [Payouts — Network enum](/api-reference/payouts/create-payout)): `ethereum`, `polygon`, `arbitrum`, `optimism`, `base`, `avalanche`, `bsc`, `tron`, `solana`, `bitcoin`, `lightning`, `stellar`, `ripple`.
+
+### Memo and tag fields
+
+Some chains require a memo or destination tag to route funds correctly within an exchange:
+
+- **XRP** — `destination_tag`
+- **Stellar** — `memo` (text or hash)
+- **Cosmos-family** — `memo`
+
+Provide these in `credentials` when the beneficiary's receiving address belongs to an exchange. Missing a required tag will send funds to a generic exchange address where they may be unrecoverable.
+
+### Address validation
+
+Anton validates wallet addresses client-side against chain checksums where applicable (EVM chains use EIP-55, Bitcoin uses Base58Check). A malformed address returns `422 invalid_credentials`.
+
+**What Anton does not do**: verify the address belongs to the person you intended. There is no equivalent of UK Confirmation of Payee for crypto. The beneficiary PII on the `Beneficiary` record is for KYC/compliance; on-chain delivery goes to the address you provided, period.
+
+## Sending the payout
+
+Same endpoint as fiat. The `method` and `rail_type` distinguish the flow:
+
+```bash
+curl https://api.antonpayments.dev/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pay-onchain-001" \
+  -d '{
+    "beneficiary_id": "ben_...",
+    "instrument_id": "ins_...",
+    "source_amount": "1000.00",
+    "source_currency": "USDC",
+    "dest_amount": "1000.00",
+    "dest_currency": "USDC",
+    "method": "stablecoin",
+    "rail_type": "stablecoin",
+    "fixed_side": "fixed_dest",
+    "purpose": "contractor_payment",
+    "reference": "INV-2026-04-042"
+  }'
+```
+
+For `stablecoin → fiat`:
+
+```json
+{
+  "source_amount": "1000.00",
+  "source_currency": "USDC",
+  "dest_amount": "920.00",
+  "dest_currency": "EUR",
+  "method": "sepa",
+  "rail_type": "fiat",
+  "fixed_side": "fixed_dest"
+}
+```
+
+Anton handles the off-ramp — converting USDC → EUR and settling via SEPA — under the hood.
+
+## The finality model
+
+Crypto finality is different from fiat. The `processing → sent → completed` transitions mean specific on-chain states:
+
+| State | On-chain meaning |
+|---|---|
+| `processing` | Transaction broadcast to the network. `tx_hash` populated. |
+| `sent` | Confirmed in at least one block. `block_confirmations >= 1`. |
+| `completed` | Confirmations reach `required_confirms` for the network. Considered final. |
+| `failed` | Transaction rejected at broadcast (invalid nonce, insufficient gas, invalid address). No funds moved. |
+| `returned` | Uncommon — rail operator recovered funds from a chain reversal. Most networks don't support this. |
+
+Required confirmations per network (from the corridor):
+
+- **Bitcoin**: 3-6 confirmations (~30-60 min)
+- **Ethereum**: 12-32 confirmations (~3-6 min)
+- **Polygon / Arbitrum / Optimism / Base**: network-specific, typically 1-20 minutes to `completed`
+- **Tron**: 1-20 blocks (~3-60 sec)
+- **Solana**: finality at ~1 slot (~400 ms; `completed` in seconds)
+- **Lightning**: near-instant
+
+Values populate on the `Payout` response as `block_confirmations` and `required_confirms` progress.
+
+## Gas and network fees
+
+`network_fee` and `network_fee_currency` on the Payout record show the on-chain fee. It's deducted from the settlement, not from your merchant balance — so the `dest_amount` the beneficiary receives may be smaller than what you intended if the recipient pays fees (depending on method and `fee_bearer`).
+
+## Refunds and reversals
+
+**Crypto is not fiat.** There is no chargeback, no reversal-by-default, no UK Faster Payments "return to sender" window.
+
+If a payout reaches `completed`:
+
+- Funds are on-chain, in the beneficiary's wallet.
+- Anton cannot recall them. Only the receiving party can return funds by sending a new transaction.
+
+If a payout reaches `failed`:
+
+- Nothing moved. Funds are still in your merchant balance (assuming the reserve was released, which Anton does automatically).
+
+If a payout is in `processing` or `sent`:
+
+- Confirmations are in progress. You cannot cancel.
+
+## Gotchas
+
+<AccordionGroup>
+  <Accordion title="Wrong network">
+    USDC on Ethereum is not USDC on Tron. Sending USDC-ERC20 to a Tron address loses the funds permanently. Verify the `network` on the instrument matches what the beneficiary expects BEFORE creating.
+  </Accordion>
+  <Accordion title="Non-custodial wallet edge cases">
+    Some hardware wallets reject transactions below a dust threshold. Test with a realistic amount in sandbox before shipping a product that supports very small crypto payouts.
+  </Accordion>
+  <Accordion title="Exchange addresses need memo/tag">
+    Sending to an exchange (Coinbase, Binance, Kraken, etc.) without the required memo or destination tag usually lands in a generic exchange account that requires manual support-ticket recovery. Always capture the memo/tag field when the beneficiary's wallet is an exchange.
+  </Accordion>
+  <Accordion title="Token contract impersonation">
+    Many tokens use similar names or symbols. Anton validates `token_contract` where provided. If your `credentials` include `token_contract` for a custom ERC-20, Anton will only send that exact contract's tokens — prevents confused-deputy sends.
+  </Accordion>
+  <Accordion title="Reorg behavior">
+    On probabilistic-finality chains (Bitcoin, Ethereum before finalization), a transaction that's `sent` could theoretically re-org out and move back to `processing`. Anton's state model accounts for this — don't mark the payout as final until `completed`.
+  </Accordion>
+</AccordionGroup>
+
+## Stablecoin funding your balance
+
+To pay OUT stablecoin, you first need stablecoin in your merchant balance. Ryan's integration path: contact support to get a merchant-specific deposit address for each stablecoin/network pair you want to fund in. Deposits are detected on-chain, and once confirmations complete, the balance is credited — fires `funding.credit` if you're subscribed.
+
+(Programmatic funding address creation is not currently exposed on the merchant API; dashboard-driven for v1.)
+
+## Subscribe to crypto-relevant events
+
+Same `payout.*` events as fiat — `payout.processing`, `payout.sent`, `payout.completed`, `payout.failed`. Payload carries `tx_hash`, `network`, `block_confirmations`, `required_confirms`.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" icon="paper-plane" href="/guides/send-a-payout">
+    The unified payout API — same shape for fiat and crypto.
+  </Card>
+  <Card title="FX & exchange" icon="arrow-right-arrow-left" href="/guides/fx-exchange">
+    Converting stablecoin to fiat balance for off-ramp payouts.
+  </Card>
+</CardGroup>

@@ -1,0 +1,114 @@
+---
+title: "Idempotency"
+sidebarTitle: "Idempotency"
+description: "Safely retry any mutating request without creating duplicates."
+---
+
+Network failures happen. When you call `POST /v1/payouts` and the connection drops before you receive the response, you don't know whether the payout was created. Retrying naively could create a duplicate.
+
+**Idempotency keys** solve this. Include a unique key with your request, and Anton guarantees the operation happens at most once — even if you send the same request many times.
+
+## How to use
+
+Add the `Idempotency-Key` header to any `POST`, `PUT`, or `PATCH` request:
+
+```bash
+curl https://api.antonpayments.dev/v1/payouts \
+  -X POST \
+  -H "Authorization: Bearer ak_test_..." \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payout-inv-1042-2026-04-15" \
+  -d '{
+    "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
+    "amount": "500.00",
+    "currency": "USD",
+    "description": "Invoice #1042"
+  }'
+```
+
+If you send the same request with the same key again, Anton returns the original response instead of creating a duplicate. Replayed responses include `X-Idempotent-Replayed: true` so you can tell a replay from a fresh result.
+
+## Required vs. optional
+
+Some endpoints require an idempotency key and return `400 missing_idempotency_key` if you omit one — payout creation, beneficiary creation, batch confirmation, webhook subscription creation, and a handful of others. The endpoint documentation lists the requirement explicitly.
+
+Endpoints that accept an optional key will still honor it — a good default is to send one on every mutation.
+
+## Key requirements
+
+| Rule | Detail |
+|---|---|
+| **Unique per operation** | Use a different key for each logically distinct operation. |
+| **Deterministic** | Use the same key when retrying the same operation. |
+| **Max length** | 255 characters. |
+| **Retention** | Keys are remembered for 24 hours, then discarded. |
+
+## Generating good keys
+
+The best idempotency keys are deterministic — derived from your own business data — so that a retry after a crash produces the same key without you having to remember whether the request succeeded.
+
+<CodeGroup>
+
+```bash cURL
+# Deterministic from your business data
+curl ... -H "Idempotency-Key: payout-${INVOICE_ID}-${BENEFICIARY_ID}"
+```
+
+```javascript JavaScript
+import { createHash, randomUUID } from "node:crypto";
+
+// Deterministic from your data — recommended
+const key = `payout-${invoiceId}-${beneficiaryId}`;
+
+// Hash of the request body — works when no natural key exists
+const bodyKey = createHash("sha256")
+  .update(JSON.stringify(payoutBody))
+  .digest("hex");
+
+// UUID — simplest, but requires you to persist it for safe retries
+const uuidKey = randomUUID();
+```
+
+```php PHP
+// Deterministic from your data — recommended
+$key = "payout-{$invoiceId}-{$beneficiaryId}";
+
+// Hash of the request body — works when no natural key exists
+$bodyKey = hash('sha256', json_encode($payoutBody));
+
+// UUID — simplest, but requires you to persist it for safe retries
+$uuidKey = bin2hex(random_bytes(16));
+```
+
+```go Go
+// Deterministic from your data — recommended
+key := fmt.Sprintf("payout-%s-%s", invoiceID, beneficiaryID)
+
+// Hash of the request body — works when no natural key exists
+sum := sha256.Sum256(body)
+bodyKey := hex.EncodeToString(sum[:])
+
+// UUID — simplest, but requires you to persist it for safe retries
+uuidKey := uuid.NewString()
+```
+
+</CodeGroup>
+
+<Tip>
+  **Prefer deterministic keys.** If your process crashes between sending a request and persisting its response, a deterministic key lets you retry safely without needing to remember whether the request went through.
+</Tip>
+
+## Behavior
+
+| Scenario | Result |
+|---|---|
+| Same key + same body | Original response replayed with `X-Idempotent-Replayed: true`. |
+| Same key + different body | `409 idempotency_conflict` — Anton refuses to replay a different operation under an existing key. |
+| Different key + same body | Treated as a new request. Creates a new resource. |
+| No key on a required endpoint | `400 missing_idempotency_key`. |
+
+## What idempotency does not cover
+
+- **`GET` requests** — already safe to retry.
+- **Soft deletes** (archive/restore, cancel) — repeated calls converge on the same state, so they're naturally idempotent.
+- **Screening, routing, or rail outcomes** — idempotency guarantees Anton won't *create* the same payout twice. It does not guarantee the same downstream routing or settlement result if you submit two different payouts back-to-back.

@@ -1,0 +1,51 @@
+---
+title: "Sandbox Overview"
+sidebarTitle: "Overview"
+description: "A full-fidelity environment for building and testing your Anton integration. Real API surface, no real money."
+---
+
+The Anton sandbox runs the same API, the same state machine, the same compliance checks, and the same webhook delivery pipeline as production. What it doesn't do is move funds. Rail submission, settlement, and counterparty communication are handled by internal mocks with deterministic outcomes — so you can build and test without waiting for a real bank transfer, and without exposing real beneficiaries to screening hits.
+
+## Getting a sandbox key
+
+<Steps>
+  <Step title="Sign in to the dashboard">
+    Go to [app.antonpayments.com](https://app.antonpayments.com) and authenticate. Sandbox access is available from day one — you do not need to complete KYB to use it.
+  </Step>
+  <Step title="Create a test key">
+    Generate a new API key in the **API Keys** section. Keys prefixed `ak_test_` only work against `https://api.antonpayments.dev`.
+  </Step>
+  <Step title="Set your base URL">
+    Use `https://api.antonpayments.dev` as the host for every request.
+  </Step>
+</Steps>
+
+## What's identical to production
+
+- **Authentication** — same `Bearer` header format, same `401` responses, same rotation flow.
+- **Data model** — beneficiaries, payouts, instruments, batches, and webhooks all share the same schemas.
+- **State machine** — a payout moves through `pending_screening → approved → processing → sent → completed` exactly as it would in production.
+- **Idempotency** — `Idempotency-Key` behaves the same way and enforces the same 24-hour window.
+- **Rate limits** — sandbox applies the same per-merchant ceilings. Test your handling of `429` here before production traffic exposes gaps.
+- **Webhooks** — subscribed endpoints receive real HTTP deliveries with real signatures. Verify your signing code in sandbox.
+
+## What's mocked
+
+- **Rail settlement** — payouts transition to `sent` and then `completed` on a compressed timeline (seconds, not hours). No real bank is contacted.
+- **Timing** — sandbox deliberately moves faster than production so integration tests complete in reasonable CI windows.
+- **Risk outcomes** — the Anton Engine runs in sandbox with a controlled signal set. You can trigger specific verdicts using test fixtures from the seeders.
+
+## Triggering specific scenarios
+
+<CardGroup cols={2}>
+  <Card title="Test data" icon="database" href="/sandbox/test-data">
+    Reset your sandbox and seed sample beneficiaries and payouts in a single call.
+  </Card>
+  <Card title="Risk evaluation" icon="shield-halved" href="/how-anton-evaluates-payouts">
+    How payouts are scored and what each terminal state means for your integration.
+  </Card>
+</CardGroup>
+
+## When you're ready for production
+
+Sandbox and production are completely isolated. Keys, data, webhooks, and merchant accounts do not carry over. Before you switch to a live key, walk through the [Going Live checklist](/guides/going-live) — sandbox can't simulate everything, and a missed item tends to be a painful discovery on day one.

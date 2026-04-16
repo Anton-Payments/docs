@@ -1,0 +1,155 @@
+---
+title: "Manage Beneficiaries"
+sidebarTitle: "Manage beneficiaries"
+description: "Create, update, search, archive, and delete the people and businesses you pay."
+---
+
+A beneficiary is the identity of a payout recipient. Every beneficiary belongs to exactly one merchant — two merchants paying the same real person each create their own beneficiary record. PII submitted at creation is tokenized in Basis Theory; Anton's core database stores only a display name and country plus an opaque token reference.
+
+This guide covers the full lifecycle — create, update, search, archive, restore, delete — plus the deduplication, PII rotation, and cross-merchant trust considerations you need for production.
+
+## Individuals vs businesses
+
+`type` on create determines which detail block you provide:
+
+- `individual` — requires `individual.*` fields: first/last name, email, phone, DOB (YYYY-MM-DD), nationality (ISO-2), and structured address.
+- `business` — requires `business.*` fields: legal name, registration number, email, phone, and address. Optional: trading name, tax ID, entity type, incorporation country/date, website.
+
+The API validates shape at creation; rail-specific validation (some rails require certain fields) surfaces later when a payout is submitted.
+
+## Creating a beneficiary
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: ben-$INVOICE_ID" \
+  -d @beneficiary.json
+```
+
+The `Idempotency-Key` header is required. Use a value derived from your own business data so a network failure doesn't cause a duplicate record. See [Idempotency](/api-reference/idempotency).
+
+`external_ref` is your own reference — stored as-is, indexed for search. Use your HRIS ID, contractor ID, or vendor number.
+
+`metadata` is an arbitrary string-to-string map also stored as-is. Use it for tags like `department: engineering` or `cost_center: 4421`.
+
+## Deduplication across merchants
+
+Anton computes a content fingerprint from beneficiary PII and uses it internally to link the same real person across merchants for engine-level risk signals. You never see the fingerprint, but its existence means:
+
+- Within your own merchant: attempting to create a beneficiary with identical PII returns `422 duplicate_beneficiary`. Handle it by searching for an existing record with matching `external_ref` or PII and reusing that ID.
+- Across merchants: cross-merchant trust signals feed the Anton Engine's risk scoring on future payouts. You do not see this directly; it's a platform feature.
+
+## Updating non-PII fields
+
+`PUT /v1/beneficiaries/{id}` updates the mutable fields on a beneficiary: `display_name`, `country`, `external_ref`, and `metadata`. Fields omitted from the request body are left unchanged. Set `external_ref` to `null` to clear it.
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID \
+  -X PUT \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "department": "engineering",
+      "cost_center": "4421",
+      "tier": "premium"
+    }
+  }'
+```
+
+**PII cannot be updated via this endpoint** — use the PII-specific endpoint below.
+
+## Updating PII
+
+Tokens in Basis Theory are immutable. Updating PII replaces the entire token — you send the full detail block, Anton re-tokenizes, and the old token is dropped:
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/pii \
+  -X PUT \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @updated-pii.json
+```
+
+Supply the detail block matching the beneficiary's `type` (`individual` or `business`). The `display_name` on the beneficiary record is re-derived from the new PII. The change is audit-logged (SOC 2 CC8.1).
+
+Common reasons to update PII:
+
+- Contractor legal name change
+- Business changes registered address
+- Beneficiary provides a corrected DOB or ID number
+
+## Retrieving PII
+
+`GET /v1/beneficiaries/{id}/pii` detokenizes and returns the full PII blob. This is an audited, security-sensitive operation — every access generates a PCI DSS 10.2.1 audit entry.
+
+Use this to pre-populate edit forms or verify what you submitted.
+
+## Archive vs delete
+
+Two different disables:
+
+- **Archive** (`POST /v1/beneficiaries/{id}/archive`) — soft-disables the beneficiary. PII is preserved. The record is hidden from active listings and cannot be used on new payouts, but can be restored later. Historical payouts referencing the beneficiary remain unchanged. Requires `Idempotency-Key`.
+- **Delete** (`DELETE /v1/beneficiaries/{id}`) — soft-deletes the beneficiary. Permanent. Historical payouts still reference the ID for audit purposes.
+
+Prefer archive unless you know you will never need this beneficiary again. Restoring an archived beneficiary brings them back to `active`:
+
+```bash
+curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/restore \
+  -X POST \
+  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Idempotency-Key: restore-$BEN_ID"
+```
+
+<Warning>
+  Beneficiaries `blocked` by compliance (status: `blocked`) cannot be restored via the API. Contact support if you believe a block was applied in error.
+</Warning>
+
+## Searching and filtering
+
+`GET /v1/beneficiaries` supports:
+
+- `status` — `active` / `archived` / `blocked`
+- `type` — `individual` / `business`
+- `country` — ISO-2 code
+- Cursor pagination: `limit` (max 100) and `cursor`
+
+For search-by-attribute, filter on `external_ref` (you store this) or fetch and filter client-side. Anton does not expose full-text search on PII.
+
+## Instruments — beneficiaries without instruments can't be paid
+
+A beneficiary alone can't receive money; they need an instrument. See [Send a Payout — Step 3](/guides/send-a-payout) for attaching one. Call `GET /v1/beneficiaries/{id}/instruments` to list the instruments attached to a given beneficiary.
+
+## Webhooks
+
+Subscribe to the `beneficiary.*` events to react to lifecycle changes out-of-band:
+
+- `beneficiary.created`
+- `beneficiary.updated` (fires on edit, archive, restore, AND PII update)
+- `beneficiary.deleted` (payload is just the id)
+- `beneficiary.blocked` (compliance block)
+
+See [Webhook Events](/api-reference/webhook-events) for payload schemas.
+
+## Common errors
+
+| Code | HTTP | Meaning | Action |
+|---|---|---|---|
+| `duplicate_beneficiary` | 422 | Exact PII match already exists under your merchant. | Search by `external_ref` or PII; reuse the existing ID. |
+| `missing_beneficiary_details` | 400 | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`. |
+| `invalid_display_name` | 422 | Name fields empty or invalid characters. | Fix name; a minimum of first + last is required for individuals. |
+| `beneficiary_not_found` | 404 | ID doesn't exist or belongs to a different merchant. | Check the ID and prefix. |
+| `beneficiary_pii_update_failed` | 422 | PII update hit a validation or tokenization error. | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" icon="paper-plane" href="/guides/send-a-payout">
+    Once you have beneficiaries and instruments, fire your first payout.
+  </Card>
+  <Card title="Handle webhooks" icon="bell" href="/guides/handle-webhooks">
+    React to `beneficiary.*` and `payout.*` events in real time.
+  </Card>
+</CardGroup>

@@ -1,0 +1,140 @@
+---
+title: "Rate Limits"
+description: "Anton applies per-merchant and per-endpoint request ceilings. Every response carries the headers you need to stay within them."
+---
+
+Rate limits protect the platform from accidental and malicious overload. Normal production traffic rarely hits them. When they do trigger, the response headers tell you exactly how long to wait.
+
+## Global limit
+
+Every authenticated merchant gets **1,000 requests per minute**, shared across all `/v1/*` endpoints. The limit resets on a rolling 60-second window.
+
+## Endpoint-specific limits
+
+Some endpoints are more expensive or more sensitive and carry a tighter ceiling:
+
+| Endpoint | Limit |
+|---|---|
+| `POST /v1/fx/quote` | 30 / minute per IP |
+| `GET /v1/fx/rate` | 30 / minute per IP |
+| `POST /v1/fx/exchange` | 10 / minute per IP |
+| `POST /v1/api-keys` | Reduced (sensitive operations ceiling) |
+| `POST /v1/api-keys/{id}/revoke` | Reduced (sensitive operations ceiling) |
+| `POST /v1/webhooks/{id}/test` | Reduced (sensitive operations ceiling) |
+| `POST /v1/merchant/security/portal-link` | Reduced (sensitive operations ceiling) |
+
+**Sensitive operations** — key lifecycle, webhook test sends, admin portal link issuance — run under a lower per-merchant ceiling to prevent abuse. Normal integration traffic will not reach it.
+
+## Headers on every response
+
+| Header | Value |
+|---|---|
+| `X-RateLimit-Limit` | Maximum requests permitted in the current window. |
+| `X-RateLimit-Remaining` | Requests remaining in the current window. |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the current window resets. |
+
+When you exceed a limit, Anton returns `429 Too Many Requests` with an additional header:
+
+| Header | Value |
+|---|---|
+| `Retry-After` | Seconds to wait before retrying. |
+
+Response body:
+
+```json
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Rate limit exceeded. Retry after 42 seconds."
+  }
+}
+```
+
+## Handling 429
+
+Treat `429` as transient. Back off for at least the number of seconds in `Retry-After` before retrying. Use jittered exponential backoff when retrying many requests at once — retrying everything at the exact `Retry-After` moment creates a thundering herd that trips the limiter again.
+
+<CodeGroup>
+
+```bash cURL
+retry() {
+  local url=$1
+  for attempt in 1 2 3 4 5; do
+    response=$(curl -sS -D /tmp/hdr -o /tmp/body -w "%{http_code}" "$url" \
+      -H "Authorization: Bearer $ANTON_API_KEY")
+    if [ "$response" != "429" ]; then
+      cat /tmp/body
+      return 0
+    fi
+    retry_after=$(grep -i '^retry-after:' /tmp/hdr | awk '{print $2}' | tr -d '\r')
+    sleep "${retry_after:-1}"
+  done
+  echo "rate limit: retry budget exhausted" >&2
+  return 1
+}
+```
+
+```javascript JavaScript
+async function requestWithBackoff(url, init = {}, attempt = 1) {
+  const response = await fetch(url, init);
+  if (response.status !== 429) return response;
+
+  if (attempt > 5) throw new Error("rate limit: retry budget exhausted");
+
+  const retryAfter = Number(response.headers.get("retry-after")) || 1;
+  const jitter = Math.random() * 500;
+  await new Promise((r) => setTimeout(r, retryAfter * 1000 + jitter));
+
+  return requestWithBackoff(url, init, attempt + 1);
+}
+```
+
+```php PHP
+function requestWithBackoff(string $url, array $opts, int $attempt = 1): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, $opts + [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+    ]);
+    $raw = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($status !== 429) return $raw;
+    if ($attempt > 5) throw new RuntimeException("rate limit: retry budget exhausted");
+
+    preg_match('/retry-after:\s*(\d+)/i', $raw, $m);
+    $wait = ((int)($m[1] ?? 1)) + (mt_rand(0, 500) / 1000);
+    usleep((int)($wait * 1_000_000));
+
+    return requestWithBackoff($url, $opts, $attempt + 1);
+}
+```
+
+```go Go
+func DoWithBackoff(req *http.Request) (*http.Response, error) {
+    for attempt := 1; attempt <= 5; attempt++ {
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+            return nil, err
+        }
+        if resp.StatusCode != http.StatusTooManyRequests {
+            return resp, nil
+        }
+        retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+        if retryAfter < 1 {
+            retryAfter = 1
+        }
+        resp.Body.Close()
+        jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+        time.Sleep(time.Duration(retryAfter)*time.Second + jitter)
+    }
+    return nil, errors.New("rate limit: retry budget exhausted")
+}
+```
+
+</CodeGroup>
+
+## Requesting a higher limit
+
+Merchants with sustained high-volume needs can request a raised global ceiling. Reach out via [help.antonpayments.com](https://help.antonpayments.com) with your use case and expected traffic profile.

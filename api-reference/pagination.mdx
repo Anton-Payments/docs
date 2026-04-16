@@ -1,0 +1,171 @@
+---
+title: "Pagination"
+sidebarTitle: "Pagination"
+description: "All list endpoints use cursor-based pagination."
+---
+
+Every `GET` endpoint that returns a collection paginates with opaque cursors. There are no page numbers, no offsets, no totals — cursors are forward-only pointers into the result set.
+
+## Parameters
+
+| Parameter | Type | Default | Max | Description |
+|---|---|---|---|---|
+| `limit` | integer | 20 | 100 | Items per page. |
+| `cursor` | string | — | — | Opaque cursor from a previous response. Omit to start from the beginning. |
+
+## Response envelope
+
+```json
+{
+  "data": [
+    { "id": "pay_abc123", "status": "completed", "amount": "500.00" },
+    { "id": "pay_def456", "status": "processing", "amount": "1200.00" }
+  ],
+  "has_more": true,
+  "next_cursor": "eyJpZCI6InBheV9kZWY0NTYifQ"
+}
+```
+
+| Field | Description |
+|---|---|
+| `data` | Array of results for this page. |
+| `has_more` | `true` if more results exist beyond this page. |
+| `next_cursor` | Cursor to pass in the next request. Present only when `has_more` is `true`. |
+
+The last page omits `next_cursor` and sets `has_more` to `false`:
+
+```json
+{
+  "data": [
+    { "id": "pay_xyz789", "status": "completed", "amount": "300.00" }
+  ],
+  "has_more": false
+}
+```
+
+## Iterating through pages
+
+<CodeGroup>
+
+```bash cURL
+# First page
+curl "https://api.antonpayments.dev/v1/payouts?limit=100" \
+  -H "Authorization: Bearer ak_test_..."
+
+# Subsequent page — pass next_cursor from the prior response as cursor
+curl "https://api.antonpayments.dev/v1/payouts?limit=100&cursor=eyJpZCI6InBheV9kZWY0NTYifQ" \
+  -H "Authorization: Bearer ak_test_..."
+```
+
+```javascript JavaScript
+async function listAllPayouts(apiKey) {
+  const payouts = [];
+  let cursor;
+
+  while (true) {
+    const url = new URL("https://api.antonpayments.dev/v1/payouts");
+    url.searchParams.set("limit", "100");
+    if (cursor) url.searchParams.set("cursor", cursor);
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const page = await response.json();
+    payouts.push(...page.data);
+
+    if (!page.has_more) break;
+    cursor = page.next_cursor;
+  }
+
+  return payouts;
+}
+```
+
+```php PHP
+function listAllPayouts(string $apiKey): array {
+    $payouts = [];
+    $cursor = null;
+
+    while (true) {
+        $query = http_build_query(array_filter([
+            'limit' => 100,
+            'cursor' => $cursor,
+        ]));
+
+        $ch = curl_init("https://api.antonpayments.dev/v1/payouts?$query");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["Authorization: Bearer $apiKey"],
+        ]);
+        $page = json_decode(curl_exec($ch), true);
+        curl_close($ch);
+
+        $payouts = array_merge($payouts, $page['data']);
+
+        if (!$page['has_more']) break;
+        $cursor = $page['next_cursor'];
+    }
+
+    return $payouts;
+}
+```
+
+```go Go
+func ListAllPayouts(apiKey string) ([]Payout, error) {
+    var payouts []Payout
+    cursor := ""
+
+    for {
+        u, _ := url.Parse("https://api.antonpayments.dev/v1/payouts")
+        q := u.Query()
+        q.Set("limit", "100")
+        if cursor != "" {
+            q.Set("cursor", cursor)
+        }
+        u.RawQuery = q.Encode()
+
+        req, _ := http.NewRequest("GET", u.String(), nil)
+        req.Header.Set("Authorization", "Bearer "+apiKey)
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+            return nil, err
+        }
+
+        var page struct {
+            Data       []Payout `json:"data"`
+            HasMore    bool     `json:"has_more"`
+            NextCursor string   `json:"next_cursor"`
+        }
+        json.NewDecoder(resp.Body).Decode(&page)
+        resp.Body.Close()
+
+        payouts = append(payouts, page.Data...)
+
+        if !page.HasMore {
+            break
+        }
+        cursor = page.NextCursor
+    }
+
+    return payouts, nil
+}
+```
+
+</CodeGroup>
+
+## Rules
+
+<AccordionGroup>
+  <Accordion title="Use the maximum page size">
+    Set `limit=100` to minimize round trips when fetching large result sets.
+  </Accordion>
+  <Accordion title="Stop when has_more is false">
+    `has_more` is the only correct termination signal. Don't compare `len(data)` to `limit` — the last page may be full.
+  </Accordion>
+  <Accordion title="Cursors are opaque">
+    Treat cursor values as opaque strings. Do not parse, modify, or construct them. Always pass the exact `next_cursor` value returned by the API.
+  </Accordion>
+  <Accordion title="Cursors don't expire">
+    Cursor values remain valid indefinitely. You can store a cursor and resume pagination later — useful for long-running exports.
+  </Accordion>
+</AccordionGroup>

@@ -1,89 +1,86 @@
 ---
 title: "Authentication"
-sidebarTitle: "Authentication"
-description: "How to authenticate your requests to the Anton Payments API using API keys."
+description: "Anton authenticates API calls with per-merchant API keys. Keys are scoped to a single environment and carry full merchant privileges — treat them as bearer credentials."
 ---
 
-## API keys
+Every request to the Anton Payments API requires an `Authorization` header carrying a bearer API key:
 
-Every request to the Anton Payments API must include an API key in the `Authorization` header using the Bearer scheme:
-
-```bash
-Authorization: Bearer ak_test_your_key_here
+```http
+Authorization: Bearer ak_live_kS2f...
 ```
 
-API keys are created and managed in the [merchant portal](https://app.antonpayments.com). Navigate to **Settings > API Keys** to generate, view, and revoke keys.
+Requests without a valid key return `401 Unauthorized`. Requests with a key from the wrong environment return `401` with `code: "key_environment_mismatch"`.
 
 ## Key formats
 
-API keys are prefixed to indicate their environment:
+| Prefix | Environment | Base URL |
+|---|---|---|
+| `ak_live_` | Production | `https://api.antonpayments.com` |
+| `ak_test_` | Sandbox | `https://api.antonpayments.dev` |
 
-| Prefix | Environment | Purpose |
-|--------|-------------|---------|
-| `ak_test_` | Sandbox | Testing and development -- no real money moves |
-| `ak_live_` | Production | Real payouts with real money |
+A test key will be rejected in production. A live key will be rejected in sandbox. A leaked key only exposes one environment's data.
 
-<Warning>
-  **Never expose live API keys.** Store them in environment variables or a secrets manager. Never commit them to version control, embed them in client-side code, or log them.
-</Warning>
+## Using a key
 
-## Key management
+<CodeGroup>
 
-You create, view, and revoke API keys through the merchant portal at **Settings > API Keys**. There is no API endpoint for key management -- all key operations are performed in the portal.
-
-### Creating a key
-
-1. Log in to the [merchant portal](https://app.antonpayments.com)
-2. Navigate to **Settings > API Keys**
-3. Select the environment (sandbox or production)
-4. Click **Create Key** and give it a descriptive name (e.g., "Production server", "Staging CI")
-
-<Info>
-  The full API key is displayed **once** at creation time. We hash keys with SHA-256 before storage -- we cannot retrieve the original key for you. Copy it immediately and store it in your secrets manager.
-</Info>
-
-### Revoking a key
-
-If a key is compromised, revoke it immediately from the merchant portal:
-
-1. Navigate to **Settings > API Keys**
-2. Find the key and click **Revoke**
-3. Confirm the revocation
-
-Revoked keys stop working immediately. There is no undo.
-
-## Security best practices
-
-<AccordionGroup>
-  <Accordion title="Rotate keys regularly" icon="arrows-rotate">
-    Create a new key, update your systems to use it, then revoke the old key. This limits exposure if a key is leaked.
-  </Accordion>
-  <Accordion title="Use separate keys per environment" icon="layer-group">
-    Never use production keys in development. Create dedicated test keys for sandbox.
-  </Accordion>
-  <Accordion title="Restrict to server-side only" icon="server">
-    API keys should only be used from your backend servers. Never include them in mobile apps, browser JavaScript, or client-side code.
-  </Accordion>
-  <Accordion title="Monitor key usage" icon="chart-line">
-    Review your API key list periodically in the merchant portal. Revoke any keys that are no longer in use or that you do not recognize.
-  </Accordion>
-</AccordionGroup>
-
-## Error responses
-
-If authentication fails, you receive a `401 Unauthorized` response:
-
-```json
-{
-  "error": {
-    "code": 401,
-    "message": "Invalid or missing API key"
-  }
-}
+```bash cURL
+curl https://api.antonpayments.dev/v1/beneficiaries \
+  -H "Authorization: Bearer ak_test_kS2f..."
 ```
 
-Common causes:
-- Missing `Authorization` header
-- Malformed header (must be `Bearer <key>`, not just the key)
-- Revoked key
-- Using a test key against the production URL (or vice versa)
+```javascript JavaScript
+const response = await fetch("https://api.antonpayments.dev/v1/beneficiaries", {
+  headers: {
+    Authorization: `Bearer ${process.env.ANTON_API_KEY}`,
+  },
+});
+const data = await response.json();
+```
+
+```php PHP
+$ch = curl_init("https://api.antonpayments.dev/v1/beneficiaries");
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "Authorization: Bearer " . getenv("ANTON_API_KEY"),
+]);
+$response = curl_exec($ch);
+curl_close($ch);
+```
+
+```go Go
+req, _ := http.NewRequest("GET", "https://api.antonpayments.dev/v1/beneficiaries", nil)
+req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
+resp, err := http.DefaultClient.Do(req)
+```
+
+</CodeGroup>
+
+## Creating and rotating keys
+
+API keys are created and managed in the [merchant dashboard](https://app.antonpayments.com). Keys are only shown once at creation — store them in your secrets manager immediately. Anton does not retain the plaintext and cannot recover a lost key.
+
+To rotate:
+
+<Steps>
+  <Step title="Create a new key">
+    Generate a new key in the dashboard. Label it with the service or environment that will use it.
+  </Step>
+  <Step title="Deploy the new key">
+    Update your secrets store and roll out the new key. Verify traffic is flowing against it.
+  </Step>
+  <Step title="Revoke the old key">
+    Only after the new key is serving all traffic, revoke the old one from the dashboard. Revocation is immediate and cannot be undone.
+  </Step>
+</Steps>
+
+## If a key is exposed
+
+Revoke it immediately from the dashboard, then review your merchant audit log for any unexpected activity. Contact [help.antonpayments.com](https://help.antonpayments.com) if the leaked key belonged to production.
+
+## Requirements
+
+- **Use HTTPS.** Anton only accepts TLS 1.2+ connections. Plaintext requests are dropped at the edge.
+- **Never commit keys to source control.** Use environment variables or a dedicated secrets manager.
+- **Never include keys in frontend code.** All API calls must originate from a trusted backend.
+- **Prefer one key per service.** Narrower blast radius when a key needs to be rotated.

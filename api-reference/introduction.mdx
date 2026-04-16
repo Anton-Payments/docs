@@ -1,89 +1,54 @@
 ---
 title: "API Reference"
 sidebarTitle: "Overview"
-description: "Complete reference for the Anton Payments REST API."
+description: "The Anton Payments merchant API. Versioned, idempotent, cursor-paginated."
 ---
 
-## Base URL
+The Anton API is a REST API over HTTPS. All requests and responses are JSON. All dates are ISO 8601 UTC. All monetary amounts are **decimal strings** — never floats — to avoid rounding errors.
 
-<CodeGroup>
+## Base URLs
 
-```bash Production
-https://api.antonpayments.com
-```
-
-```bash Sandbox
-https://api.antonpayments.dev
-```
-
-</CodeGroup>
+| Environment | Base URL |
+|---|---|
+| Production | `https://api.antonpayments.com` |
+| Sandbox | `https://api.antonpayments.dev` |
 
 ## Authentication
 
-All requests require an API key in the `Authorization` header:
+Every request requires a bearer API key in the `Authorization` header. See [Authentication](/authentication) for details.
 
-```bash
-Authorization: Bearer ak_live_your_key_here
+```http
+Authorization: Bearer ak_test_...
 ```
 
-Use `ak_test_*` keys for sandbox and `ak_live_*` keys for production. See [Authentication](/authentication) for details.
+## Conventions
 
-## Request format
+- **Versioning.** All endpoints live under `/v1/`. Breaking changes ship as a new version; `/v1/` remains available for the life of the contract.
+- **JSON.** Request bodies are `application/json`. Field names are `snake_case`. Unknown fields in requests are rejected with `422`.
+- **Amounts.** Monetary values are strings: `"1234.56"`, not `1234.56`. Parse them as decimals, not floats.
+- **Timestamps.** RFC 3339 / ISO 8601 in UTC: `"2026-04-15T13:45:02Z"`.
+- **Identifiers.** Prefixed opaque strings: `pay_...`, `ben_...`, `mer_...`, `ins_...`, `bat_...`, `wbh_...`. Treat them as opaque — do not parse or compare substrings.
+- **Errors.** Every error response follows a consistent envelope with a machine-readable `code` and a human-readable `message`. See [Errors](/api-reference/errors).
 
-- Request bodies use `Content-Type: application/json`
-- All monetary amounts are strings (e.g., `"500.00"`) to avoid floating-point precision issues
-- Dates use ISO 8601 format (`2026-02-14T10:30:00Z`)
-- IDs are prefixed strings (e.g., `pay_`, `pye_`, `ins_`, `batch_`)
+## Cross-cutting topics
 
-## Response format
-
-All successful responses are wrapped in a `data` envelope:
-
-```json Single resource
-{
-  "data": {
-    "id": "pay_cng3q8s6ek9kc5qg1h2g",
-    "status": "completed",
-    "source_amount": "500.00"
-  }
-}
-```
-
-```json List response
-{
-  "data": [
-    { "id": "pay_abc123" },
-    { "id": "pay_def456" }
-  ],
-  "has_more": true,
-  "next_cursor": "pay_def456"
-}
-```
-
-See [Pagination](/concepts/pagination) for details on cursor-based pagination.
-
-## Idempotency
-
-Financial mutation endpoints (create payout, confirm batch, execute FX exchange) require an `Idempotency-Key` header. See [Idempotency](/concepts/idempotency) for details.
-
-## Rate limiting
-
-Requests are rate-limited per merchant (1,000 requests/minute). Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header.
-
-## Resources
-
-| Resource | Endpoint | Description |
-|----------|----------|-------------|
-| [Reference Data](/api-reference/reference-data/list-currencies) | `/v1/currencies`, `/v1/countries`, `/v1/payment-methods` | Supported currencies, countries, and payment methods |
-| [Payouts](/api-reference/payouts/create-payout) | `/v1/payouts` | Create and track cross-border payouts |
-| [Payees](/api-reference/payees/create-payee) | `/v1/payees` | Manage payout recipients |
-| [Instruments](/api-reference/instruments/list-instruments) | `/v1/instruments` | Payment methods attached to payees |
-| [Balances](/api-reference/balances/list-balances) | `/v1/balances` | Merchant funding balances by currency |
-| [Accounts](/api-reference/accounts/list-accounts) | `/v1/accounts` | Funding accounts and transaction history |
-| [Batches](/api-reference/batches/upload-batch) | `/v1/batches` | Bulk payout uploads via CSV/XLSX |
-| [Webhooks](/api-reference/webhooks/create-webhook-subscription) | `/v1/webhooks` | Real-time event notifications |
-| [Documents](/api-reference/documents/upload-document) | `/v1/documents` | Upload compliance documents |
-| [RFIs](/api-reference/rfis/list-rfis) | `/v1/rfis` | Respond to compliance requests |
-| [Pricing](/api-reference/pricing/list-merchant-pricing) | `/v1/pricing` | View pricing plans and fee quotes |
-| [FX](/api-reference/fx/create-fx-quote) | `/v1/fx` | Foreign exchange quoting and conversion |
-| [Corridors](/api-reference/corridors/list-corridors) | `/v1/corridors` | Available payment corridors |
+<CardGroup cols={2}>
+  <Card title="Idempotency" icon="rotate" href="/api-reference/idempotency">
+    Safely retry any mutation with `Idempotency-Key`.
+  </Card>
+  <Card title="Pagination" icon="list" href="/api-reference/pagination">
+    Cursor-based pagination on every list endpoint.
+  </Card>
+  <Card title="Rate limits" icon="gauge-high" href="/api-reference/rate-limits">
+    Per-merchant and per-endpoint request ceilings.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/api-reference/errors">
+    Error envelope, status codes, and remediation.
+  </Card>
+  <Card title="Webhook events" icon="bolt" href="/api-reference/webhook-events">
+    Every event type and its payload schema.
+  </Card>
+  <Card title="Webhook signing" icon="signature" href="/api-reference/webhook-signing">
+    Verify signatures on every incoming delivery.
+  </Card>
+</CardGroup>

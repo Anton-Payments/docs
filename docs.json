@@ -10,7 +10,8 @@
   "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "dark": "/logo/dark.svg",
+    "href": "/introduction"
   },
   "appearance": {
     "default": "system"
@@ -41,7 +42,7 @@
       "display": "interactive"
     },
     "examples": {
-      "languages": ["bash", "javascript", "python", "go"]
+      "languages": ["bash", "javascript", "php", "go"]
     }
   },
   "search": {
@@ -53,35 +54,38 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "Get Started",
             "pages": [
               "introduction",
               "quickstart",
               "authentication",
-              "environments"
-            ]
-          },
-          {
-            "group": "Core Concepts",
-            "pages": [
-              "concepts/payouts",
-              "concepts/beneficiaries",
-              "concepts/balances",
-              "concepts/webhooks",
-              "concepts/pagination",
-              "concepts/errors",
-              "concepts/idempotency"
+              "environments",
+              "how-anton-evaluates-payouts"
             ]
           },
           {
             "group": "Guides",
             "pages": [
               "guides/send-a-payout",
+              "guides/crypto-payouts",
               "guides/manage-beneficiaries",
               "guides/handle-webhooks",
               "guides/batch-payouts",
-              "guides/error-handling",
+              "guides/fx-exchange",
               "guides/going-live"
+            ]
+          },
+          {
+            "group": "Sandbox",
+            "pages": [
+              "sandbox/overview",
+              "sandbox/test-data"
+            ]
+          },
+          {
+            "group": "Changelog",
+            "pages": [
+              "changelog"
             ]
           }
         ]
@@ -96,11 +100,50 @@
             ]
           },
           {
+            "group": "Cross-Cutting",
+            "pages": [
+              "api-reference/idempotency",
+              "api-reference/pagination",
+              "api-reference/rate-limits",
+              "api-reference/errors",
+              "api-reference/webhook-events",
+              "api-reference/webhook-signing",
+              "api-reference/ip-allowlist"
+            ]
+          },
+          {
             "group": "Reference Data",
             "pages": [
               "api-reference/reference-data/list-currencies",
               "api-reference/reference-data/list-countries",
               "api-reference/reference-data/list-payment-methods"
+            ]
+          },
+          {
+            "group": "Beneficiaries",
+            "pages": [
+              "api-reference/beneficiaries/create-beneficiary",
+              "api-reference/beneficiaries/list-beneficiaries",
+              "api-reference/beneficiaries/get-beneficiary",
+              "api-reference/beneficiaries/update-beneficiary",
+              "api-reference/beneficiaries/delete-beneficiary",
+              "api-reference/beneficiaries/get-beneficiary-pii",
+              "api-reference/beneficiaries/update-beneficiary-pii",
+              "api-reference/beneficiaries/archive-beneficiary",
+              "api-reference/beneficiaries/restore-beneficiary"
+            ]
+          },
+          {
+            "group": "Instruments",
+            "pages": [
+              "api-reference/instruments/create-instrument-for-beneficiary",
+              "api-reference/instruments/list-instruments-for-beneficiary",
+              "api-reference/instruments/list-instruments",
+              "api-reference/instruments/list-instrument-countries",
+              "api-reference/instruments/list-instrument-methods",
+              "api-reference/instruments/get-instrument",
+              "api-reference/instruments/update-instrument",
+              "api-reference/instruments/delete-instrument"
             ]
           },
           {
@@ -114,25 +157,17 @@
             ]
           },
           {
-            "group": "Payees",
+            "group": "Batches",
             "pages": [
-              "api-reference/payees/create-payee",
-              "api-reference/payees/list-payees",
-              "api-reference/payees/get-payee",
-              "api-reference/payees/update-payee",
-              "api-reference/payees/update-payee-pii",
-              "api-reference/payees/delete-payee"
-            ]
-          },
-          {
-            "group": "Instruments",
-            "pages": [
-              "api-reference/instruments/create-instrument-for-payee",
-              "api-reference/instruments/list-instruments-by-payee",
-              "api-reference/instruments/list-instruments",
-              "api-reference/instruments/get-instrument",
-              "api-reference/instruments/update-instrument",
-              "api-reference/instruments/delete-instrument"
+              "api-reference/batches/download-batch-template",
+              "api-reference/batches/upload-batch",
+              "api-reference/batches/list-batches",
+              "api-reference/batches/get-batch",
+              "api-reference/batches/confirm-batch",
+              "api-reference/batches/cancel-batch",
+              "api-reference/batches/list-batch-payouts",
+              "api-reference/batches/list-batch-errors",
+              "api-reference/batches/list-batch-results"
             ]
           },
           {
@@ -153,40 +188,28 @@
             ]
           },
           {
-            "group": "Batches",
-            "pages": [
-              "api-reference/batches/download-batch-template",
-              "api-reference/batches/upload-batch",
-              "api-reference/batches/list-batches",
-              "api-reference/batches/get-batch",
-              "api-reference/batches/confirm-batch",
-              "api-reference/batches/cancel-batch",
-              "api-reference/batches/list-batch-payouts",
-              "api-reference/batches/get-batch-errors",
-              "api-reference/batches/get-batch-results"
-            ]
-          },
-          {
             "group": "Webhooks",
             "pages": [
               "api-reference/webhooks/create-webhook-subscription",
               "api-reference/webhooks/list-webhook-subscriptions",
               "api-reference/webhooks/get-webhook-subscription",
+              "api-reference/webhooks/delete-webhook-subscription",
               "api-reference/webhooks/get-webhook-secret",
               "api-reference/webhooks/rotate-webhook-secret",
               "api-reference/webhooks/test-webhook-subscription",
               "api-reference/webhooks/deactivate-webhook-subscription",
-              "api-reference/webhooks/delete-webhook-subscription",
               "api-reference/webhooks/list-webhook-events",
               "api-reference/webhooks/get-webhook-event",
-              "api-reference/webhooks/list-webhook-event-deliveries"
+              "api-reference/webhooks/list-webhook-deliveries"
             ]
           },
           {
             "group": "Documents",
             "pages": [
               "api-reference/documents/upload-document",
-              "api-reference/documents/list-documents"
+              "api-reference/documents/list-documents",
+              "api-reference/documents/get-document",
+              "api-reference/documents/get-document-download-url"
             ]
           },
           {
@@ -218,6 +241,23 @@
             "pages": [
               "api-reference/corridors/list-corridors"
             ]
+          },
+          {
+            "group": "Balance Alerts",
+            "pages": [
+              "api-reference/balance-alerts/list-balance-alerts",
+              "api-reference/balance-alerts/get-balance-alert",
+              "api-reference/balance-alerts/upsert-balance-alert",
+              "api-reference/balance-alerts/delete-balance-alert"
+            ]
+          },
+          {
+            "group": "Sandbox",
+            "pages": [
+              "api-reference/sandbox/reset-sandbox",
+              "api-reference/sandbox/seed-sample-beneficiaries",
+              "api-reference/sandbox/seed-sample-payouts"
+            ]
           }
         ]
       }
@@ -231,14 +271,18 @@
         },
         {
           "anchor": "Support",
-          "href": "mailto:support@antonpayments.com",
-          "icon": "envelope"
+          "href": "https://help.antonpayments.com",
+          "icon": "life-ring"
         }
       ]
     }
   },
   "navbar": {
     "links": [
+      {
+        "label": "Website",
+        "href": "https://www.antonpayments.com"
+      },
       {
         "label": "Dashboard",
         "href": "https://app.antonpayments.com"
@@ -253,8 +297,7 @@
   "footer": {
     "socials": {
       "github": "https://github.com/anton-payments",
-      "linkedin": "https://linkedin.com/company/antonpayments",
-      "x": "https://x.com/antonpayments"
+      "linkedin": "https://linkedin.com/company/antonpayments"
     }
   },
   "contextual": {
