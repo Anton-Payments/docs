@@ -153,6 +153,7 @@
               "api-reference/payouts/list-payouts",
               "api-reference/payouts/get-payout",
               "api-reference/payouts/list-payout-events",
+              "api-reference/payouts/get-payout-velocity-results",
               "api-reference/payouts/cancel-payout"
             ]
           },
@@ -257,6 +258,61 @@
               "api-reference/sandbox/reset-sandbox",
               "api-reference/sandbox/seed-sample-beneficiaries",
               "api-reference/sandbox/seed-sample-payouts"
+            ]
+          },
+          {
+            "group": "Merchant",
+            "pages": [
+              "api-reference/merchant/get-merchant",
+              "api-reference/merchant/update-merchant-profile"
+            ]
+          },
+          {
+            "group": "API Keys",
+            "pages": [
+              "api-reference/api-keys/list-api-keys",
+              "api-reference/api-keys/create-api-key",
+              "api-reference/api-keys/revoke-api-key"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api-reference/users/get-me",
+              "api-reference/users/list-team-users",
+              "api-reference/users/invite-team-user"
+            ]
+          },
+          {
+            "group": "Notifications",
+            "pages": [
+              "api-reference/notifications/rotate-channel-secret"
+            ]
+          },
+          {
+            "group": "Velocity",
+            "pages": [
+              "api-reference/velocity/list-velocity-rules",
+              "api-reference/velocity/create-velocity-rule",
+              "api-reference/velocity/update-velocity-rule",
+              "api-reference/velocity/delete-velocity-rule",
+              "api-reference/velocity/simulate-velocity"
+            ]
+          },
+          {
+            "group": "Engine",
+            "pages": [
+              "api-reference/engine/get-engine-dashboard",
+              "api-reference/engine/get-beneficiary-engine-verdict",
+              "api-reference/engine/get-payout-engine-verdict"
+            ]
+          },
+          {
+            "group": "Onboarding",
+            "pages": [
+              "api-reference/onboarding/get-onboarding",
+              "api-reference/onboarding/update-onboarding",
+              "api-reference/onboarding/submit-onboarding"
             ]
           }
         ]

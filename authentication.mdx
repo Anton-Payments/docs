@@ -3,13 +3,21 @@ title: "Authentication"
 description: "Anton authenticates API calls with per-merchant API keys. Keys are scoped to a single environment and carry full merchant privileges — treat them as bearer credentials."
 ---
 
-Every request to the Anton Payments API requires an `Authorization` header carrying a bearer API key:
+Every request to the Anton Payments API requires an `Authorization` header carrying a bearer credential. The merchant surface accepts **two credential types on the same routes**:
+
+- **API keys** (`ak_live_*` / `ak_test_*`) — for server-to-server integrations.
+- **WorkOS portal JWTs** — issued to users signed in to the merchant dashboard. JWTs carry the authenticated user plus their merchant org and role.
+
+Both are presented the same way:
 
 ```http
 Authorization: Bearer ak_live_kS2f...
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6...
 ```
 
-Requests without a valid key return `401 Unauthorized`. Requests with a key from the wrong environment return `401` with `code: "key_environment_mismatch"`.
+This **dual-auth** model means an endpoint like `POST /v1/payouts` works identically whether it's hit by a headless job using an API key or by a merchant user driving the dashboard. Role-based permissions (`payouts.create`, `settings.update`, `apikeys.view`, etc.) are enforced consistently across both.
+
+Requests without a valid credential return `401 Unauthorized`. API keys used against the wrong environment return `401` with `code: "key_environment_mismatch"`.
 
 ## Key formats
 
