@@ -1,0 +1,41 @@
+# Technical terms that appear in the Anton Payments public docs.
+# One term per line. Vale treats entries as regex-ready tokens; case
+# variants are honoured exactly. Keep sorted within sections.
+
+# API / web concepts
+backoff
+Bindable
+booleans
+deduplicate
+Deduplication
+hostname
+hostnames
+idempotency
+Idempotency
+idempotencyKey
+idempotency_conflict
+insufficient_balance
+loopback
+misconfiguration
+param
+plaintext
+Plaintext
+rate_limit_exceeded
+replayable
+request_id
+requestId
+Resave
+rollout
+tokenization
+velocity_blocked
+
+# Abbreviations / plurals
+JWTs
+NATs
+RFIs
+
+# Finance / operations
+counterparty
+
+# Python keywords that appear in code samples and Vale flags
+elif

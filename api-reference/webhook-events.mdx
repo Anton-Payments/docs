@@ -533,7 +533,7 @@ Fires when compliance screening returns a possible match that requires manual re
 
 ### `balance.low`
 
-Fires when a merchant's available balance drops below a configured low-balance threshold. Thresholds are configured per `(merchant, currency)` pair — one threshold per pair — either in the merchant dashboard or via the [Balance Alerts API](/api-reference/balance-alerts/upsert-balance-alert). The event uses **latching** semantics to prevent spam while the balance oscillates around the threshold:
+Fires when a merchant's available balance drops below a configured low-balance threshold. Thresholds are configured per `(merchant, currency)` pair — one threshold per pair — in the merchant dashboard. The event uses **latching** semantics to prevent spam while the balance oscillates around the threshold:
 
 - Fires once when the available balance transitions from at-or-above the threshold to below it.
 - Does not fire again while the balance remains below the threshold.

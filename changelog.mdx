@@ -3,17 +3,33 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
-<Note>
-  Placeholder. Changelog entries should include:
-  - Date and version (semver)
-  - Category (Added / Changed / Deprecated / Removed / Fixed / Security)
-  - Affected endpoints or areas
-  - Migration notes for breaking changes
+## v1.0.0 — 2026-04-18
 
-  Deprecation policy and sunset timelines also live here.
-</Note>
+The v1.0.0 merchant contract is now frozen. Merchant integrations built against this surface will not break in minor or patch releases. Breaking changes will only arrive in a future v2.
 
-## Unreleased
+### Added
 
-- Rewriting documentation structure and rebuilding the OpenAPI specification from the canonical merchant routes.
-- Renaming `/v1/payees` → `/v1/beneficiaries` (in progress). The legacy path will remain as a deprecated alias during the transition.
+- **Bindable pricing quotes.** `POST /v1/pricing/quote` now returns `quote_id` (prefix `pq_`) and `expires_at`. Pass `quote_id` on `POST /v1/payouts` to lock the quoted fee. Missing or mismatched quotes surface as `422 quote_expired` / `422 quote_already_used` / `422 quote_mismatch`.
+- **Per-merchant rate limits.** The 1,000 requests-per-minute base quota is per **merchant** (not per IP). Multi-seat merchants behind shared egress NATs now get coherent quota accounting. Specific merchants can be provisioned at 2×/5×/10×/20× the base by contacting support.
+- **Sandbox seeding.** `POST /v1/merchant/sandbox/reset`, `/seed-beneficiaries`, and `/seed-payouts` produce deterministic fixtures for SDK testing in the sandbox environment.
+
+### Changed
+
+- **Cursor pagination everywhere.** Every list endpoint uses `limit` + opaque `cursor` with `{ data, has_more, next_cursor }`. Legacy `offset` pagination has been removed.
+- **Monetary amounts are decimal strings, scaled per currency.** Amount fields are always emitted at the currency's canonical scale (USD/EUR at 2 decimals, JPY at 0, BHD at 3, BTC at 8, USDC at 6). Never parse as a float.
+- **ID prefix scheme normalised.** `pay_*` (payouts), `ben_*` (beneficiaries), `ins_*` (instruments), `bat_*` (batches), `whk_*` (webhook subscriptions), `evt_*` (events), `dlv_*` (deliveries), `pq_*` (pricing quotes), `fxq_*` (FX quotes), `fxx_*` (FX exchanges), `mer_*` (merchant). Your API-key secrets are issued by the dashboard with the `ak_live_*` / `ak_test_*` prefix.
+- **Corridor responses no longer expose `provider`.** Anton's rail graph is a commercial secret; the merchant view emits only the merchant-observable fields.
+- **Timestamps are RFC 3339 with nanosecond precision, in UTC.**
+- **Webhook secret rotation.** `POST /v1/webhooks/{id}/secret/rotate` returns a fresh raw secret **exactly once**; `GET /v1/webhooks/{id}/secret` thereafter returns only the masked suffix (`***xxxx`). Webhook creates also echo the raw secret once in the create response.
+- **Idempotency scoping.** `Idempotency-Key` is scoped per `(merchant, path, body)` — cross-merchant collisions are impossible. Replays of identical bodies return the original response; replays with a different body return `409 idempotency_conflict`.
+
+### Security
+
+- **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity — not even as booleans. Anton-network intelligence is aggregated only into opaque verification signals that are indistinguishable from external-provider outcomes.
+- **PII isolation.** All beneficiary PII and payment instrument details are tokenized in Basis Theory. Raw values are only ever returned from the dedicated `GET /v1/beneficiaries/{id}/pii` endpoint.
+
+---
+
+## Pre-v1.0.0 notes
+
+Early access and beta entries are retained in internal changelogs. Anything on the merchant surface prior to 2026-04-18 should be treated as unsupported.

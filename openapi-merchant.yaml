@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Anton Payments API
-  version: 1.0.0-beta
+  version: 1.0.0
   summary: Cross-border payout infrastructure. Fiat, stablecoin, and crypto.
   description: |
     The Anton Payments merchant API. Versioned, idempotent, cursor-paginated.
@@ -61,6 +61,22 @@ tags:
     description: Per-currency low-balance thresholds that drive the `balance.low` webhook event.
   - name: Sandbox
     description: Reset and seed your sandbox environment.
+  - name: Merchant
+    description: Merchant profile, branding, preferences, and security posture.
+  - name: API Keys
+    description: Issue, list, and revoke API keys.
+  - name: Users
+    description: Self-service profile, MFA, and team management.
+  - name: Notifications
+    description: Per-user notification channels and preferences.
+  - name: Velocity
+    description: Merchant-scoped risk rules and what-if simulation.
+  - name: Engine
+    description: Glass-box view of Anton's risk intelligence.
+  - name: Onboarding
+    description: Authenticated KYB onboarding draft and submission.
+  - name: Public Onboarding
+    description: Session-authenticated hosted onboarding flow. Not intended for SDK consumption.
 
 paths:
   /v1/currencies:
@@ -1687,280 +1703,6 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /v1/documents:
-    post:
-      tags: [Documents]
-      summary: Upload a document
-      operationId: uploadDocument
-      description: |
-        Upload a supporting document — KYB evidence, beneficiary identity docs,
-        proof of source of funds for an RFI response, etc. Files are stored in
-        S3; only metadata is held in the database.
-
-        Supported types: PDF, JPEG, PNG. Maximum size: 20 MB.
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, category]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                category:
-                  type: string
-                  description: Document category (e.g. `kyb_incorporation`, `beneficiary_id`, `rfi_evidence`).
-                entity_type:
-                  type: string
-                  enum: [application, beneficiary, rfi]
-                  description: Entity this document is attached to.
-                entity_id:
-                  type: string
-                description:
-                  type: string
-                  maxLength: 500
-      responses:
-        '201':
-          description: Document uploaded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Document'
-        '400':
-          description: Missing file or unsupported MIME type.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '413':
-          description: '`file_too_large`.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    get:
-      tags: [Documents]
-      summary: List documents
-      operationId: listDocuments
-      description: Cursor-paginated list of documents uploaded on your account.
-      parameters:
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Cursor'
-        - name: entity_type
-          in: query
-          schema:
-            type: string
-            enum: [application, beneficiary, rfi]
-        - name: entity_id
-          in: query
-          schema:
-            type: string
-        - name: category
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [uploaded, accepted, rejected]
-      responses:
-        '200':
-          description: Paginated list.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/CursorList'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Document'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /v1/documents/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^doc_[a-zA-Z0-9]+$'
-    get:
-      tags: [Documents]
-      summary: Retrieve a document
-      operationId: getDocument
-      description: Return a document's metadata (but not its contents — see `/download`).
-      responses:
-        '200':
-          description: Document.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Document'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /v1/documents/{id}/download:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^doc_[a-zA-Z0-9]+$'
-    get:
-      tags: [Documents]
-      summary: Get a download URL
-      operationId: getDocumentDownloadURL
-      description: |
-        Return a short-lived pre-signed URL the merchant can GET to fetch the
-        document's bytes. The URL typically expires within a few minutes.
-      responses:
-        '200':
-          description: Pre-signed download URL.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [url, expires_at]
-                properties:
-                  url:
-                    type: string
-                    format: uri
-                  expires_at:
-                    $ref: '#/components/schemas/Timestamp'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /v1/rfis:
-    get:
-      tags: [RFIs]
-      summary: List RFIs
-      operationId: listRFIs
-      description: |
-        Cursor-paginated list of Requests for Information raised on your
-        merchant account. RFIs surface during payout review, beneficiary
-        onboarding, or periodic compliance checks.
-      parameters:
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Cursor'
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [open, responded, resolved, escalated]
-        - name: entity_type
-          in: query
-          schema:
-            type: string
-            enum: [payout, beneficiary, merchant]
-        - name: entity_id
-          in: query
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Paginated list.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/CursorList'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/RFI'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /v1/rfis/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^rfi_[a-zA-Z0-9]+$'
-    get:
-      tags: [RFIs]
-      summary: Retrieve an RFI
-      operationId: getRFI
-      responses:
-        '200':
-          description: RFI.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RFI'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /v1/rfis/{id}/respond:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^rfi_[a-zA-Z0-9]+$'
-    post:
-      tags: [RFIs]
-      summary: Respond to an RFI
-      operationId: respondToRFI
-      description: |
-        Submit a response to an open RFI. You can include supporting documents
-        by `document_id` (upload them first via `POST /v1/documents`).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [response]
-              properties:
-                response:
-                  type: string
-                  description: Free-form text response answering the RFI's questions.
-                document_ids:
-                  type: array
-                  description: IDs of supporting documents uploaded via `POST /v1/documents`.
-                  items:
-                    type: string
-                    pattern: '^doc_[a-zA-Z0-9]+$'
-      responses:
-        '200':
-          description: Response recorded. RFI moves to `responded` pending ops review.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RFI'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          description: '`rfi_respond_failed` — RFI is already resolved, expired, or in a state that cannot be responded to.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-
   /v1/pricing:
     get:
       tags: [Pricing]
@@ -1995,6 +1737,16 @@ paths:
         Preview the fee that would apply for a given source/destination pair
         and amount. Useful for surfacing fees to your end user before they
         confirm a payout.
+
+        **Bindable quotes (v1.0.0).** Every quote response includes a
+        `quote_id` (prefix `pq_`) and an `expires_at` timestamp. You can
+        bind the exact quoted fee to a subsequent payout by passing the
+        `quote_id` on `POST /v1/payouts`. If the quote has expired, been
+        already bound to another payout, or the payout's currencies/amount
+        don't match the quote, the payout create call returns
+        `422 quote_expired` / `422 quote_already_used` / `422 quote_mismatch`.
+        Omit `quote_id` on the payout to let the platform re-price at
+        submission time.
       requestBody:
         required: true
         content:
@@ -2020,6 +1772,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
                 properties:
                   fee:
                     $ref: '#/components/schemas/Money'
@@ -2031,6 +1784,12 @@ paths:
                   plan_id:
                     type: string
                     pattern: '^prc_[a-zA-Z0-9]+$'
+                  quote_id:
+                    type: string
+                    pattern: '^pq_[a-zA-Z0-9]+$'
+                    description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                  expires_at:
+                    $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -2237,43 +1996,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /v1/webhooks/{id}/secret/rotate:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
-    post:
-      tags: [Webhooks]
-      summary: Rotate the signing secret
-      operationId: rotateWebhookSecret
-      description: |
-        Generate a fresh signing secret. The old secret is invalidated immediately.
-        There is no overlap window — any delivery in flight may be signed with
-        either secret depending on when it was queued; plan rotations for a
-        quiet period.
-
-        The new secret is shown **once** in the response. Store it now.
-      responses:
-        '200':
-          description: Rotated. Response carries the new secret.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [secret]
-                properties:
-                  secret:
-                    type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-
   /v1/webhooks/{id}/test:
     parameters:
       - name: id
@@ -2437,117 +2159,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /v1/merchant/balance-alerts:
-    get:
-      tags: [Balance Alerts]
-      summary: List balance alert thresholds
-      operationId: listBalanceAlerts
-      description: |
-        Return every `balance.low` threshold configured for your merchant,
-        ordered by currency. A merchant with no configured thresholds returns
-        an empty array.
-
-        Each threshold record includes the configured amount, whether it's
-        enabled, and the current latch state (`currently_latched` — whether
-        a `balance.low` event has fired and not yet been cleared by a recovery
-        above the threshold).
-      responses:
-        '200':
-          description: Configured thresholds.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/BalanceAlertThreshold'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /v1/merchant/balance-alerts/{currency}:
-    parameters:
-      - name: currency
-        in: path
-        required: true
-        description: ISO 4217 currency code (or stablecoin / crypto symbol).
-        schema:
-          $ref: '#/components/schemas/CurrencyCode'
-    get:
-      tags: [Balance Alerts]
-      summary: Retrieve a balance alert threshold
-      operationId: getBalanceAlert
-      description: Return the configured threshold for a single currency.
-      responses:
-        '200':
-          description: Threshold.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BalanceAlertThreshold'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          description: '`balance_alert_not_found` — no threshold configured for this currency.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    put:
-      tags: [Balance Alerts]
-      summary: Create or replace a balance alert threshold
-      operationId: upsertBalanceAlert
-      description: |
-        Create or replace the `balance.low` threshold for a currency.
-
-        When the merchant's available balance in this currency crosses from
-        at-or-above `threshold_amount` to below it, Anton fires a `balance.low`
-        webhook event. The event fires once; the latch clears when the balance
-        rises back to at-or-above the threshold (no event on recovery). This
-        prevents webhook spam when the balance oscillates around the threshold.
-
-        Updates preserve latch state — so a merchant that changes their
-        threshold while latched stays latched until the balance crosses the
-        new threshold upward.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BalanceAlertUpsertRequest'
-      responses:
-        '200':
-          description: Threshold saved.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BalanceAlertThreshold'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          description: |
-            - `invalid_threshold` — `threshold_amount` is negative or not a decimal.
-            - `balance_alert_upsert_failed` — persistence error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    delete:
-      tags: [Balance Alerts]
-      summary: Delete a balance alert threshold
-      operationId: deleteBalanceAlert
-      description: |
-        Remove the threshold for a currency. Deleting a non-existent threshold
-        succeeds — the endpoint is idempotent. After deletion, balance
-        mutations in this currency no longer fire `balance.low` events.
-      responses:
-        '204':
-          description: Threshold removed (or was never present).
-        '401':
-          $ref: '#/components/responses/Unauthorized'
 
   /v1/merchant/sandbox/reset:
     post:
@@ -2890,6 +2501,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  # ── Merchant profile and workspace settings ──────────────────────────
+  /v1/webhooks/{id}/secret/rotate:
+    post:
+      tags: [Webhooks]
+      summary: Rotate the webhook signing secret
+      operationId: rotateWebhookSecret
+      description: |
+        Generate a new HMAC signing secret. The raw secret is returned
+        **exactly once** in the response body. Any subsequent `GET
+        /v1/webhooks/{id}/secret` returns only a masked suffix
+        (`***xxxx`). NTF-2.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^whk_[a-zA-Z0-9]+$' } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rotated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret]
+                properties:
+                  secret:
+                    type: string
+                    description: Raw signing secret. Shown once — store immediately.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
     bearerAuth:
@@ -3291,8 +2930,7 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Your own reference, if you supplied one at creation.
         metadata:
           type: object
@@ -3385,9 +3023,8 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
+          type: [string, "null"]
           maxLength: 255
-          nullable: true
           description: Set to `null` to clear.
         metadata:
           type: object
@@ -3699,6 +3336,15 @@ components:
         end_user_ip:
           type: string
           description: IP of the merchant's end-user who initiated the payout. Used for risk signals.
+        quote_id:
+          type: string
+          pattern: '^pq_[a-zA-Z0-9]+$'
+          description: |
+            Optional bindable pricing quote id returned by `POST /v1/pricing/quote`.
+            When present, the payout fee is locked to the quoted value. The quote
+            must be unexpired, unbound, and match the payout's currencies + amount,
+            otherwise the create returns `422 quote_expired` / `422 quote_already_used`
+            / `422 quote_mismatch`.
 
     Payout:
       type: object
@@ -3741,8 +3387,7 @@ components:
           type: string
           pattern: '^ins_[a-zA-Z0-9]+$'
         batch_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           pattern: '^bat_[a-zA-Z0-9]+$'
           description: Set when the payout was created as part of a batch upload.
         status:
@@ -4837,3 +4482,174 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+
+    # ── Wave 6 additions ──────────────────────────────────────────────
+    Merchant:
+      type: object
+      description: |
+        The calling merchant's profile. `rate_limit_multiplier` and
+        `rate_limit_per_minute` surface the merchant's current rate-limit
+        tier (Wave 4). The effective ceiling is base 1000 × multiplier.
+      required: [id, status, rate_limit_multiplier, rate_limit_per_minute]
+      properties:
+        id: { type: string, pattern: '^mer_[a-zA-Z0-9]+$' }
+        display_name: { type: string }
+        legal_name: { type: string }
+        status:
+          type: string
+          enum: [pending, active, suspended, terminated]
+        rate_limit_multiplier:
+          type: integer
+          description: Per-merchant multiplier applied to the base 1000 req/min ceiling. 1x / 2x / 5x / 10x / 20x.
+          enum: [1, 2, 5, 10, 20]
+        rate_limit_per_minute:
+          type: integer
+          description: Effective per-minute request ceiling after the multiplier.
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    APIKey:
+      type: object
+      required: [id, label, masked_suffix, environment, created_at]
+      properties:
+        id: { type: string, pattern: '^ak_[a-zA-Z0-9]+$' }
+        label: { type: string, maxLength: 100 }
+        masked_suffix:
+          type: string
+          description: Last 4 characters of the raw secret, e.g. `***aB3x`. Only surface used after creation.
+        environment: { type: string, enum: [live, test] }
+        last_used_at: { $ref: '#/components/schemas/Timestamp' }
+        revoked_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    VelocityRule:
+      type: object
+      required: [id, scope, kind, action, created_at]
+      properties:
+        id: { type: string }
+        scope: { type: string, enum: [platform, merchant] }
+        kind: { type: string, description: "E.g. `daily_volume`, `per_payout_amount`, `country_block`." }
+        action: { type: string, enum: [block, review, alert] }
+        threshold: { type: string }
+        params:
+          type: object
+          additionalProperties: true
+        active: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    VelocityRuleWriteRequest:
+      type: object
+      required: [kind, action]
+      properties:
+        kind: { type: string }
+        action: { type: string, enum: [block, review, alert] }
+        threshold: { type: string }
+        params:
+          type: object
+          additionalProperties: true
+
+    VelocityRuleResult:
+      type: object
+      properties:
+        rule_id: { type: string }
+        kind: { type: string }
+        action: { type: string, enum: [allow, review, block, alert] }
+        triggered: { type: boolean }
+        reason: { type: string }
+
+    VelocityVerdict:
+      type: object
+      properties:
+        action: { type: string, enum: [allow, review, block] }
+        triggered_rules:
+          type: array
+          items: { $ref: '#/components/schemas/VelocityRuleResult' }
+
+    BeneficiaryEngineVerdict:
+      type: object
+      description: |
+        Merchant-facing projection of Anton's engine verdict. Per the
+        v1.0.0 cross-merchant policy, the only "external" signal exposed
+        is an opaque boolean aggregating external providers AND the
+        Anton network's successful verifications — no counts, no
+        identities, no adverse-event signals.
+      required: [decision, beneficiary, computed_at]
+      properties:
+        decision:
+          type: object
+          required: [action, description]
+          properties:
+            action: { type: string, enum: [allow, review, block] }
+            reason_codes:
+              type: array
+              items: { type: string }
+            description: { type: string }
+        beneficiary:
+          type: object
+          required: [trust_score, identity_consistency, third_party_verification]
+          properties:
+            trust_score:
+              type: string
+              description: Decimal string 0..1.
+            identity_consistency:
+              type: string
+              description: Decimal string 0..1.
+            third_party_verification:
+              type: object
+              required: [verified_by_external_sources]
+              properties:
+                verified_by_external_sources:
+                  type: boolean
+                  description: Opaque aggregate over external providers and the Anton network. No counts derivable.
+        computed_at: { $ref: '#/components/schemas/Timestamp' }
+
+    OnboardingApplication:
+      type: object
+      description: Merchant-facing projection of an onboarding application. Internal underwriter fields (risk tier/score/notes, assigned-to, internal notes) are stripped.
+      required: [id, merchant_id, status, created_at, updated_at]
+      properties:
+        id: { type: string }
+        merchant_id: { type: string }
+        status:
+          type: string
+          enum: [draft, submitted, in_review, info_needed, approved, rejected]
+        legal_name: { type: string }
+        trading_name: { type: string }
+        registration_no: { type: string }
+        tax_id: { type: string }
+        business_type: { type: string }
+        industry: { type: string }
+        mcc_code: { type: string }
+        website: { type: string }
+        description: { type: string }
+        approval_conditions: { type: string }
+        rejection_reason: { type: string }
+        status_token: { type: string }
+        kyb_provider: { type: string }
+        kyb_reference: { type: string }
+        kyb_status: { type: string }
+        kyb_completed_at: { $ref: '#/components/schemas/Timestamp' }
+        submitted_at: { $ref: '#/components/schemas/Timestamp' }
+        reviewed_at: { $ref: '#/components/schemas/Timestamp' }
+        decided_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    User:
+      type: object
+      required: [id, email, role, status, created_at]
+      properties:
+        id: { type: string, pattern: '^usr_[a-zA-Z0-9]+$' }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        role:
+          type: string
+          enum: [admin, accounting, technical, operator, viewer]
+        status:
+          type: string
+          enum: [active, invited, deactivated]
+        mfa_enrolled: { type: boolean }
+        last_sign_in_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }

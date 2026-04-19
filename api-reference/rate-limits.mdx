@@ -7,7 +7,21 @@ Rate limits protect the platform from accidental and malicious overload. Normal 
 
 ## Global limit
 
-Every authenticated merchant gets **1,000 requests per minute**, shared across all `/v1/*` endpoints. The limit resets on a rolling 60-second window.
+Every authenticated merchant gets a **base of 1,000 requests per minute**, shared across all `/v1/*` endpoints, enforced on a rolling 60-second window. The limit is **per merchant** (not per IP) — seats and servers behind a shared egress NAT all count against the same quota, but separate merchants never share quotas with each other.
+
+## Merchant rate-limit tiers
+
+Merchants can be placed on a higher tier by Anton. The tier applies a multiplier to the base 1,000 rpm ceiling.
+
+| Tier | Multiplier | Effective ceiling |
+|---|---|---|
+| Default | 1× | 1,000 rpm |
+| Growth | 2× | 2,000 rpm |
+| Scale | 5× | 5,000 rpm |
+| High-volume | 10× | 10,000 rpm |
+| Enterprise | 20× | 20,000 rpm |
+
+Read your current tier from `GET /v1/merchant` — the response includes `rate_limit_multiplier` (1, 2, 5, 10, or 20) and the effective `rate_limit_per_minute`. Promotions take effect immediately on the next request; no rollout is required.
 
 ## Endpoint-specific limits
 
@@ -15,15 +29,12 @@ Some endpoints are more expensive or more sensitive and carry a tighter ceiling:
 
 | Endpoint | Limit |
 |---|---|
-| `POST /v1/fx/quote` | 30 / minute per IP |
-| `GET /v1/fx/rate` | 30 / minute per IP |
-| `POST /v1/fx/exchange` | 10 / minute per IP |
-| `POST /v1/api-keys` | Reduced (sensitive operations ceiling) |
-| `POST /v1/api-keys/{id}/revoke` | Reduced (sensitive operations ceiling) |
+| `POST /v1/fx/quote` | 30 / minute per merchant |
+| `GET /v1/fx/rate` | 30 / minute per merchant |
+| `POST /v1/fx/exchange` | 10 / minute per merchant |
 | `POST /v1/webhooks/{id}/test` | Reduced (sensitive operations ceiling) |
-| `POST /v1/merchant/security/portal-link` | Reduced (sensitive operations ceiling) |
 
-**Sensitive operations** — key lifecycle, webhook test sends, admin portal link issuance — run under a lower per-merchant ceiling to prevent abuse. Normal integration traffic will not reach it.
+**Sensitive operations** — webhook test sends and similar one-off verification flows — run under a lower per-merchant ceiling to prevent abuse. Normal integration traffic will not reach it.
 
 ## Headers on every response
 

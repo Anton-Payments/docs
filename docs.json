@@ -37,12 +37,19 @@
     }
   },
   "api": {
-    "openapi": ["/openapi-merchant.yaml"],
+    "openapi": [
+      "/openapi-merchant.yaml"
+    ],
     "playground": {
       "display": "interactive"
     },
     "examples": {
-      "languages": ["bash", "javascript", "php", "go"]
+      "languages": [
+        "bash",
+        "javascript",
+        "php",
+        "go"
+      ]
     }
   },
   "search": {
@@ -153,6 +160,7 @@
               "api-reference/payouts/list-payouts",
               "api-reference/payouts/get-payout",
               "api-reference/payouts/list-payout-events",
+              "api-reference/payouts/get-payout-velocity-results",
               "api-reference/payouts/cancel-payout"
             ]
           },
@@ -204,23 +212,6 @@
             ]
           },
           {
-            "group": "Documents",
-            "pages": [
-              "api-reference/documents/upload-document",
-              "api-reference/documents/list-documents",
-              "api-reference/documents/get-document",
-              "api-reference/documents/get-document-download-url"
-            ]
-          },
-          {
-            "group": "RFIs",
-            "pages": [
-              "api-reference/rfis/list-rfis",
-              "api-reference/rfis/get-rfi",
-              "api-reference/rfis/respond-to-rfi"
-            ]
-          },
-          {
             "group": "Pricing",
             "pages": [
               "api-reference/pricing/list-merchant-pricing",
@@ -240,15 +231,6 @@
             "group": "Corridors",
             "pages": [
               "api-reference/corridors/list-corridors"
-            ]
-          },
-          {
-            "group": "Balance Alerts",
-            "pages": [
-              "api-reference/balance-alerts/list-balance-alerts",
-              "api-reference/balance-alerts/get-balance-alert",
-              "api-reference/balance-alerts/upsert-balance-alert",
-              "api-reference/balance-alerts/delete-balance-alert"
             ]
           },
           {
