@@ -15,7 +15,7 @@ Authorization: Bearer ak_live_kS2f...
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6...
 ```
 
-This **dual-auth** model means an endpoint like `POST /v1/payouts` works identically whether it's hit by a headless job using an API key or by a merchant user driving the dashboard. Role-based permissions (`payouts.create`, `settings.update`, `apikeys.view`, etc.) are enforced consistently across both.
+This **dual-auth** model means an endpoint like `POST /v1/payouts` works identically whether it's hit by a headless job using an API key or by a merchant user driving the dashboard. API keys carry full merchant scope for the endpoints documented here; dashboard users are subject to the role model configured in your organization.
 
 Requests without a valid credential return `401 Unauthorized`. API keys used against the wrong environment return `401` with `code: "key_environment_mismatch"`.
 
@@ -84,7 +84,7 @@ To rotate:
 
 ## If a key is exposed
 
-Revoke it immediately from the dashboard, then review your merchant audit log for any unexpected activity. Contact [help.antonpayments.com](https://help.antonpayments.com) if the leaked key belonged to production.
+Revoke it immediately from the dashboard, then review recent activity in the dashboard's audit log for anything unexpected. Contact [help.antonpayments.com](https://help.antonpayments.com) if the leaked key belonged to production.
 
 ## Requirements
 

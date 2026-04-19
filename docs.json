@@ -37,12 +37,19 @@
     }
   },
   "api": {
-    "openapi": ["/openapi-merchant.yaml"],
+    "openapi": [
+      "/openapi-merchant.yaml"
+    ],
     "playground": {
       "display": "interactive"
     },
     "examples": {
-      "languages": ["bash", "javascript", "php", "go"]
+      "languages": [
+        "bash",
+        "javascript",
+        "php",
+        "go"
+      ]
     }
   },
   "search": {
@@ -205,23 +212,6 @@
             ]
           },
           {
-            "group": "Documents",
-            "pages": [
-              "api-reference/documents/upload-document",
-              "api-reference/documents/list-documents",
-              "api-reference/documents/get-document",
-              "api-reference/documents/get-document-download-url"
-            ]
-          },
-          {
-            "group": "RFIs",
-            "pages": [
-              "api-reference/rfis/list-rfis",
-              "api-reference/rfis/get-rfi",
-              "api-reference/rfis/respond-to-rfi"
-            ]
-          },
-          {
             "group": "Pricing",
             "pages": [
               "api-reference/pricing/list-merchant-pricing",
@@ -244,75 +234,11 @@
             ]
           },
           {
-            "group": "Balance Alerts",
-            "pages": [
-              "api-reference/balance-alerts/list-balance-alerts",
-              "api-reference/balance-alerts/get-balance-alert",
-              "api-reference/balance-alerts/upsert-balance-alert",
-              "api-reference/balance-alerts/delete-balance-alert"
-            ]
-          },
-          {
             "group": "Sandbox",
             "pages": [
               "api-reference/sandbox/reset-sandbox",
               "api-reference/sandbox/seed-sample-beneficiaries",
               "api-reference/sandbox/seed-sample-payouts"
-            ]
-          },
-          {
-            "group": "Merchant",
-            "pages": [
-              "api-reference/merchant/get-merchant",
-              "api-reference/merchant/update-merchant-profile"
-            ]
-          },
-          {
-            "group": "API Keys",
-            "pages": [
-              "api-reference/api-keys/list-api-keys",
-              "api-reference/api-keys/create-api-key",
-              "api-reference/api-keys/revoke-api-key"
-            ]
-          },
-          {
-            "group": "Users",
-            "pages": [
-              "api-reference/users/get-me",
-              "api-reference/users/list-team-users",
-              "api-reference/users/invite-team-user"
-            ]
-          },
-          {
-            "group": "Notifications",
-            "pages": [
-              "api-reference/notifications/rotate-channel-secret"
-            ]
-          },
-          {
-            "group": "Velocity",
-            "pages": [
-              "api-reference/velocity/list-velocity-rules",
-              "api-reference/velocity/create-velocity-rule",
-              "api-reference/velocity/update-velocity-rule",
-              "api-reference/velocity/delete-velocity-rule",
-              "api-reference/velocity/simulate-velocity"
-            ]
-          },
-          {
-            "group": "Engine",
-            "pages": [
-              "api-reference/engine/get-engine-dashboard",
-              "api-reference/engine/get-beneficiary-engine-verdict",
-              "api-reference/engine/get-payout-engine-verdict"
-            ]
-          },
-          {
-            "group": "Onboarding",
-            "pages": [
-              "api-reference/onboarding/get-onboarding",
-              "api-reference/onboarding/update-onboarding",
-              "api-reference/onboarding/submit-onboarding"
             ]
           }
         ]
