@@ -61,7 +61,7 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 
 **Treat `manual_review` as a normal state.** Most legitimate payouts clear review in minutes. Surface a pending state to your end user; do not surface an error.
 
-**Respond to RFIs promptly.** If a payout enters `manual_review` and Anton needs more information — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. Your merchant responds through the dashboard or via `POST /v1/rfis/{id}/respond`. The payout cannot clear review until the RFI is closed.
+**Respond to RFIs promptly.** If a payout enters `manual_review` and Anton needs more information — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. Your merchant responds through the dashboard. The payout cannot clear review until the RFI is closed.
 
 **Never retry a `screening_failed` payout with the same beneficiary.** It will fail again. Either correct the beneficiary's details or stop attempting to send to them.
 
@@ -69,10 +69,4 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 
 Screening, velocity, and engine evaluation run automatically on every live payout. You cannot disable them, override them at submission time, or skip them with a flag. This is a compliance requirement, not a limitation.
 
-For select merchants, Anton exposes programmatic access to:
-
-- The engine dashboard (`GET /v1/engine/dashboard`)
-- Per-payout and per-beneficiary engine verdicts
-- Merchant-scoped velocity rule management — list, create, update, simulate
-
-These endpoints are enabled on approval. [Contact us](https://help.antonpayments.com) if you want to inspect or tune risk signals programmatically.
+For select merchants, Anton can enable programmatic access to the engine — risk signals, velocity rule management, and dashboard-equivalent views — on top of the public API surface. These are not part of the public v1.0.0 contract; they're negotiated per account. [Contact us](https://help.antonpayments.com) if you want to inspect or tune risk signals programmatically.

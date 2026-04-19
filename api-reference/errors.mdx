@@ -108,7 +108,7 @@ The following codes are returned via the `code` field of the error envelope. Cod
 | `403` | `sandbox_only` | `sandbox … is not available in this environment` | A `/v1/merchant/sandbox/*` endpoint was called against production. | Only call sandbox endpoints in the sandbox environment. |
 | `403` | `merchant_suspended` | `merchant account is suspended` | Merchant account is in the `suspended` state. | Contact Anton support. |
 | `403` | `merchant_terminated` | `merchant account is terminated` | Merchant account is in the `terminated` state. | Contact Anton support. |
-| `403` | `merchant_not_active` | `merchant account is not yet active` | Onboarding/provisioning is still in progress. | Finish onboarding; only `/v1/onboarding/*`, `/v1/documents/*`, and `/v1/rfis/*` are callable during this stage. |
+| `403` | `merchant_not_active` | `merchant account is not yet active` | Merchant provisioning is still in progress. | Complete onboarding from the merchant dashboard. Contact Anton support if this persists. |
 | `403` | `merchant_not_found` | `merchant not found` | The authenticated merchant ID could not be resolved. | Re-authenticate; confirm the merchant exists. |
 
 
