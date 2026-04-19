@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Anton Payments API
-  version: 1.0.0-beta
+  version: 1.0.0
   summary: Cross-border payout infrastructure. Fiat, stablecoin, and crypto.
   description: |
     The Anton Payments merchant API. Versioned, idempotent, cursor-paginated.
@@ -61,6 +61,22 @@ tags:
     description: Per-currency low-balance thresholds that drive the `balance.low` webhook event.
   - name: Sandbox
     description: Reset and seed your sandbox environment.
+  - name: Merchant
+    description: Merchant profile, branding, preferences, and security posture.
+  - name: API Keys
+    description: Issue, list, and revoke API keys.
+  - name: Users
+    description: Self-service profile, MFA, and team management.
+  - name: Notifications
+    description: Per-user notification channels and preferences.
+  - name: Velocity
+    description: Merchant-scoped risk rules and what-if simulation.
+  - name: Engine
+    description: Glass-box view of Anton's risk intelligence.
+  - name: Onboarding
+    description: Authenticated KYB onboarding draft and submission.
+  - name: Public Onboarding
+    description: Session-authenticated hosted onboarding flow. Not intended for SDK consumption.
 
 paths:
   /v1/currencies:
@@ -1995,6 +2011,16 @@ paths:
         Preview the fee that would apply for a given source/destination pair
         and amount. Useful for surfacing fees to your end user before they
         confirm a payout.
+
+        **Bindable quotes (v1.0.0).** Every quote response includes a
+        `quote_id` (prefix `pq_`) and an `expires_at` timestamp. You can
+        bind the exact quoted fee to a subsequent payout by passing the
+        `quote_id` on `POST /v1/payouts`. If the quote has expired, been
+        already bound to another payout, or the payout's currencies/amount
+        don't match the quote, the payout create call returns
+        `422 quote_expired` / `422 quote_already_used` / `422 quote_mismatch`.
+        Omit `quote_id` on the payout to let the platform re-price at
+        submission time.
       requestBody:
         required: true
         content:
@@ -2020,6 +2046,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
                 properties:
                   fee:
                     $ref: '#/components/schemas/Money'
@@ -2031,6 +2058,12 @@ paths:
                   plan_id:
                     type: string
                     pattern: '^prc_[a-zA-Z0-9]+$'
+                  quote_id:
+                    type: string
+                    pattern: '^pq_[a-zA-Z0-9]+$'
+                    description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                  expires_at:
+                    $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -2890,6 +2923,501 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  # ── Merchant profile and workspace settings ──────────────────────────
+  /v1/merchant:
+    get:
+      tags: [Merchant]
+      summary: Get the calling merchant's profile
+      operationId: getMerchant
+      description: |
+        Return the calling merchant's profile. Includes the per-merchant
+        rate-limit tier — `rate_limit_multiplier` (1, 2, 5, 10, 20) and
+        the effective `rate_limit_per_minute` (base 1000 × multiplier).
+      responses:
+        '200':
+          description: Merchant profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Merchant'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/merchant/profile:
+    patch:
+      tags: [Merchant]
+      summary: Update the merchant profile
+      operationId: updateMerchantProfile
+      description: |
+        Patch merchant-level fields (display name, support contact, branding
+        metadata, etc.). Requires the `settings.update` permission. Convergent —
+        no idempotency key required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Updated merchant profile.,
+                 content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ── API keys ─────────────────────────────────────────────────────────
+  /v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      operationId: listAPIKeys
+      description: |
+        List every API key issued to this merchant. Raw secrets are never
+        returned — only the key id, label, masked suffix, and lifecycle
+        timestamps. Gated on `apikeys.view` (admin + technical only).
+      responses:
+        '200':
+          description: API keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/APIKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [API Keys]
+      summary: Create an API key
+      operationId: createAPIKey
+      description: |
+        Issue a new API key. The raw secret is returned **exactly once** in
+        this response — store it immediately. Anton does not retain the
+        plaintext. Requires the `apikeys.create` permission, an
+        `Idempotency-Key` header, and is subject to the sensitive-operations
+        rate limit.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string, maxLength: 100 }
+                environment: { type: string, enum: [live, test] }
+      responses:
+        '201':
+          description: API key created. The `secret` field is returned only in this response.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIKey'
+                  - type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: Raw API key secret. Prefixed `ak_live_` or `ak_test_`. Shown once.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { description: Rate limited. }
+
+  /v1/api-keys/{id}/revoke:
+    post:
+      tags: [API Keys]
+      summary: Revoke an API key
+      operationId: revokeAPIKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^ak_[a-zA-Z0-9]+$' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Revoked. Subsequent use of the key will return `401 invalid_api_key`. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Velocity / merchant risk rules ───────────────────────────────────
+  /v1/velocity/rules:
+    get:
+      tags: [Velocity]
+      summary: List merchant-scoped risk rules
+      operationId: listVelocityRules
+      description: |
+        Return the currently-active risk rules for this merchant —
+        both platform defaults and merchant-scoped overrides. Rules
+        drive the real-time payout verdict (`allow`, `review`, `block`).
+      responses:
+        '200':
+          description: Velocity rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VelocityRule' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Velocity]
+      summary: Create a merchant-scoped risk rule
+      operationId: createVelocityRule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VelocityRuleWriteRequest' }
+      responses:
+        '201':
+          description: Rule created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VelocityRule' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/velocity/rules/{id}:
+    patch:
+      tags: [Velocity]
+      summary: Update a merchant-scoped rule
+      operationId: updateVelocityRule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VelocityRuleWriteRequest' }
+      responses:
+        '200':
+          description: Rule updated.
+          content: { application/json: { schema: { $ref: '#/components/schemas/VelocityRule' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Velocity]
+      summary: Delete a merchant-scoped rule
+      operationId: deleteVelocityRule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/velocity/simulate:
+    post:
+      tags: [Velocity]
+      summary: Simulate a payout against current rules
+      operationId: simulateVelocity
+      description: |
+        What-if evaluation — run a synthetic payload through the current
+        rule set and return the verdict Anton would produce without
+        creating a payout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Simulation result.
+          content: { application/json: { schema: { $ref: '#/components/schemas/VelocityVerdict' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ── Engine dashboard + per-entity verdicts ───────────────────────────
+  /v1/engine/dashboard:
+    get:
+      tags: [Engine]
+      summary: Glass-box engine dashboard
+      operationId: getEngineDashboard
+      description: |
+        Merchant-facing view of how Anton's risk intelligence evaluated
+        recent activity. Aggregated statistics only — no cross-merchant
+        counts or identities are surfaced (v1.0.0 cross-merchant policy).
+      responses:
+        '200':
+          description: Engine dashboard payload.
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/beneficiaries/{id}/engine-verdict:
+    get:
+      tags: [Beneficiaries]
+      summary: Live engine verdict for a beneficiary
+      operationId: getBeneficiaryEngineVerdict
+      description: |
+        Return Anton's current risk verdict for this beneficiary. Includes
+        a single opaque `third_party_verification.verified_by_external_sources`
+        boolean aggregating external providers and the Anton network's
+        accumulated verifications (treated as one source). Never exposes
+        cross-merchant counts, identities, or adverse-event signals.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^ben_[a-zA-Z0-9]+$' } }
+      responses:
+        '200':
+          description: Engine verdict.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BeneficiaryEngineVerdict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/payouts/{id}/engine-verdict:
+    get:
+      tags: [Payouts]
+      summary: Engine verdict recorded for this payout
+      operationId: getPayoutEngineVerdict
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^pay_[a-zA-Z0-9]+$' } }
+      responses:
+        '200':
+          description: Engine verdict.
+          content: { application/json: { schema: { $ref: '#/components/schemas/BeneficiaryEngineVerdict' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/payouts/{id}/velocity-results:
+    get:
+      tags: [Payouts]
+      summary: Velocity rule results recorded for this payout
+      operationId: getPayoutVelocityResults
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^pay_[a-zA-Z0-9]+$' } }
+      responses:
+        '200':
+          description: Velocity rule evaluation results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VelocityRuleResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Merchant onboarding (authenticated; draft + submit) ──────────────
+  /v1/onboarding:
+    get:
+      tags: [Onboarding]
+      summary: Get the merchant's onboarding application
+      operationId: getOnboardingApplication
+      responses:
+        '200':
+          description: Onboarding application.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingApplication' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Onboarding]
+      summary: Update the onboarding application draft
+      operationId: updateOnboardingDraft
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingApplication' }
+        '409': { description: '`application_locked` — application is no longer in `draft` or `info_needed`.' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/onboarding/submit:
+    post:
+      tags: [Onboarding]
+      summary: Submit the onboarding application
+      operationId: submitOnboarding
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Submitted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingApplication' }
+        '409': { description: Application already submitted or not in a submittable state. }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ── Public onboarding (Persona session, X-Onboarding-Token) ──────────
+  /v1/public/onboarding/start:
+    post:
+      tags: [Public Onboarding]
+      security: []
+      summary: Start the email-first onboarding session
+      operationId: publicOnboardingStart
+      description: |
+        Session-authenticated onboarding flow (X-Onboarding-Token). These
+        routes back the hosted sign-up experience and are **not intended
+        for SDK consumption** — merchants use the authenticated
+        `/v1/onboarding/*` surface after provisioning.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Session started. }
+
+  /v1/public/onboarding/status:
+    get:
+      tags: [Public Onboarding]
+      security: []
+      summary: Read the current onboarding session status
+      operationId: publicOnboardingStatus
+      parameters:
+        - name: X-Onboarding-Token
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Status payload. }
+        '401': { description: Invalid or expired session token. }
+
+  # ── Users (self + team) ──────────────────────────────────────────────
+  /v1/users/me:
+    get:
+      tags: [Users]
+      summary: Get the calling user's profile
+      operationId: getMe
+      responses:
+        '200':
+          description: User profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/users:
+    get:
+      tags: [Users]
+      summary: List users on the merchant team
+      operationId: listTeamUsers
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Team users.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+                  has_more: { type: boolean }
+                  next_cursor: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/users/invite:
+    post:
+      tags: [Users]
+      summary: Invite a new team member
+      operationId: inviteTeamUser
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [admin, accounting, technical, operator, viewer] }
+      responses:
+        '201': { description: Invitation sent. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ── Webhooks: secret read + rotate (NTF-2 parity for platform webhooks) ──
+  /v1/webhooks/{id}/secret/rotate:
+    post:
+      tags: [Webhooks]
+      summary: Rotate the webhook signing secret
+      operationId: rotateWebhookSecret
+      description: |
+        Generate a new HMAC signing secret. The raw secret is returned
+        **exactly once** in the response body. Any subsequent `GET
+        /v1/webhooks/{id}/secret` returns only a masked suffix
+        (`***xxxx`). NTF-2.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^whk_[a-zA-Z0-9]+$' } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rotated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret]
+                properties:
+                  secret:
+                    type: string
+                    description: Raw signing secret. Shown once — store immediately.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Notification channels: secret rotation (NTF-2) ───────────────────
+  /v1/users/me/notifications/channels/{id}/secret/rotate:
+    post:
+      tags: [Notifications]
+      summary: Rotate a notification channel signing secret
+      operationId: rotateChannelSecret
+      description: |
+        Rotate the HMAC signing secret for a notification channel. The raw
+        secret is returned **exactly once** in this response. Subsequent
+        channel reads mask the secret as `***xxxx`. Sensitive-rate-limited.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rotated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret]
+                properties:
+                  secret: { type: string, description: Raw signing secret. Shown once. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3699,6 +4227,15 @@ components:
         end_user_ip:
           type: string
           description: IP of the merchant's end-user who initiated the payout. Used for risk signals.
+        quote_id:
+          type: string
+          pattern: '^pq_[a-zA-Z0-9]+$'
+          description: |
+            Optional bindable pricing quote id returned by `POST /v1/pricing/quote`.
+            When present, the payout fee is locked to the quoted value. The quote
+            must be unexpired, unbound, and match the payout's currencies + amount,
+            otherwise the create returns `422 quote_expired` / `422 quote_already_used`
+            / `422 quote_mismatch`.
 
     Payout:
       type: object
@@ -4837,3 +5374,174 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+
+    # ── Wave 6 additions ──────────────────────────────────────────────
+    Merchant:
+      type: object
+      description: |
+        The calling merchant's profile. `rate_limit_multiplier` and
+        `rate_limit_per_minute` surface the merchant's current rate-limit
+        tier (Wave 4). The effective ceiling is base 1000 × multiplier.
+      required: [id, status, rate_limit_multiplier, rate_limit_per_minute]
+      properties:
+        id: { type: string, pattern: '^mer_[a-zA-Z0-9]+$' }
+        display_name: { type: string }
+        legal_name: { type: string }
+        status:
+          type: string
+          enum: [pending, active, suspended, terminated]
+        rate_limit_multiplier:
+          type: integer
+          description: Per-merchant multiplier applied to the base 1000 req/min ceiling. 1x / 2x / 5x / 10x / 20x.
+          enum: [1, 2, 5, 10, 20]
+        rate_limit_per_minute:
+          type: integer
+          description: Effective per-minute request ceiling after the multiplier.
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    APIKey:
+      type: object
+      required: [id, label, masked_suffix, environment, created_at]
+      properties:
+        id: { type: string, pattern: '^ak_[a-zA-Z0-9]+$' }
+        label: { type: string, maxLength: 100 }
+        masked_suffix:
+          type: string
+          description: Last 4 characters of the raw secret, e.g. `***aB3x`. Only surface used after creation.
+        environment: { type: string, enum: [live, test] }
+        last_used_at: { $ref: '#/components/schemas/Timestamp' }
+        revoked_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    VelocityRule:
+      type: object
+      required: [id, scope, kind, action, created_at]
+      properties:
+        id: { type: string }
+        scope: { type: string, enum: [platform, merchant] }
+        kind: { type: string, description: "E.g. `daily_volume`, `per_payout_amount`, `country_block`." }
+        action: { type: string, enum: [block, review, alert] }
+        threshold: { type: string }
+        params:
+          type: object
+          additionalProperties: true
+        active: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    VelocityRuleWriteRequest:
+      type: object
+      required: [kind, action]
+      properties:
+        kind: { type: string }
+        action: { type: string, enum: [block, review, alert] }
+        threshold: { type: string }
+        params:
+          type: object
+          additionalProperties: true
+
+    VelocityRuleResult:
+      type: object
+      properties:
+        rule_id: { type: string }
+        kind: { type: string }
+        action: { type: string, enum: [allow, review, block, alert] }
+        triggered: { type: boolean }
+        reason: { type: string }
+
+    VelocityVerdict:
+      type: object
+      properties:
+        action: { type: string, enum: [allow, review, block] }
+        triggered_rules:
+          type: array
+          items: { $ref: '#/components/schemas/VelocityRuleResult' }
+
+    BeneficiaryEngineVerdict:
+      type: object
+      description: |
+        Merchant-facing projection of Anton's engine verdict. Per the
+        v1.0.0 cross-merchant policy, the only "external" signal exposed
+        is an opaque boolean aggregating external providers AND the
+        Anton network's successful verifications — no counts, no
+        identities, no adverse-event signals.
+      required: [decision, beneficiary, computed_at]
+      properties:
+        decision:
+          type: object
+          required: [action, description]
+          properties:
+            action: { type: string, enum: [allow, review, block] }
+            reason_codes:
+              type: array
+              items: { type: string }
+            description: { type: string }
+        beneficiary:
+          type: object
+          required: [trust_score, identity_consistency, third_party_verification]
+          properties:
+            trust_score:
+              type: string
+              description: Decimal string 0..1.
+            identity_consistency:
+              type: string
+              description: Decimal string 0..1.
+            third_party_verification:
+              type: object
+              required: [verified_by_external_sources]
+              properties:
+                verified_by_external_sources:
+                  type: boolean
+                  description: Opaque aggregate over external providers and the Anton network. No counts derivable.
+        computed_at: { $ref: '#/components/schemas/Timestamp' }
+
+    OnboardingApplication:
+      type: object
+      description: Merchant-facing projection of an onboarding application. Internal underwriter fields (risk tier/score/notes, assigned-to, internal notes) are stripped.
+      required: [id, merchant_id, status, created_at, updated_at]
+      properties:
+        id: { type: string }
+        merchant_id: { type: string }
+        status:
+          type: string
+          enum: [draft, submitted, in_review, info_needed, approved, rejected]
+        legal_name: { type: string }
+        trading_name: { type: string }
+        registration_no: { type: string }
+        tax_id: { type: string }
+        business_type: { type: string }
+        industry: { type: string }
+        mcc_code: { type: string }
+        website: { type: string }
+        description: { type: string }
+        approval_conditions: { type: string }
+        rejection_reason: { type: string }
+        status_token: { type: string }
+        kyb_provider: { type: string }
+        kyb_reference: { type: string }
+        kyb_status: { type: string }
+        kyb_completed_at: { $ref: '#/components/schemas/Timestamp' }
+        submitted_at: { $ref: '#/components/schemas/Timestamp' }
+        reviewed_at: { $ref: '#/components/schemas/Timestamp' }
+        decided_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    User:
+      type: object
+      required: [id, email, role, status, created_at]
+      properties:
+        id: { type: string, pattern: '^usr_[a-zA-Z0-9]+$' }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        role:
+          type: string
+          enum: [admin, accounting, technical, operator, viewer]
+        status:
+          type: string
+          enum: [active, invited, deactivated]
+        mfa_enrolled: { type: boolean }
+        last_sign_in_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }

@@ -3,17 +3,40 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
-<Note>
-  Placeholder. Changelog entries should include:
-  - Date and version (semver)
-  - Category (Added / Changed / Deprecated / Removed / Fixed / Security)
-  - Affected endpoints or areas
-  - Migration notes for breaking changes
+## v1.0.0 — 2026-04-18
 
-  Deprecation policy and sunset timelines also live here.
-</Note>
+The v1.0.0 merchant contract is now frozen. Merchant integrations built against this surface will not break in minor or patch releases. Breaking changes will only arrive in a future v2.
 
-## Unreleased
+### Added
 
-- Rewriting documentation structure and rebuilding the OpenAPI specification from the canonical merchant routes.
-- Renaming `/v1/payees` → `/v1/beneficiaries` (in progress). The legacy path will remain as a deprecated alias during the transition.
+- **Bindable pricing quotes.** `POST /v1/pricing/quote` now returns `quote_id` (prefix `pq_`) and `expires_at`. Pass `quote_id` on `POST /v1/payouts` to lock the quoted fee. Missing or mismatched quotes surface as `422 quote_expired` / `422 quote_already_used` / `422 quote_mismatch`. (PRI)
+- **Per-merchant rate-limit tiers.** `GET /v1/merchant` surfaces `rate_limit_multiplier` (1, 2, 5, 10, 20) and the effective `rate_limit_per_minute`. The 1,000 rpm base is per **merchant** (not per IP). (Wave 4)
+- **Engine dashboard + per-entity verdicts.** `GET /v1/engine/dashboard`, `GET /v1/beneficiaries/{id}/engine-verdict`, and `GET /v1/payouts/{id}/engine-verdict` expose Anton's risk verdicts with cross-merchant-safe shapes. The verdict carries a single opaque `third_party_verification.verified_by_external_sources` boolean aggregating external providers and the Anton network — no counts, no identities, no adverse-event signals. (Wave 5a)
+- **Merchant-scoped velocity rules.** `GET /v1/velocity/rules`, `POST /v1/velocity/rules`, `PATCH /v1/velocity/rules/{id}`, `DELETE /v1/velocity/rules/{id}`, plus `POST /v1/velocity/simulate` for what-if evaluation.
+- **Merchant profile + workspace surfaces.** `GET /v1/merchant`, `PATCH /v1/merchant/profile`, plus the full `/v1/merchant/branding`, `/v1/merchant/preferences`, `/v1/merchant/security`, `/v1/merchant/notifications`, `/v1/merchant/audit-log`, and `/v1/merchant/balance-alerts` trees.
+- **Self-service users + team management.** `/v1/users/me/*` (profile, avatar, MFA, sessions, password, notifications, welcome flow) plus `/v1/users`, `/v1/users/invite`, and team role/lifecycle endpoints.
+- **Notification channels + preferences.** `/v1/users/me/notifications/channels`, `/v1/users/me/notifications/preferences`, and the admin-scoped `/v1/merchant/notifications/routes`.
+- **API key lifecycle.** `POST /v1/api-keys` returns the raw secret **exactly once**; subsequent list calls only expose the masked suffix. `POST /v1/api-keys/{id}/revoke` is immediate and idempotent.
+- **Webhook + channel secret rotation (NTF-2).** `POST /v1/webhooks/{id}/secret/rotate` and `POST /v1/users/me/notifications/channels/{id}/secret/rotate` return a fresh raw secret exactly once; `GET` on either resource masks the secret as `***xxxx`. Creates also echo the raw secret once in the create response.
+- **Public onboarding surface (ONB-1).** Hosted Persona onboarding moved to `/v1/public/onboarding/*` under session-token auth, isolated from the merchant-authenticated `/v1/onboarding` surface.
+
+### Changed
+
+- **Cursor pagination everywhere.** Every list endpoint uses `limit` + opaque `cursor` with `{ data, has_more, next_cursor }`. Legacy `offset` pagination has been removed. (Wave 5c)
+- **Monetary amounts are decimal strings, scaled per currency.** Amount fields are always emitted at the currency's canonical scale (USD/EUR at 2 decimals, BTC at 8, USDC at 6, etc.). Never parse as a float. (Wave 5c)
+- **ID prefix scheme normalised.** `ak_*` (API keys), `pay_*` (payouts), `ben_*` (beneficiaries), `ins_*` (instruments), `bat_*` (batches), `whk_*` (webhook subscriptions), `evt_*` (events), `dlv_*` (deliveries), `pq_*` (pricing quotes), `fxq_*` (FX quotes), `fxx_*` (FX exchanges), `mer_*` (merchant), `usr_*` (user). (Wave 5c)
+- **Corridor responses no longer expose `provider`.** Anton's rail graph is a commercial secret; `CorridorView` emits only the merchant-observable fields. (Wave 5a, COR-1)
+- **Timestamps are RFC3339Nano in UTC.**
+- **Idempotency scoping.** `Idempotency-Key` is scoped per `(merchant, path, body)` — cross-merchant collisions are impossible. Replays of identical bodies return the original response; replays with a different body return `409 idempotency_conflict`. (Wave 5a)
+
+### Security
+
+- **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity — not even as booleans. Verification signals are aggregated into a single opaque network-vs-external-provider boolean.
+- **PII isolation.** All beneficiary PII and payment instrument details are tokenized in Basis Theory. Raw values are only ever returned from the dedicated `GET /v1/beneficiaries/{id}/pii` endpoint (gated by `beneficiary.view_pii`).
+- **Last-admin protection.** Role changes and deactivations that would leave a merchant with zero active admins return `403 last_admin_protection`. (Wave 5d)
+
+---
+
+## Pre-v1.0.0 notes
+
+Early access and beta entries are retained in internal changelogs. Anything on the merchant surface prior to 2026-04-18 should be treated as unsupported.
