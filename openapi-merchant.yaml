@@ -2270,43 +2270,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /v1/webhooks/{id}/secret/rotate:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
-    post:
-      tags: [Webhooks]
-      summary: Rotate the signing secret
-      operationId: rotateWebhookSecret
-      description: |
-        Generate a fresh signing secret. The old secret is invalidated immediately.
-        There is no overlap window — any delivery in flight may be signed with
-        either secret depending on when it was queued; plan rotations for a
-        quiet period.
-
-        The new secret is shown **once** in the response. Store it now.
-      responses:
-        '200':
-          description: Rotated. Response carries the new secret.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [secret]
-                properties:
-                  secret:
-                    type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-
   /v1/webhooks/{id}/test:
     parameters:
       - name: id
@@ -3819,8 +3782,7 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Your own reference, if you supplied one at creation.
         metadata:
           type: object
@@ -3913,9 +3875,8 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
+          type: [string, "null"]
           maxLength: 255
-          nullable: true
           description: Set to `null` to clear.
         metadata:
           type: object
@@ -4278,8 +4239,7 @@ components:
           type: string
           pattern: '^ins_[a-zA-Z0-9]+$'
         batch_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           pattern: '^bat_[a-zA-Z0-9]+$'
           description: Set when the payout was created as part of a batch upload.
         status:
