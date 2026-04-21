@@ -1901,7 +1901,13 @@ paths:
       tags: [Webhooks]
       summary: List webhook subscriptions
       operationId: listWebhookSubscriptions
-      description: Return all webhook subscriptions on your merchant account.
+      description: |
+        Return all webhook subscriptions on your merchant account.
+
+        Subscriptions that have been deleted via `DELETE /v1/webhooks/{id}`
+        are soft-deleted and excluded from this list. Their delivery
+        history is retained and can be inspected via the deliveries
+        endpoint with `include_deleted=true`.
       parameters:
         - name: status
           in: query
@@ -1936,6 +1942,12 @@ paths:
       tags: [Webhooks]
       summary: Retrieve a webhook subscription
       operationId: getWebhookSubscription
+      description: |
+        Retrieve a single subscription by ID. Subscriptions that have been
+        deleted via `DELETE /v1/webhooks/{id}` are soft-deleted and return
+        `404 webhook_subscription_not_found` here — they are not visible
+        to merchant reads. Delivery history is still accessible via
+        `GET /v1/webhooks/events/{id}/deliveries?include_deleted=true`.
       responses:
         '200':
           description: Subscription.
@@ -1952,16 +1964,30 @@ paths:
       summary: Delete a webhook subscription
       operationId: deleteWebhookSubscription
       description: |
-        Permanently delete a subscription. Event history and past delivery
-        records are retained for audit, but no new deliveries will be attempted.
-        Prefer `POST /v1/webhooks/{id}/deactivate` if you may re-enable later.
+        Soft-delete a subscription. The subscription disappears from
+        `GET /v1/webhooks` and `GET /v1/webhooks/{id}` (which will return
+        404) and will not receive any further event deliveries. The full
+        delivery history is preserved for audit retention and can be
+        retrieved via `GET /v1/webhooks/events/{id}/deliveries` with
+        `include_deleted=true`.
+
+        This endpoint is **idempotent**. Calling `DELETE` on a
+        subscription that was never created, or on one that has already
+        been deleted, also returns `204 No Content`. Clients can safely
+        retry `DELETE` after a timeout without worrying about spurious
+        404s.
+
+        Prefer `POST /v1/webhooks/{id}/deactivate` if you may re-enable
+        the same subscription later — deactivate is reversible;
+        delete is not.
       responses:
         '204':
-          description: Subscription deleted.
+          description: |
+            Subscription is now in the deleted state. Returned whether the
+            subscription existed and was freshly deleted, or was already
+            deleted, or never existed.
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /v1/webhooks/{id}/secret:
     parameters:
@@ -2142,6 +2168,23 @@ paths:
         subscribed endpoint. Each attempt records the request headers, response
         status, body, duration, and retry schedule — useful for debugging
         failing integrations.
+
+        By default, deliveries that targeted a subscription which has
+        since been deleted (`DELETE /v1/webhooks/{id}`) are excluded
+        from this list. Pass `include_deleted=true` to include them —
+        useful when auditing historical delivery activity from a
+        subscription you have since removed.
+      parameters:
+        - name: include_deleted
+          in: query
+          required: false
+          description: |
+            When `true`, include deliveries whose target subscription
+            has been soft-deleted. Accepts standard boolean values
+            (`true`/`false`, `1`/`0`). Defaults to `false`.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Delivery history.
