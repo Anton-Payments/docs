@@ -3240,7 +3240,7 @@ components:
         - faster_payment
         - mobile_money
         - wallet
-        - on_chain
+        - crypto
         - layer2
         - exchange
         - stablecoin
@@ -3975,7 +3975,7 @@ components:
           $ref: '#/components/schemas/Network'
         method:
           type: string
-          description: Delivery method within the corridor (bank_transfer, on_chain, stablecoin, etc.).
+          description: Delivery method within the corridor (bank_transfer, crypto, stablecoin, etc.).
         active:
           type: boolean
         priority:
