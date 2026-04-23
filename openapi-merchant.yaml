@@ -2493,11 +2493,34 @@ paths:
                 properties:
                   status:
                     type: string
-                    enum: [reset, deleted]
+                    enum: [reset, deleted, cleaned]
+                    description: |
+                      Outcome of the reset. Varies by `scope`:
+                      - `reset` — balances re-seeded (`scope=balances` or `scope=full-reset`)
+                      - `cleaned` — everything wiped and balances re-seeded (`scope=all`)
+                      - `deleted` — everything wiped without re-seed (`scope=delete-all`)
                   scope:
                     type: string
                   merchant_id:
                     type: string
+                  beneficiaries:
+                    type: integer
+                    description: |
+                      Sample beneficiaries re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
+                  instruments:
+                    type: integer
+                    description: |
+                      Sample instruments re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
+                  payouts:
+                    type: integer
+                    description: |
+                      Sample payouts re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
         '400':
           description: '`invalid_scope` — the `scope` query parameter is not one of the accepted values.'
           content:
@@ -2534,9 +2557,18 @@ paths:
                   status:
                     type: string
                     example: seeded
-                  created_count:
+                  merchant_id:
+                    type: string
+                  beneficiaries:
                     type: integer
-                    example: 12
+                    description: Number of sample beneficiaries created.
+                    example: 4
+                  instruments:
+                    type: integer
+                    description: |
+                      Number of payment instruments created across the
+                      seeded beneficiaries.
+                    example: 4
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2785,9 +2817,12 @@ paths:
                   status:
                     type: string
                     example: seeded
-                  created_count:
+                  merchant_id:
+                    type: string
+                  created:
                     type: integer
-                    example: 30
+                    description: Number of sample payouts created.
+                    example: 4
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
