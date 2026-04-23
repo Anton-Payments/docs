@@ -1854,27 +1854,13 @@ paths:
       operationId: listTransactions
       description: |
         Cursor-paginated list of transactions across every funding account you
-        hold. Filter by currency, type, or time range as needed.
+        hold. Only `limit` and `cursor` are honored; server-side filtering by
+        currency, type, or time range is not yet supported — filter client-side
+        on the returned `MerchantTransaction` objects, or call
+        `GET /v1/accounts/{currency}/transactions` to narrow by currency.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
-        - name: currency
-          in: query
-          schema:
-            $ref: '#/components/schemas/CurrencyCode'
-        - name: type
-          in: query
-          description: Transaction type — `credit`, `debit`, `fee`, `fx`, etc.
-          schema:
-            type: string
-        - name: created_after
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
-        - name: created_before
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Transactions.
