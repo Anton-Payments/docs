@@ -137,7 +137,8 @@
               "api-reference/beneficiaries/get-beneficiary-pii",
               "api-reference/beneficiaries/update-beneficiary-pii",
               "api-reference/beneficiaries/archive-beneficiary",
-              "api-reference/beneficiaries/restore-beneficiary"
+              "api-reference/beneficiaries/restore-beneficiary",
+              "api-reference/beneficiaries/rescore-beneficiary"
             ]
           },
           {

@@ -66,6 +66,7 @@ The `field` is dotted-path notation for nested objects (for example `individual.
 | `422 Unprocessable Entity` | Request was syntactically valid but semantically rejected — validation failure, insufficient balance, or a business-rule refusal. |
 | `429 Too Many Requests` | Per-merchant rate limit exceeded. Respect `Retry-After`. See [Rate limits](./rate-limits). |
 | `500 Internal Server Error` | An unexpected server error. Safe to retry with exponential backoff. The detailed error is never exposed to clients — correlate via `X-Request-ID`. |
+| `501 Not Implemented` | The endpoint exists but is not enabled in this environment due to missing configuration (for example, the engine admin token is not set on this API instance). Not a caller mistake. |
 | `503 Service Unavailable` | A downstream dependency (rail provider, FX provider, Basis Theory, WorkOS) is degraded or circuit-broken. Retry with backoff. |
 | `504 Gateway Timeout` | The request exceeded the 25-second handler timeout. Retry; consider whether your payload can be split. |
 
@@ -140,6 +141,7 @@ The following codes are returned via the `code` field of the error envelope. Cod
 |---|---|---|
 | `404` | `payout_not_found` | `GET /v1/payouts/{id}`, `GET /v1/payouts/{id}/events` |
 | `404` | `beneficiary_not_found` | All `/v1/beneficiaries/{id}*` reads/writes; instrument creation under a beneficiary |
+| `404` | `engine_beneficiary_not_found` | `POST /v1/beneficiaries/{id}/rescore` when the engine has no profile for this beneficiary yet (typically a brand-new beneficiary that has not yet been scored by the engine's background consumer) |
 | `404` | `instrument_not_found` | `GET/PUT/DELETE /v1/instruments/{id}` |
 | `404` | `batch_not_found` | All `/v1/batches/{id}*` endpoints |
 | `404` | `template_not_found` | `GET /v1/batches/template` when the template file is missing on the server |
@@ -200,6 +202,17 @@ The following codes are returned via the `code` field of the error envelope. Cod
 | `422` | `beneficiary_archive_failed` | Generic archive failure. | Inspect the message; retry. |
 | `422` | `beneficiary_restore_failed` | Generic restore failure. | Inspect the message; retry. |
 | `422` | `beneficiary_delete_failed` | Generic delete failure. | Inspect the message; retry. |
+
+### Beneficiary rescore
+
+Codes returned only by `POST /v1/beneficiaries/{id}/rescore`.
+
+| HTTP | `code` | Meaning | Remediation |
+|---|---|---|---|
+| `404` | `engine_beneficiary_not_found` | The beneficiary exists under this merchant, but the Anton Engine has not yet seeded a profile for it. Typically seen on brand-new beneficiaries before the first payout. | Wait for the engine's beneficiary-events consumer to write the profile (usually seconds; definitely after the next payout), then retry. |
+| `409` | `beneficiary_scoring_locked` | The beneficiary is in a terminal scoring state (permanently locked by the engine) and cannot be rescored. | Do not retry. Contact support if a rescore is required. |
+| `429` | `rescore_rate_limited` | A rescore for this beneficiary completed recently — the engine applies a cooldown to prevent churn. Distinct from `rate_limit_exceeded`, which is the per-merchant request quota. | Honor the `Retry-After` header before retrying. |
+| `501` | `rescore_not_configured` | Manual rescore is not enabled on this API instance (the engine admin token is not configured). Environment-level configuration issue, not a caller mistake. | Contact support — the environment needs the engine admin token provisioned. |
 
 ### Instruments
 
@@ -277,6 +290,10 @@ Not every error is safe to retry. The table below is a safe default — apply st
 |---|---|---|
 | `500`, `502`, `503`, `504` | Yes | Use exponential backoff with jitter. Always include the same `Idempotency-Key` on mutating retries so a partially-processed request is not duplicated. |
 | `429 rate_limit_exceeded` | Yes | Wait at least the `Retry-After` value before the first retry. |
+| `429 rescore_rate_limited` | Yes | Beneficiary-specific rescore cooldown. Honor `Retry-After`. |
+| `501 rescore_not_configured` | No | Environment is missing the engine admin token. Contact support. |
+| `409 beneficiary_scoring_locked` | No | Beneficiary is permanently locked. Retrying will fail identically. |
+| `404 engine_beneficiary_not_found` | Conditional | Retry only after the engine has seeded a profile (typically after the next payout). |
 | Transient network errors (connection reset, DNS failure, TLS reset) | Yes | Treat the same as a 5xx. Retry with the same `Idempotency-Key`. |
 | `400`, `404`, `410`, `413`, `422 validation_error` | No | Fix the request. Retrying will fail identically. |
 | `401` | No | Re-authenticate first. Do not loop on 401. |
