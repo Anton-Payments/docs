@@ -938,7 +938,18 @@ paths:
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            The request failed validation or a business rule on the instrument.
+
+            Common error codes:
+              * `validation_error` — body shape or field validation failed (e.g. `end_user_ip` not a valid IPv4/IPv6).
+              * `invalid_credentials` — method-specific credential check failed (IBAN checksum, ABA routing checksum, wallet address format, etc.).
+              * `method_not_supported` — the requested `method` is valid globally but is not supported for the beneficiary's country (e.g. `us_bank` on a `GB` beneficiary).
+              * `duplicate_instrument` — an instrument with the same credentials already exists on this beneficiary. Reuse the existing instrument.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -1451,6 +1462,12 @@ paths:
                   enum: [active, disabled]
                 end_user_ip:
                   type: string
+                  format: ip
+                  description: |
+                    The end-user's public IP address for the session that initiated
+                    this update. Captured on the audit trail and fed into risk scoring.
+                    Must be a valid IPv4 or IPv6 address.
+                  example: "203.0.113.42"
       responses:
         '200':
           description: Instrument updated.
@@ -1474,6 +1491,25 @@ paths:
         Soft-delete an instrument. The instrument is removed from active listings
         and cannot be used on new payouts. Historical payouts referencing it
         remain accessible and unchanged.
+
+        An optional JSON body may supply `end_user_ip` — the public IP of the
+        end-user session that initiated the delete — for audit and risk. The
+        field must be a valid IPv4 or IPv6 address.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                end_user_ip:
+                  type: string
+                  format: ip
+                  description: |
+                    The end-user's public IP address for the session that
+                    initiated this deletion. Captured on the audit trail and
+                    used as a risk signal. Must be a valid IPv4 or IPv6 address.
+                  example: "203.0.113.42"
       responses:
         '204':
           description: Instrument deleted.
@@ -1481,6 +1517,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -3195,14 +3233,14 @@ components:
 
         The `credentials` object shape varies by `method`. A few common shapes:
 
-        - `iban`: `{ "iban": "GB82WEST12345698765432", "bic": "WESTGB22" }` (BIC optional)
-        - `uk_bank`: `{ "account_number": "12345678", "sort_code": "123456" }`
-        - `us_bank`: `{ "routing_number": "026073150", "account_number": "...", "account_type": "checking" }`
+        - `iban`: `{ "account_holder_name": "Ada Lovelace", "iban": "GB82WEST12345698765432", "bic": "WESTGB22" }` (BIC optional; `account_holder_name` required)
+        - `uk_bank`: `{ "account_holder_name": "Ada Lovelace", "account_number": "12345678", "sort_code": "123456" }`
+        - `us_bank`: `{ "account_holder_name": "Ada Lovelace", "routing_number": "026073150", "account_number": "...", "account_type": "checking" }`
         - `crypto`: `{ "wallet_address": "0x...", "network": "ethereum", "token_symbol": "USDC" }`
-        - `card`: `{ "pan": "...", "expiry_month": 12, "expiry_year": 2028 }` (routed through PCI vault)
+        - `card`: `{ "number": "...", "exp_month": "12", "exp_year": "2028" }` (routed through PCI vault; all fields are strings)
 
-        Call `GET /v1/payment-methods?country=XX` for the complete per-country catalog
-        with the exact credential schema required.
+        Call `GET /v1/instruments/methods?country=XX` for the complete per-country
+        catalog with the exact credential schema required for each method.
       properties:
         method:
           $ref: '#/components/schemas/PaymentMethodCode'
@@ -3224,6 +3262,15 @@ components:
           default: false
         end_user_ip:
           type: string
+          format: ip
+          description: |
+            The end-user's public IP address, forwarded by you from the session that
+            submitted these credentials. Captured on the audit trail and used as a
+            signal in Anton's risk scoring.
+
+            Must be a valid IPv4 or IPv6 address. Requests with a malformed value
+            are rejected with `422 validation_error`.
+          example: "203.0.113.42"
 
     Instrument:
       type: object
