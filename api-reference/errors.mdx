@@ -258,6 +258,7 @@ These codes are returned only by the `/v1/merchant/sandbox/*` routes, which are 
 | `503` | `beneficiary_seeder_unavailable` | Beneficiary seeder is not configured. | Same as above. |
 | `503` | `payout_seeder_unavailable` | Payout seeder is not configured. | Same as above. |
 | `500` | `sandbox_reset_failed` | Sandbox reset failed during wipe or reseed. | Retry; share the `X-Request-ID` if persistent. |
+| `500` | `seed_beneficiaries_failed` | Sample beneficiary seeder failed — unexpected error during tokenization or persistence. Distinct from `duplicate_beneficiary` / `duplicate_instrument` (422), which indicate the seeder already ran. | Retry; share the `X-Request-ID` if persistent. |
 | `500` | `seed_payouts_failed` | Sample payout seeder failed. | Retry; share the `X-Request-ID` if persistent. |
 
 ### Server and infrastructure
