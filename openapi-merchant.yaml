@@ -986,6 +986,65 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/payouts/{id}/velocity-results:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Payout ID (prefixed `pay_`).
+        schema:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+    get:
+      tags: [Payouts]
+      summary: List velocity rule results for a payout
+      operationId: listPayoutVelocityResults
+      description: |
+        Returns the per-rule velocity / risk evaluation snapshot captured at
+        payout-creation time. Each row is one rule the engine evaluated against
+        this payout with the triggered/threshold/action values recorded for that
+        specific evaluation — rules edited or deleted after the fact don't
+        rewrite history here.
+
+        **Portal-only (JWT auth).** API-key callers get `403 api_key_not_accepted`
+        — this endpoint is only reachable through the merchant dashboard. The
+        same data is not exposed on public API keys to avoid encoding internal
+        risk-policy surface into merchant integrations.
+      x-anton-portal-only: true
+      responses:
+        '200':
+          description: Velocity rule evaluation snapshot. May be empty if no rules ran (e.g. pre-screening payouts, or engine-bypassed flows).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayoutVelocityResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Forbidden — the request authenticated via an API key. This endpoint
+            is only available through the merchant dashboard (JWT auth).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                api_key_rejected:
+                  value:
+                    error:
+                      code: api_key_not_accepted
+                      message: this endpoint is only available through the merchant dashboard
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/payouts/{id}/cancel:
     parameters:
       - name: id
@@ -3769,6 +3828,12 @@ components:
         rail_type:
           $ref: '#/components/schemas/RailType'
           description: Hint for rail routing. Anton may override based on corridor availability.
+        network:
+          $ref: '#/components/schemas/Network'
+          description: |
+            Optional rail network hint (e.g. `swift`, `sepa`, `ethereum`). If
+            omitted Anton derives the network from the instrument and corridor
+            pricing. Populated on the response regardless.
         fixed_side:
           type: string
           enum: [fixed_source, fixed_dest]
@@ -4022,6 +4087,54 @@ components:
           type: object
           additionalProperties: true
         occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    PayoutVelocityResult:
+      type: object
+      description: |
+        A single velocity/risk rule evaluated against a payout. Snapshot
+        semantics — `rule_name`, `rule_type`, `action`, and `threshold` reflect
+        the rule's configuration at evaluation time. Editing or deleting the
+        underlying rule later does not alter these historical rows.
+      required: [id, payout_id, merchant_id, rule_id, rule_name, rule_type, action, triggered, current_value, threshold, evaluated_at, created_at]
+      properties:
+        id:
+          type: string
+          pattern: '^vrs_[a-zA-Z0-9]+$'
+        payout_id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        rule_id:
+          type: string
+          description: The velocity rule this row was evaluated against.
+        rule_name:
+          type: string
+          description: Snapshot of the rule's display name at evaluation time.
+        rule_type:
+          type: string
+          description: Rule family — e.g. `volume`, `count`, `geo`, `amount`.
+        action:
+          type: string
+          enum: [block, review, alert]
+          description: The action the rule would have taken if `triggered` is true.
+        triggered:
+          type: boolean
+          description: Whether `current_value` crossed `threshold` on this evaluation.
+        current_value:
+          $ref: '#/components/schemas/Money'
+          description: The measured value at evaluation time.
+        threshold:
+          $ref: '#/components/schemas/Money'
+          description: The rule's configured threshold at evaluation time.
+        message:
+          type: string
+          description: Optional human-readable context for the evaluation.
+        evaluated_at:
           $ref: '#/components/schemas/Timestamp'
         created_at:
           $ref: '#/components/schemas/Timestamp'

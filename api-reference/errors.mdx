@@ -174,8 +174,27 @@ The following codes are returned via the `code` field of the error envelope. Cod
 |---|---|---|---|
 | `422` | `insufficient_balance` | The source balance cannot cover the payout amount plus fees. (Also returned by `POST /v1/fx/exchange` when the sell-side balance is too low.) | Top up the relevant currency balance, or reduce the amount. |
 | `403` | `velocity_blocked` | The payout was rejected by Anton's real-time risk policy (velocity/thresholds/geo). | Inspect `GET /v1/payouts/{id}/velocity-results` for the triggered rules. A `payout.velocity_blocked` webhook is also dispatched with the reason. |
-| `422` | `payout_rejected` | Catch-all for payout creation failures that are not validation, balance, or velocity related. | Inspect the message; correct the input or retry. |
+| `422` | `payout_rejected` | Catch-all for payout creation failures that are not validation, balance, or velocity related. | Inspect the message; correct the input or retry. See the `payout_rejected` sub-causes table below for the specific conditions this code covers. |
 | `422` | `payout_not_cancellable` | The payout's current state does not allow cancellation (already submitted to a rail, completed, etc.). | Re-fetch the payout; cancellation is only valid before submission. |
+
+#### `payout_rejected` sub-causes
+
+`payout_rejected` is a stable, coarse-grained code — your integration should
+pattern-match on `error.code`, not on `error.message`. Today it rolls up the
+following conditions in the API response. The `message` string distinguishes
+them, and the operational runbook (`api/docs/internal/integrations/`) carries
+the full mapping. Future API revisions may split any of these into a dedicated
+code; when that happens it will be announced as a breaking change with a
+minimum 90-day deprecation window on the catch-all.
+
+| Sub-cause | When it fires | Remediation |
+|---|---|---|
+| Archived or inactive beneficiary | The `beneficiary_id` exists but is `archived` or `inactive`. | Unarchive or activate the beneficiary via the merchant portal, or pick a different beneficiary. |
+| Archived or inactive instrument | The `instrument_id` is not in `active` status. | Activate or replace the instrument. |
+| Wrong-currency instrument | The instrument's currency doesn't match the payout's `dest_currency`. | Select an instrument whose currency matches the destination. |
+| Merchant not active / approved | The merchant is not in `active` status (still onboarding, suspended, etc.). | Complete onboarding or contact support. State-changes to `active` arrive via webhook. |
+| Invalid corridor | The source / destination currency pair is not enabled on your account. | Call `GET /v1/corridors` to enumerate enabled corridors. Contact support to request a new corridor. |
+| Pricing service unavailable | Transient backend failure computing the quote for this payout. | Retry with back-off. The same `Idempotency-Key` is safe to reuse once the service recovers. |
 
 ### Batches
 
