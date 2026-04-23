@@ -47,7 +47,26 @@ Response:
 }
 ```
 
-`delete-all` responds with `"status": "deleted"`.
+`status` varies by scope:
+
+- `balances` → `"status": "reset"`
+- `all` → `"status": "cleaned"`
+- `delete-all` → `"status": "deleted"`
+- `full-reset` → `"status": "reset"` with extra counts for the sample data that was re-seeded
+
+`full-reset` adds `beneficiaries`, `instruments`, and `payouts` counts so the
+dashboard can render a confirmation toast without a second call:
+
+```json
+{
+  "status": "reset",
+  "scope": "full-reset",
+  "merchant_id": "mer_01HX...",
+  "beneficiaries": 4,
+  "instruments": 4,
+  "payouts": 4
+}
+```
 
 ## Seed sample beneficiaries
 
@@ -64,9 +83,16 @@ Response:
 ```json
 {
   "status": "seeded",
-  "created_count": 12
+  "merchant_id": "mer_01HX...",
+  "beneficiaries": 4,
+  "instruments": 4
 }
 ```
+
+`beneficiaries` is the number of beneficiary records created; `instruments`
+is the number of payment instruments attached across those beneficiaries
+(usually one per beneficiary, but kept separate so the response shape stays
+honest if the seeder later creates multi-instrument beneficiaries).
 
 The beneficiaries created include a mix of `individual` and `business` types, spanning several corridors — enough variety to exercise most payout flows without you having to construct PII by hand.
 
@@ -83,9 +109,14 @@ curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-payouts \
 ```json
 {
   "status": "seeded",
-  "created_count": 30
+  "merchant_id": "mer_01HX...",
+  "created": 4
 }
 ```
+
+`created` is the number of sample payouts created — one per seeded
+beneficiary, cycling through the four outcome triggers (happy path, slow,
+return, failure).
 
 **Requires seeded beneficiaries first.** Running seed-payouts with no beneficiaries returns `422 no_beneficiaries`. Call seed-beneficiaries first, or use `?scope=full-reset` on the reset endpoint which seeds both.
 
