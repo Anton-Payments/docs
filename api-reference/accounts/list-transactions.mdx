@@ -2,3 +2,12 @@
 title: "List All Transactions"
 openapi: "GET /v1/transactions"
 ---
+
+<Note>
+  **Filtering is not yet supported on this endpoint.** Only `limit` and
+  `cursor` are honored — any additional query parameters are silently
+  ignored. To narrow results by currency, call
+  [`GET /v1/accounts/{currency}/transactions`](/api-reference/accounts/list-account-transactions).
+  For other filters (type, time range), filter client-side on the returned
+  `MerchantTransaction` objects until server-side filtering ships.
+</Note>
