@@ -87,6 +87,11 @@ paths:
       description: |
         Return every currency Anton supports, across fiat, crypto, and stablecoin.
         Use these codes when building payout or FX requests.
+
+        The catalog is pruned at call time to currencies with at least one active
+        corridor. Each entry carries a lifecycle `status` (`active` or `deprecated`)
+        and `supported_rails` indicating which rail families (`fiat`, `crypto`,
+        `stablecoin`) can carry the token.
       responses:
         '200':
           description: Supported currencies.
@@ -107,11 +112,19 @@ paths:
                     decimals: 2
                     symbol: "$"
                     type: fiat
+                    status: active
+                    supported_rails: [fiat]
                   - code: USDC
                     name: USD Coin
                     decimals: 6
                     symbol: USDC
                     type: stablecoin
+                    status: active
+                    supported_rails: [stablecoin]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/countries:
     get:
@@ -119,8 +132,13 @@ paths:
       summary: List supported countries
       operationId: listCountries
       description: |
-        Return every destination country Anton can deliver payouts to, along with
-        the currencies each country supports.
+        Return every country Anton recognizes (the full 159-country superset derived
+        from the instrument registry), along with the currencies each country
+        supports and whether Anton currently has an active, non-wildcard payout
+        corridor for the destination (`payout_supported`).
+
+        Clients that previously relied on `/v1/countries` returning only routable
+        destinations should filter on `payout_supported == true`.
       responses:
         '200':
           description: Supported countries.
@@ -134,6 +152,10 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Country'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/payment-methods:
     get:
@@ -160,6 +182,12 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/PaymentMethodDescriptor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /v1/beneficiaries:
     post:
@@ -3328,7 +3356,7 @@ components:
 
     Currency:
       type: object
-      required: [code, name, decimals, type]
+      required: [code, name, decimals, type, status]
       properties:
         code:
           $ref: '#/components/schemas/CurrencyCode'
@@ -3345,16 +3373,40 @@ components:
         type:
           type: string
           enum: [fiat, crypto, stablecoin]
+        status:
+          type: string
+          enum: [active, deprecated]
+          description: |
+            Lifecycle state of the currency. `active` means at least one corridor
+            currently routes the currency end-to-end; `deprecated` means Anton
+            still recognizes the symbol but no corridor can carry it. New payouts
+            against deprecated currencies are rejected upstream.
+          example: active
+        supported_rails:
+          type: array
+          description: |
+            Rail families that can carry this currency. Used to build corridor-aware
+            payout UIs without a round-trip to `/v1/corridors`. Omitted when no rail
+            carries the currency (the entry will still appear if declared in the
+            catalog, but `supported_rails` will be absent).
+          items:
+            type: string
+            enum: [fiat, crypto, stablecoin]
+          example: [fiat]
 
     Country:
       type: object
-      required: [iso2, iso3, name, supported_currencies]
+      required: [iso2, iso3, name, supported_currencies, payout_supported]
       properties:
         iso2:
           $ref: '#/components/schemas/CountryCode'
         iso3:
-          type: string
-          pattern: '^[A-Z]{3}$'
+          type: [string, "null"]
+          description: |
+            ISO 3166-1 alpha-3 country code. Always three uppercase letters for
+            countries with an assigned alpha-3. Kosovo (`XK`) has no ISO-assigned
+            alpha-3 and is returned as an empty string — treat empty string as
+            "unassigned" and fall back to `iso2`.
           example: USA
         name:
           type: string
@@ -3364,6 +3416,14 @@ components:
           description: Currencies Anton can deliver in this country.
           items:
             $ref: '#/components/schemas/CurrencyCode'
+        payout_supported:
+          type: boolean
+          description: |
+            `true` when Anton has at least one active, non-wildcard payout corridor
+            for the destination country. Clients that need only routable
+            destinations should filter on this field rather than assuming every
+            country in the response is payout-ready.
+          example: true
 
     PaymentMethodDescriptor:
       type: object
