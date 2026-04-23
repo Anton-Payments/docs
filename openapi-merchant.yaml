@@ -2012,7 +2012,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve a webhook subscription
@@ -2071,7 +2071,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve the current signing secret
@@ -2087,11 +2087,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: '`whsec_` + 64 hex.'
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: '`whsec_` + 64 hex.'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2104,7 +2108,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Send a test delivery
@@ -2117,15 +2121,20 @@ paths:
         Rate-limited.
       responses:
         '202':
-          description: Test event queued for delivery.
+          description: |
+            Test event queued for delivery. The response contains the full
+            `WebhookEvent` envelope — ID, type, timestamp, and the
+            synthetic payload — so the caller can correlate the queued
+            event with the delivery that arrives at the endpoint shortly
+            after.
           content:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  event_id:
-                    type: string
-                    pattern: '^evt_[a-zA-Z0-9]+$'
+                  data:
+                    $ref: '#/components/schemas/WebhookEvent'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2140,15 +2149,18 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Deactivate a webhook subscription
       operationId: deactivateWebhookSubscription
       description: |
         Stop delivering events to this subscription without deleting it. The
-        subscription moves to `inactive` and can be reactivated by updating its
-        status (contact support or wait for a re-activation endpoint).
+        subscription moves to `inactive` and stops receiving further
+        deliveries. To re-enable a subscription later, contact support —
+        there is no public reactivation endpoint. If you expect to
+        re-enable an endpoint programmatically, prefer creating a fresh
+        subscription over deactivating the existing one.
       responses:
         '200':
           description: Subscription deactivated.
@@ -2647,11 +2659,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: Raw signing secret. Shown once — store immediately.
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: Raw signing secret. Shown once — store immediately.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 components:
@@ -3943,6 +3959,11 @@ components:
             $ref: '#/components/schemas/WebhookEventType'
         metadata:
           type: object
+          description: |
+            Arbitrary string-to-string map attached to the subscription.
+            Echoed back on reads unchanged. Useful for correlating
+            subscriptions with your own internal IDs (environment,
+            tenant, integration name, etc.). Not interpreted by Anton.
           additionalProperties:
             type: string
 
@@ -3953,8 +3974,8 @@ components:
       properties:
         id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
-          example: wbh_01HX8Z9K0M2N3P4Q5R6S7T8UW
+          pattern: '^whk_[a-zA-Z0-9]+$'
+          example: whk_01HX8Z9K0M2N3P4Q5R6S7T8UW
         merchant_id:
           type: string
           pattern: '^mer_[a-zA-Z0-9]+$'
@@ -3974,6 +3995,9 @@ components:
           example: "2024-01-01"
         metadata:
           type: object
+          description: |
+            Arbitrary string-to-string map attached at creation. Returned
+            unchanged on reads. Not interpreted by Anton.
           additionalProperties:
             type: string
         created_at:
@@ -4013,7 +4037,7 @@ components:
           pattern: '^evt_[a-zA-Z0-9]+$'
         subscription_id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
         status:
           type: string
           enum: [pending, success, failed, abandoned]
