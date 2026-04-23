@@ -538,6 +538,157 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/beneficiaries/{id}/rescore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Rescore a beneficiary
+      operationId: rescoreBeneficiary
+      description: |
+        Triggers a manual Payee-pillar rescore of this beneficiary via the Anton
+        Engine. Use this after remediating a data issue (completed verification,
+        resolved an adverse event, updated PII) when you want a fresh verdict
+        before the next payout rather than waiting for the next scheduled
+        evaluation.
+
+        The engine response is returned directly so the portal can render the
+        old vs new score. The merchant-initiated `reason` is always recorded as
+        `ops_review`; no request body is required.
+
+        Requires an `Idempotency-Key` header.
+
+        Concurrency and rate limiting are enforced by the engine:
+        - If another rescore is already in flight for this beneficiary, the API
+          returns `202 Accepted` with `{"status": "in_flight"}` (no retry needed).
+        - If a rescore completed very recently, the API returns
+          `429 rescore_rate_limited`. Honor `Retry-After` before retrying.
+        - If the beneficiary is in a terminal state (permanently locked), the
+          API returns `409 beneficiary_scoring_locked`.
+        - If the engine has not yet seeded a profile for this beneficiary, the
+          API returns `404 engine_beneficiary_not_found`. Retry after the next
+          payout, which seeds the profile.
+        - If the engine admin token is not configured on this environment, the
+          API returns `501 rescore_not_configured`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: No request body is required. Any body is ignored.
+      responses:
+        '200':
+          description: Rescore completed. The body is the engine's verdict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryRescoreResponse'
+        '202':
+          description: |
+            A rescore is already running for this beneficiary. No retry is
+            needed; wait for the next scheduled reconciliation or poll the
+            beneficiary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, message]
+                properties:
+                  status:
+                    type: string
+                    enum: [in_flight]
+                  message:
+                    type: string
+                    example: a rescore for this beneficiary is already running
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: |
+            Beneficiary not found (`beneficiary_not_found`) or the engine has
+            no profile for this beneficiary yet (`engine_beneficiary_not_found`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                beneficiary_not_found:
+                  summary: Beneficiary does not exist under this merchant
+                  value:
+                    error:
+                      message: beneficiary not found
+                      code: beneficiary_not_found
+                engine_beneficiary_not_found:
+                  summary: Engine has no profile for this beneficiary yet
+                  value:
+                    error:
+                      message: engine has no profile for this beneficiary yet — please try again after the next payout
+                      code: engine_beneficiary_not_found
+        '409':
+          description: |
+            Either an idempotency key conflict (`idempotency_conflict`) or the
+            beneficiary is in a terminal scoring state (`beneficiary_scoring_locked`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                beneficiary_scoring_locked:
+                  summary: Beneficiary is permanently locked and cannot be rescored
+                  value:
+                    error:
+                      message: this beneficiary is in a terminal state and cannot be rescored
+                      code: beneficiary_scoring_locked
+                idempotency_conflict:
+                  summary: Idempotency key was replayed with a different payload
+                  value:
+                    error:
+                      message: idempotency key conflict
+                      code: idempotency_conflict
+        '429':
+          description: |
+            Either the standard per-merchant rate limit (`rate_limit_exceeded`)
+            or the beneficiary-specific rescore cooldown (`rescore_rate_limited`).
+            Honor `Retry-After`.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                rescore_rate_limited:
+                  summary: A rescore for this beneficiary completed recently
+                  value:
+                    error:
+                      message: a rescore completed recently; please wait before retrying
+                      code: rescore_rate_limited
+        '501':
+          description: |
+            Manual rescore is not configured on this API instance (the engine
+            admin token is not set). This is an environment-level configuration
+            issue, not a caller mistake.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                rescore_not_configured:
+                  value:
+                    error:
+                      message: manual rescore is not enabled on this API
+                      code: rescore_not_configured
+
   /v1/payouts:
     post:
       tags: [Payouts]
@@ -3077,6 +3228,26 @@ components:
           type: object
           additionalProperties:
             type: string
+        trust_score:
+          type: [number, "null"]
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Cross-merchant composite Payee-pillar trust score computed by the Anton
+            Engine. Range `0.0`–`1.0`; higher is more trustworthy. `null` when the
+            engine has not yet seeded a profile for this beneficiary — a beneficiary
+            created moments ago may land in this state briefly until the engine's
+            beneficiary events consumer writes the first profile row.
+          example: 0.87
+        trust_tier:
+          type: [string, "null"]
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
+          description: |
+            Bucketed label for `trust_score` using the engine's Payee cut-points.
+            Provided so merchant UIs can colour the beneficiary without reimplementing
+            the thresholds. `null` when `trust_score` is `null`.
+          example: HIGH
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -3091,8 +3262,70 @@ components:
         external_ref: contractor-1042
         metadata:
           department: engineering
+        trust_score: 0.87
+        trust_tier: HIGH
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
+
+    BeneficiaryRescoreResponse:
+      type: object
+      description: |
+        Verdict returned by a successful `POST /v1/beneficiaries/{id}/rescore`.
+        Carries both the new evaluation and, when available, the previous one
+        so clients can render old-vs-new score comparisons.
+      required: [pillar, resource_id, new_evaluation_id, new_score, new_tier]
+      properties:
+        pillar:
+          type: string
+          enum: [payee]
+          description: |
+            The engine scoring pillar that was recomputed. Merchant rescores
+            are always Payee-pillar.
+        resource_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+          description: The beneficiary ID this verdict applies to.
+        new_evaluation_id:
+          type: string
+          description: |
+            Engine evaluation ID for the rescore run. Persistent — can be used
+            to correlate with the engine's audit trail.
+        new_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Engine-native score for the rescore run. The normalized `trust_score`
+            exposed on `GET /v1/beneficiaries/{id}` is derived from this value.
+        new_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+          description: Bucketed tier for `new_score`.
+        previous_evaluation_id:
+          type: string
+          description: |
+            Engine evaluation ID of the prior evaluation, if any. Omitted when
+            this is the first evaluation for the beneficiary.
+        previous_score:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 100
+          description: |
+            Prior engine score, if any. Nullable (not omitted) so a legitimate
+            prior score of `0` is distinguishable from "no previous evaluation."
+        previous_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+          description: Prior tier, if any. Omitted when there was no prior evaluation.
+      example:
+        pillar: payee
+        resource_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        new_evaluation_id: eval_01HXA1B2C3D4E5F6G7H8J9K0
+        new_score: 72
+        new_tier: MEDIUM
+        previous_evaluation_id: eval_01HX9Z0Y8X7W6V5U4T3S2R1Q
+        previous_score: 45
+        previous_tier: HIGH
 
     Currency:
       type: object
