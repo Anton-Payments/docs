@@ -3292,11 +3292,11 @@ components:
             to correlate with the engine's audit trail.
         new_score:
           type: integer
-          minimum: 0
-          maximum: 100
           description: |
-            Engine-native score for the rescore run. The normalized `trust_score`
-            exposed on `GET /v1/beneficiaries/{id}` is derived from this value.
+            Engine-native raw score for the rescore run. This is the engine's
+            internal integer score, not the normalized `trust_score` (0.0–1.0)
+            exposed on `GET /v1/beneficiaries/{id}` — the normalization is
+            performed by the engine's profile writer.
         new_tier:
           type: string
           enum: [CRITICAL, HIGH, MEDIUM, LOW]
@@ -3308,11 +3308,10 @@ components:
             this is the first evaluation for the beneficiary.
         previous_score:
           type: [integer, "null"]
-          minimum: 0
-          maximum: 100
           description: |
-            Prior engine score, if any. Nullable (not omitted) so a legitimate
-            prior score of `0` is distinguishable from "no previous evaluation."
+            Prior engine raw score, if any. Nullable (not omitted) so a
+            legitimate prior score of `0` is distinguishable from "no previous
+            evaluation."
         previous_tier:
           type: string
           enum: [CRITICAL, HIGH, MEDIUM, LOW]
@@ -3321,10 +3320,10 @@ components:
         pillar: payee
         resource_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
         new_evaluation_id: eval_01HXA1B2C3D4E5F6G7H8J9K0
-        new_score: 72
+        new_score: 423
         new_tier: MEDIUM
         previous_evaluation_id: eval_01HX9Z0Y8X7W6V5U4T3S2R1Q
-        previous_score: 45
+        previous_score: 380
         previous_tier: HIGH
 
     Currency:
