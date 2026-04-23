@@ -1772,22 +1772,59 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                required:
+                  - fee
+                  - fee_currency
+                  - plan_id
+                  - quote_id
+                  - source_currency
+                  - dest_currency
+                  - source_amount
+                  - dest_amount
+                  - rate
+                  - total_cost
+                  - total_currency
+                  - created_at
+                  - expires_at
                 properties:
-                  fee:
-                    $ref: '#/components/schemas/Money'
-                  fee_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  fee_type:
-                    type: string
-                    enum: [fixed, percentage, hybrid, tiered]
-                  plan_id:
-                    type: string
-                    pattern: '^prc_[a-zA-Z0-9]+$'
                   quote_id:
                     type: string
                     pattern: '^pq_[a-zA-Z0-9]+$'
                     description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                  plan_id:
+                    type: string
+                    pattern: '^prc_[a-zA-Z0-9]+$'
+                  source_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  dest_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  source_amount:
+                    $ref: '#/components/schemas/Money'
+                  dest_amount:
+                    $ref: '#/components/schemas/Money'
+                  fee:
+                    $ref: '#/components/schemas/Money'
+                  fee_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  rate:
+                    type: string
+                    description: |
+                      FX rate applied to produce `dest_amount` from `source_amount`.
+                      `"1"` for same-currency quotes. Decimal string.
+                  rail_type:
+                    $ref: '#/components/schemas/RailType'
+                  method:
+                    $ref: '#/components/schemas/PayoutMethod'
+                  total_cost:
+                    allOf:
+                      - $ref: '#/components/schemas/Money'
+                    description: |
+                      `source_amount + fee` when the fee is charged in
+                      `source_currency`. Decimal string.
+                  total_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  created_at:
+                    $ref: '#/components/schemas/Timestamp'
                   expires_at:
                     $ref: '#/components/schemas/Timestamp'
         '401':
@@ -2345,6 +2382,10 @@ paths:
       description: |
         Non-binding rate between two currencies. Cheaper than a lockable quote;
         use for display purposes. Rate-limited to 30 per minute per IP.
+
+        **Provider note.** In sandbox, indicative rates are served by the
+        frankfurter.app public data feed (sandbox-only). Production uses the
+        same locked-rate providers as `POST /v1/fx/quote`.
       parameters:
         - name: sell_currency
           in: query
@@ -2356,9 +2397,12 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/CurrencyCode'
-        - name: sell_amount
+        - name: buy_amount
           in: query
-          description: Optional — amount to convert. When present, the response includes a `buy_amount`.
+          description: |
+            Optional — the recipient-side (`buy_currency`) amount to price. When
+            present, the response includes a computed `sell_amount`. Defaults
+            to `1` unit of `buy_currency` when omitted (rate display).
           schema:
             $ref: '#/components/schemas/Money'
       responses:
@@ -2386,8 +2430,6 @@ paths:
                     $ref: '#/components/schemas/Money'
                   buy_amount:
                     $ref: '#/components/schemas/Money'
-                  rate_timestamp:
-                    $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -2449,6 +2491,8 @@ paths:
           description: |
             - `quote_not_locked` — quote must be lockable.
             - `insufficient_balance` — sell currency balance cannot cover the exchange.
+            - `no_buy_account` — the merchant has no funding account in the
+              `buy_currency`. Provision the account (via ops) before retrying.
           content:
             application/json:
               schema:
@@ -4112,7 +4156,6 @@ components:
       description: An FX rate quote, optionally locked for execution.
       required:
         - id
-        - merchant_id
         - sell_currency
         - buy_currency
         - sell_amount
@@ -4120,13 +4163,15 @@ components:
         - mid_market_rate
         - customer_rate
         - locked
-        - created_at
       properties:
         id:
           type: string
           pattern: '^fxq_[a-zA-Z0-9]+$'
         merchant_id:
           type: string
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
         sell_currency:
           $ref: '#/components/schemas/CurrencyCode'
         buy_currency:
@@ -4157,14 +4202,17 @@ components:
         locked:
           type: boolean
         created_at:
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
 
     FXExchange:
       type: object
       description: An executed currency exchange between two merchant balances.
       required:
         - id
-        - merchant_id
         - sell_currency
         - buy_currency
         - sell_amount
@@ -4172,13 +4220,15 @@ components:
         - customer_rate
         - status
         - quote_id
-        - created_at
       properties:
         id:
           type: string
           pattern: '^fxx_[a-zA-Z0-9]+$'
         merchant_id:
           type: string
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
         sell_currency:
           $ref: '#/components/schemas/CurrencyCode'
         buy_currency:
@@ -4206,7 +4256,11 @@ components:
           type: string
           enum: [pending, completed, failed]
         created_at:
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
 
     MerchantAccount:
       type: object

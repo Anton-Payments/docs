@@ -221,6 +221,7 @@ The following codes are returned via the `code` field of the error envelope. Cod
 | `410` | `quote_expired` | The locked quote referenced by `quote_id` has expired. | Generate a new quote and retry. |
 | `400` | `quote_not_locked` | `POST /v1/fx/exchange` was called with a `quote_id` that points to an indicative (non-lockable) quote. | Use a locked quote — call `POST /v1/fx/quote` first. |
 | `422` | `no_funding_account` | The merchant has no funding account in the sell currency. | Fund the account first via `/v1/accounts/...`. |
+| `422` | `no_buy_account` | `POST /v1/fx/exchange` — the merchant has no funding account in the `buy_currency`, so the exchange cannot be credited. Previously surfaced as `500`; now deterministic per ANT-55. | Provision the buy-side account (contact ops) and retry. |
 | `502` | `fx_rates_unavailable` | The upstream FX rate provider is degraded or unavailable. | Retry with backoff. |
 | `503` | `locked_rate_unavailable` | The provider returned an indicative rate when a locked rate was requested. | Retry shortly. |
 | `500` | `fx_execution_failed` | Exchange execution failed in a way that does not map to insufficient balance or a quote issue. The message is sanitized; the real cause is logged with the `X-Request-ID`. | Retry with backoff; share the `X-Request-ID` if persistent. |
