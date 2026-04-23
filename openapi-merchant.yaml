@@ -4368,9 +4368,6 @@ components:
           description: Delivery method within the corridor (bank_transfer, crypto, stablecoin, etc.).
         active:
           type: boolean
-        priority:
-          type: integer
-          description: Anton uses lowest priority first when multiple corridors match.
         cutoff_time:
           type: string
           description: Daily cutoff for same-day processing (fiat rails, HH:MM UTC).
