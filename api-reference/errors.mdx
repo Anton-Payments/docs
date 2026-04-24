@@ -200,13 +200,20 @@ minimum 90-day deprecation window on the catch-all.
 
 | HTTP | `code` | Meaning | Remediation |
 |---|---|---|---|
-| `409` | `duplicate_file` | A batch file with the same SHA-256 hash is already pending, validating, or processing for this merchant. | Wait for the pending batch to finish, or cancel it. Use the `pending_batches` array on a non-error upload response to correlate. |
+| `400` | `invalid_cursor` | `GET /v1/batches`, `GET /v1/batches/{id}/payouts`, or `GET /v1/ops/batches` was called with a `cursor` that is malformed or has been tampered with. | Drop the cursor and start from the first page, or use the `next_cursor` returned on the previous page verbatim. |
+| `400` | `file_hash_mismatch` | Client-supplied `file_hash` multipart field does not match the server-computed SHA-256 of the uploaded file. | Recompute the SHA-256 on the exact bytes being uploaded. |
+| `409` | `duplicate_file` | A batch file with the same SHA-256 hash is already `uploaded`, `validating`, `validated`, `confirmed`, or `processing` for this merchant. | Wait for the pending batch to finish, or cancel it. Use the `pending_batches` array on a non-error upload response to correlate. |
 | `409` | `batch_not_validated` | `POST /v1/batches/{id}/confirm` was called before the batch finished validating. | Poll for `validated` status before confirming. |
 | `409` | `batch_confirmation_expired` | The batch validation result expired before confirm was called. | Re-upload the file and retry. |
 | `409` | `batch_not_cancellable` | The batch is not in a cancellable state. | Re-fetch the batch; cancellation is only valid in early states. |
 | `422` | `batch_upload_failed` | Generic upload failure not covered by `duplicate_file` or `invalid_file_format`. | Retry; if persistent, file a support ticket with the `X-Request-ID`. |
 | `422` | `batch_confirm_failed` | Generic confirmation failure. | Inspect the message and retry. |
 | `422` | `batch_cancel_failed` | Generic cancellation failure. | Inspect the message and retry. |
+| `501` | `not_configured` | `GET /v1/batches/{id}/beneficiaries` was called on an API instance where the beneficiary service is not wired into the batch handler. Not a caller mistake. | Environment-level misconfiguration; contact support. Sandbox and production have this enabled. |
+
+<Note>
+  Uploads larger than the 32 MB limit currently surface as `400 file_too_large` (the BodySizeLimit middleware rejects oversize requests before the handler runs). The catalog entry in the [Payload size](#payload-size) section reflects the intended long-term shape (`413 file_too_large`); an internal fix is tracked to align the status.
+</Note>
 
 ### Beneficiaries
 

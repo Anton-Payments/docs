@@ -1194,22 +1194,62 @@ paths:
   /v1/batches/template:
     get:
       tags: [Batches]
-      summary: Download the batch CSV template
+      summary: Download the batch template
       operationId: downloadBatchTemplate
       description: |
-        Returns a ready-to-fill CSV template with the canonical header row and a
+        Returns a ready-to-fill batch template with the canonical header row and a
         handful of example rows. Use this to anchor your batch format — column
         order and casing matter.
+
+        Two formats are offered and are byte-for-byte aligned — the XLSX template
+        uses the same columns in the same order as the CSV and is preferred for
+        merchants editing in Excel / Google Sheets (richer data validation). The
+        default format is `xlsx` when the `format` query parameter is omitted.
+
+        Reconciliation columns of note:
+          * `external_id` — your opaque internal payee reference (CRM ID, HR
+            system ID, accounting-package payee code). Stored on every payout
+            and beneficiary created from this batch and echoed back on reads so
+            you can reconcile against your system of record. Must not contain
+            PII, card data, or account numbers.
+          * `source_currency` — optional per-row override of the funding
+            currency; if unset, rows fall back to the `source_currency` passed
+            on `POST /v1/batches/{id}/confirm`.
+      parameters:
+        - name: format
+          in: query
+          description: |
+            Template format to download. Defaults to `xlsx` when omitted.
+          schema:
+            type: string
+            enum: [xlsx, csv]
+            default: xlsx
       responses:
         '200':
-          description: CSV template.
+          description: Batch template in the requested format.
           content:
             text/csv:
               schema:
                 type: string
                 format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: '`invalid_template_format` — `format` is not `xlsx` or `csv`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`template_not_found` — the template file is missing on this API instance (environment misconfiguration).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -1229,8 +1269,13 @@ paths:
         call `POST /v1/batches/{id}/confirm` to actually create the payouts.
         Confirmation expires — see `expires_at` on the batch record.
 
-        Maximum file size: 32 MB. Maximum rows per batch: check current limits
-        with support.
+        If any other batch is already in a pending lifecycle state (`uploaded`,
+        `validating`, `validated`, or `confirmed`) for this merchant, the
+        response includes a `pending_batches` array as a soft warning — the
+        upload still succeeds, but you should likely confirm or cancel the
+        earlier batches first so funding calculations don't collide.
+
+        Maximum file size: 32 MB. Maximum rows per batch: 10,000.
       requestBody:
         required: true
         content:
@@ -1243,15 +1288,51 @@ paths:
                   type: string
                   format: binary
                   description: CSV or XLSX file. Filename is preserved.
+                file_hash:
+                  type: string
+                  pattern: '^sha256:[a-f0-9]{64}$'
+                  description: |
+                    Optional client-computed SHA-256 of the file for defence-in-depth
+                    verification. If provided, the server recomputes the hash and
+                    rejects the upload with `file_hash_mismatch` (400) on any drift.
+                    Format: `sha256:<64-hex>` (lowercase hex).
+                  example: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
       responses:
         '201':
           description: Batch accepted and queued for validation.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                allOf:
+                  - $ref: '#/components/schemas/Batch'
+                  - type: object
+                    properties:
+                      pending_batches:
+                        type: array
+                        description: |
+                          Other in-flight batches for this merchant at the time of
+                          upload. Present only when at least one prior batch is in
+                          `validated` or `confirmed` state. Use the IDs to confirm
+                          or cancel the earlier batches.
+                        items:
+                          type: object
+                          required: [id, status]
+                          properties:
+                            id:
+                              type: string
+                              pattern: '^bat_[a-zA-Z0-9]+$'
+                            status:
+                              $ref: '#/components/schemas/BatchStatus'
         '400':
-          description: Malformed upload — missing file, empty file, or unsupported format.
+          description: |
+            Malformed upload.
+
+            Common error codes:
+              * `invalid_multipart_form` — request body could not be parsed as multipart.
+              * `invalid_file` — the `file` form field is missing.
+              * `invalid_file_format` — file extension is not `.csv` or `.xlsx`.
+              * `file_hash_mismatch` — client-supplied `file_hash` does not match the server-computed SHA-256.
+              * `file_too_large` — file exceeds the 32 MB limit. (Historically documented as 413; the 32 MB BodySizeLimit middleware currently surfaces oversize uploads as 400.)
           content:
             application/json:
               schema:
@@ -1259,13 +1340,13 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
-          description: '`duplicate_file` — a batch with this exact file hash was uploaded in the last 24 hours.'
+          description: '`duplicate_file` — a batch with this exact SHA-256 file hash is already `uploaded`, `validating`, `validated`, `confirmed`, or `processing` for this merchant. Wait for it to finish or cancel it; retry after.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        '413':
-          description: '`file_too_large` — file exceeds the 32 MB limit.'
+        '422':
+          description: '`batch_upload_failed` — generic upload-flow failure not covered by the 400/409 codes above. Retry; share `X-Request-ID` on support tickets.'
           content:
             application/json:
               schema:
@@ -1282,8 +1363,22 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - name: status
           in: query
+          description: Restrict to a single batch status.
           schema:
             $ref: '#/components/schemas/BatchStatus'
+        - name: created_after
+          in: query
+          description: |
+            RFC 3339 timestamp — inclusive lower bound on `created_at`.
+            Unparseable values are silently ignored (degrades to "no lower
+            bound") rather than returning 400, to match `GET /v1/payouts`.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          description: RFC 3339 timestamp — inclusive upper bound on `created_at`. Unparseable values are silently ignored.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Paginated list of batches.
@@ -1298,6 +1393,12 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/Batch'
+        '400':
+          description: '`invalid_cursor` — the supplied cursor is malformed or tampered.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1379,6 +1480,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            - `batch_confirm_failed` — generic confirmation failure not covered by the 409 codes above.
+            - `validation_error` — the optional `source_currency` body field is not a valid ISO 4217 currency code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -1398,6 +1507,10 @@ paths:
         Cancel a batch before processing begins. Valid from `uploaded`,
         `validating`, `validated`, `validation_failed`, or `confirmed`. Once
         `processing` begins, use per-payout cancellation instead.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Batch cancelled.
@@ -1411,6 +1524,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: '`batch_not_cancellable` — batch is already in a terminal state or is actively processing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: '`batch_cancel_failed` — generic cancel-flow failure.'
           content:
             application/json:
               schema:
@@ -1452,6 +1571,61 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /v1/batches/{id}/beneficiaries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List beneficiaries touched by a batch
+      operationId: listBatchBeneficiaries
+      description: |
+        List the beneficiaries that this batch created or first referenced.
+        Covers both the auto-create path (a row with inline beneficiary
+        details for which no matching beneficiary existed — Anton creates one
+        and tags it with `source_batch_id`) and the match path (a row that
+        resolved by `external_id` or display-name heuristic against an
+        existing beneficiary, but where this batch was the first to touch it).
+
+        Returned beneficiaries have `created_via: "batch"` and a
+        `source_batch_id` equal to the batch ID in the URL. The response is
+        merchant-scoped — cross-merchant ID probing returns 404.
+
+        This endpoint may return `501 not_configured` on API instances where
+        the beneficiary service is not wired into the batch handler (not the
+        case for production or sandbox).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paginated list of beneficiaries created or first referenced by this batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: '`not_configured` — batch beneficiary listing is not enabled on this API instance.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/batches/{id}/errors:
     parameters:
@@ -4189,7 +4363,14 @@ components:
           description: Beneficiaries that would be created from the file.
         matched_beneficiaries:
           type: integer
-          description: Rows that matched an existing beneficiary.
+          description: Rows that matched an existing beneficiary via display-name heuristic.
+        external_id_matched_beneficiaries:
+          type: integer
+          description: |
+            Rows that resolved to an existing beneficiary via merchant-supplied
+            `external_id` lookup. Counted separately from `matched_beneficiaries`
+            because `external_id` is a stronger match signal than a name
+            heuristic.
         existing_beneficiaries:
           type: integer
           description: Distinct existing beneficiaries referenced.
