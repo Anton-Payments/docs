@@ -2853,6 +2853,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: |
+            `locked_rate_unavailable` — the request asked for a locked quote
+            (the default) but the upstream provider could not issue a rate
+            lock. Retry with backoff, or set `locked: false` for an
+            indicative quote.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/fx/rate:
     get:
@@ -4823,7 +4833,13 @@ components:
           $ref: '#/components/schemas/Money'
         locked:
           type: boolean
-          description: Request a locked quote with a short expiry window. Defaults to true.
+          description: |
+            Request a rate-locked quote whose `customer_rate` is held until
+            `lock_expires_at`. Redeem the lock by passing the returned `id`
+            (or equivalently `lock_id`) as `quote_id` on
+            `POST /v1/fx/exchange` before expiry. Defaults to `true`.
+            Set to `false` for an indicative (non-binding) quote that cannot
+            be redeemed on `/v1/fx/exchange`.
           default: true
 
     FXQuote:
@@ -4876,6 +4892,23 @@ components:
           $ref: '#/components/schemas/Timestamp'
         locked:
           type: boolean
+        lock_id:
+          type: string
+          pattern: '^fxq_[a-zA-Z0-9]+$'
+          description: |
+            Identifier of the rate lock. Pass this value as `quote_id` on
+            `POST /v1/fx/exchange` to redeem the locked rate before
+            `lock_expires_at`. Equal to `id` on locked quotes, and omitted
+            entirely on indicative quotes (`locked: false`).
+        lock_expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            UTC timestamp past which the rate lock is no longer honored.
+            Omitted on indicative quotes. Equal to `expires_at` on locked
+            quotes — kept as a dedicated field so clients can distinguish
+            "the quote payload expired" from "the merchant's rate lock
+            expired" when those semantics diverge in future revisions.
         created_at:
           allOf:
             - $ref: '#/components/schemas/Timestamp'
