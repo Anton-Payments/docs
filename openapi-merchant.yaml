@@ -3531,6 +3531,15 @@ components:
             engine has not yet seeded a profile for this beneficiary — a beneficiary
             created moments ago may land in this state briefly until the engine's
             beneficiary events consumer writes the first profile row.
+
+            **Convention.** Every beneficiary-scoped endpoint that surfaces a
+            trust signal uses this same 0.0–1.0 scale — including `trust_score`
+            here, `new_trust_score` / `previous_trust_score` on the rescore
+            response, and `beneficiary.trust_score` on the engine-verdict
+            response. `trust_score` is the inverse of the engine's raw Payee
+            risk integer: `trust = (1000 - raw_risk) / 1000`. Do not mix the
+            two scales — prefer the `*_trust_score` fields and treat the raw
+            engine score fields as internal-audit detail.
           example: 0.87
         trust_tier:
           type: [string, "null"]
@@ -3565,7 +3574,16 @@ components:
         Verdict returned by a successful `POST /v1/beneficiaries/{id}/rescore`.
         Carries both the new evaluation and, when available, the previous one
         so clients can render old-vs-new score comparisons.
-      required: [pillar, resource_id, new_evaluation_id, new_score, new_tier]
+
+        **Scale.** The `new_trust_score` / `previous_trust_score` fields use
+        the same `0.0`–`1.0` trust-score convention as
+        `GET /v1/beneficiaries/{id}.trust_score` — higher is more trustworthy.
+        Prefer these fields on merchant-facing surfaces.
+        `new_score` / `previous_score` are the engine's raw 0–1000 Payee-pillar
+        risk integers and are **deprecated** — they remain on the response for
+        backward compatibility and ops-audit use and will be removed in a
+        future release.
+      required: [pillar, resource_id, new_evaluation_id, new_score, new_trust_score, new_tier]
       properties:
         pillar:
           type: string
@@ -3582,28 +3600,57 @@ components:
           description: |
             Engine evaluation ID for the rescore run. Persistent — can be used
             to correlate with the engine's audit trail.
+        new_trust_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalized trust score for the rescore run, on the same `0.0`–`1.0`
+            scale as `GET /v1/beneficiaries/{id}.trust_score`. Higher is more
+            trustworthy. Derived from the raw Payee-pillar risk integer as
+            `trust = (1000 - raw_risk) / 1000`. Always present on a successful
+            rescore response.
         new_score:
           type: integer
+          minimum: 0
+          maximum: 1000
+          deprecated: true
           description: |
-            Engine-native raw score for the rescore run. This is the engine's
-            internal integer score, not the normalized `trust_score` (0.0–1.0)
-            exposed on `GET /v1/beneficiaries/{id}` — the normalization is
-            performed by the engine's profile writer.
+            **Deprecated.** The engine's raw 0–1000 Payee-pillar risk integer
+            for the rescore run (lower is more trustworthy — the inverse of the
+            merchant trust score). Use `new_trust_score` instead; this field
+            will be removed in a future release.
         new_tier:
           type: string
           enum: [CRITICAL, HIGH, MEDIUM, LOW]
-          description: Bucketed tier for `new_score`.
+          description: Bucketed tier for the rescore (see `trust_tier` on the beneficiary resource).
         previous_evaluation_id:
           type: string
           description: |
             Engine evaluation ID of the prior evaluation, if any. Omitted when
             this is the first evaluation for the beneficiary.
+        previous_trust_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalized trust score from the prior evaluation, on the same
+            `0.0`–`1.0` scale as `new_trust_score`. Omitted when there was no
+            prior evaluation (distinguishable from a legitimate prior of
+            exactly `0.0` or `1.0`).
         previous_score:
           type: [integer, "null"]
+          minimum: 0
+          maximum: 1000
+          deprecated: true
           description: |
-            Prior engine raw score, if any. Nullable (not omitted) so a
-            legitimate prior score of `0` is distinguishable from "no previous
-            evaluation."
+            **Deprecated.** Prior engine raw 0–1000 Payee-pillar risk integer,
+            if any. Nullable (not omitted) so a legitimate prior score of `0`
+            is distinguishable from "no previous evaluation." Use
+            `previous_trust_score` instead; this field will be removed in a
+            future release.
         previous_tier:
           type: string
           enum: [CRITICAL, HIGH, MEDIUM, LOW]
@@ -3613,9 +3660,11 @@ components:
         resource_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
         new_evaluation_id: eval_01HXA1B2C3D4E5F6G7H8J9K0
         new_score: 423
+        new_trust_score: 0.577
         new_tier: MEDIUM
         previous_evaluation_id: eval_01HX9Z0Y8X7W6V5U4T3S2R1Q
-        previous_score: 380
+        previous_score: 720
+        previous_trust_score: 0.28
         previous_tier: HIGH
 
     Currency:
@@ -5395,8 +5444,14 @@ components:
           required: [trust_score, identity_consistency, third_party_verification]
           properties:
             trust_score:
-              type: string
-              description: Decimal string 0..1.
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: |
+                Normalized Payee-pillar trust score, `0.0`–`1.0`, higher is
+                more trustworthy. Same scale as
+                `GET /v1/beneficiaries/{id}.trust_score`.
             identity_consistency:
               type: string
               description: Decimal string 0..1.
