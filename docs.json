@@ -175,6 +175,7 @@
               "api-reference/batches/confirm-batch",
               "api-reference/batches/cancel-batch",
               "api-reference/batches/list-batch-payouts",
+              "api-reference/batches/list-batch-beneficiaries",
               "api-reference/batches/list-batch-errors",
               "api-reference/batches/list-batch-results"
             ]
