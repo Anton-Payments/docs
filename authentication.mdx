@@ -1,94 +1,218 @@
 ---
 title: "Authentication"
-description: "Anton authenticates API calls with per-merchant API keys. Keys are scoped to a single environment and carry full merchant privileges — treat them as bearer credentials."
+description: "Anton authenticates programmatic API calls with OAuth 2.0 client_credentials bound to a DPoP keypair. Static API keys are not accepted on v1."
 ---
 
-Every request to the Anton Payments API requires an `Authorization` header carrying a bearer credential. The merchant surface accepts **two credential types on the same routes**:
+Every authenticated `/v1` request requires both:
 
-- **API keys** (`ak_live_*` / `ak_test_*`) — for server-to-server integrations.
-- **WorkOS portal JWTs** — issued to users signed in to the merchant dashboard. JWTs carry the authenticated user plus their merchant org and role.
+1. An **OAuth 2.0 access token** in the `Authorization` header (scheme: `DPoP`, not `Bearer`).
+2. A **DPoP proof JWT** in the `DPoP` header — signed fresh per request with a key only your merchant holds.
 
-Both are presented the same way:
+Without DPoP, a leaked access token is full account access. With DPoP, a leaked token alone is inert — the proof cryptographically binds the request to the holder of the matching private key.
+
+Anton accepts two credential types on the same `/v1` routes:
+
+- **OAuth access tokens** (DPoP-bound) — for server-to-server integrations.
+- **WorkOS portal JWTs** — issued to users signed in to the merchant dashboard.
+
+This page covers programmatic OAuth auth. Portal JWT auth is automatic from the dashboard and not something integrators need to wire by hand.
+
+## Glossary
+
+| Term | What it is |
+|---|---|
+| **`client_id`** | Public identifier you put in the `Authorization: Basic ...` header when minting tokens. Format: `ant_oc_<env>_<32hex>`. |
+| **`client_secret`** | Long-lived secret paired with `client_id`. Format: `ant_ocs_<env>_<48hex>`. **Shown ONCE at creation** and never recoverable — store it immediately. |
+| **DPoP keypair** | EC P-256 (ES256) or Ed25519 (EdDSA) keypair you hold. The public half is registered with Anton when you create your client; the private half stays in your infrastructure. |
+| **Access token** | Short-lived signed JWT minted by `POST /oauth/token`. 1 hour TTL in production / staging, 8 hours in sandbox. |
+| **DPoP proof** | A fresh JWT you sign with your DPoP private key on every request. Encodes the HTTP method, URL, an `iat` timestamp, a unique `jti`, and (when sending a token) a hash of the access token. |
+| **`jkt`** | RFC 7638 SHA-256 thumbprint of your DPoP public JWK. Stored on your client record and stamped into every token's `cnf.jkt` claim. |
+
+## Generating credentials
+
+Sign in to the [merchant portal](https://app.antonpayments.com), go to **Settings → API Credentials**, and click **Create credentials**. The portal:
+
+1. Generates an ES256 (P-256) DPoP keypair in your browser using WebCrypto. The private key never leaves your device.
+2. Submits the public JWK to Anton.
+3. Returns `client_id`, `client_secret`, and the private key in PEM + JWK form — **all three shown once**. Copy them or download the `.pem`.
+
+Store the secret + private key in your secrets manager. Pass them to your service via env vars or a secrets mount. Never check them in.
+
+Sandbox credentials are issued by `app.antonpayments.dev` and only authenticate against `api.antonpayments.dev`. Production credentials similarly only work against `api.antonpayments.com`.
+
+## Token endpoint
+
+`POST /oauth/token` exchanges your `(client_id, client_secret)` plus a DPoP proof for an access token.
+
+**Request:**
+
+- `Content-Type: application/x-www-form-urlencoded`
+- `Authorization: Basic <base64(client_id:client_secret)>` (body fallback also accepted: `client_id` + `client_secret` as form fields)
+- `DPoP: <proof JWT>` — required, with `htm=POST`, `htu=https://api.antonpayments.dev/oauth/token`, fresh `iat` and `jti`, and **no** `ath` claim.
+- Body: `grant_type=client_credentials`
+
+**Response (200):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIs...",
+  "token_type": "DPoP",
+  "expires_in": 28800
+}
+```
+
+`expires_in` is in seconds. Cache the token until `exp - 60s` then re-mint. There are no refresh tokens — call the endpoint again with your secret.
+
+**Errors** (RFC 6749 §5.2 envelope):
+
+| HTTP | `error` | When |
+|---|---|---|
+| 400 | `unsupported_grant_type` | `grant_type` is not `client_credentials`. |
+| 400 | `invalid_request` | Missing form body, wrong Content-Type, missing DPoP header. |
+| 400 | `invalid_dpop_proof` | DPoP proof signature/jkt/htm/htu/iat/jti failed verification. |
+| 401 | `invalid_client` | Unknown `client_id`, wrong `client_secret`, or revoked client. |
+| 403 | `invalid_client` | Test client used in production, or vice versa. |
+
+## Making authenticated requests
+
+Every `/v1` call needs both headers:
 
 ```http
-Authorization: Bearer ak_live_kS2f...
-Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6...
+Authorization: DPoP <access_token>
+DPoP: <proof JWT, fresh per request>
 ```
 
-This **dual-auth** model means an endpoint like `POST /v1/payouts` works identically whether it's hit by a headless job using an API key or by a merchant user driving the dashboard. API keys carry full merchant scope for the endpoints documented here; dashboard users are subject to the role model configured in your organization.
+The proof MUST carry these claims:
 
-Requests without a valid credential return `401 Unauthorized`. API keys used against the wrong environment return `401` with `code: "key_environment_mismatch"`.
+- `htm` — HTTP method (`POST`, `GET`, etc.)
+- `htu` — request URL, scheme + host + path only (no query, no fragment)
+- `iat` — Unix timestamp, must be within ±60 seconds of Anton's clock
+- `jti` — unique identifier; Anton rejects replays within a 5-minute window
+- `ath` — base64url(SHA-256(access_token))
 
-## Key formats
+Header (the embedded `jwk` MUST hash to the `jkt` you registered):
 
-| Prefix | Environment | Base URL |
+```json
+{
+  "typ": "dpop+jwt",
+  "alg": "ES256",
+  "jwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+}
+```
+
+### curl quickstart
+
+The script below mints a token and calls `GET /v1/beneficiaries` against sandbox. It shells out to `openssl`, `jq`, and a small Python helper for ECDSA signature conversion — adapt to your language as needed; production clients should use a JOSE library rather than this verbose shell version.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+API=https://api.antonpayments.dev
+CLIENT_ID="${ANTON_CLIENT_ID:?missing}"
+CLIENT_SECRET="${ANTON_CLIENT_SECRET:?missing}"
+PRIV_PEM="${ANTON_PRIVATE_KEY_PEM:?path to your PKCS#8 EC private key}"
+
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+sha256_b64url() { openssl dgst -sha256 -binary | b64url; }
+
+# Build a DPoP proof. ath_b64 is empty for the token request.
+build_proof() {
+  local method="$1" url="$2" ath_b64="${3:-}"
+
+  # Extract public key (x, y) from the PEM.
+  local raw_hex x_hex y_hex
+  raw_hex=$(openssl ec -in "$PRIV_PEM" -pubout -outform DER 2>/dev/null \
+            | tail -c 65 | xxd -p -c 999)
+  x_hex=${raw_hex:2:64}
+  y_hex=${raw_hex:66:64}
+  local x y
+  x=$(echo "$x_hex" | xxd -r -p | b64url)
+  y=$(echo "$y_hex" | xxd -r -p | b64url)
+
+  local header claims
+  header=$(printf '{"typ":"dpop+jwt","alg":"ES256","jwk":{"kty":"EC","crv":"P-256","x":"%s","y":"%s"}}' "$x" "$y" | b64url)
+  if [ -n "$ath_b64" ]; then
+    claims=$(printf '{"jti":"%s","htm":"%s","htu":"%s","iat":%d,"ath":"%s"}' \
+             "$(uuidgen)" "$method" "$url" "$(date +%s)" "$ath_b64" | b64url)
+  else
+    claims=$(printf '{"jti":"%s","htm":"%s","htu":"%s","iat":%d}' \
+             "$(uuidgen)" "$method" "$url" "$(date +%s)" | b64url)
+  fi
+  local signing_input="$header.$claims"
+  local sig_der sig_p1363
+  sig_der=$(printf '%s' "$signing_input" | openssl dgst -sha256 -sign "$PRIV_PEM" -binary)
+  # Convert ASN.1 DER signature to IEEE P1363 (r || s, 64 bytes for P-256).
+  sig_p1363=$(printf '%s' "$sig_der" | python3 -c "
+import sys
+from asn1crypto import core
+data = sys.stdin.buffer.read()
+seq = core.Sequence.load(data)
+r = int(seq[0]).to_bytes(32, 'big')
+s = int(seq[1]).to_bytes(32, 'big')
+sys.stdout.buffer.write(r + s)
+" | b64url)
+  printf '%s.%s' "$signing_input" "$sig_p1363"
+}
+
+# 1. Mint a token.
+TOKEN_PROOF=$(build_proof POST "$API/oauth/token")
+TOKEN_RESP=$(curl -fsS -X POST "$API/oauth/token" \
+  -u "$CLIENT_ID:$CLIENT_SECRET" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "DPoP: $TOKEN_PROOF" \
+  -d "grant_type=client_credentials")
+ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r .access_token)
+
+# 2. Build a per-request proof (this one carries `ath`) and call /v1.
+ATH=$(printf '%s' "$ACCESS_TOKEN" | sha256_b64url)
+REQ_URL="$API/v1/beneficiaries"
+REQ_PROOF=$(build_proof GET "$REQ_URL" "$ATH")
+
+curl -fsS "$REQ_URL" \
+  -H "Authorization: DPoP $ACCESS_TOKEN" \
+  -H "DPoP: $REQ_PROOF"
+```
+
+## Token caching
+
+- Cache an access token until `exp - 60 seconds`. Don't refresh on every call — it's wasted round-trips.
+- On `401 invalid_token`, force-refresh once (the previous token may have expired between mint and use).
+- DPoP proofs are **not** cacheable — generate a fresh one for every request.
+
+## Troubleshooting
+
+| Error code | Likely cause | Fix |
 |---|---|---|
-| `ak_live_` | Production | `https://api.antonpayments.com` |
-| `ak_test_` | Sandbox | `https://api.antonpayments.dev` |
+| `invalid_dpop_proof` (`htm` mismatch) | Proof signed for a different HTTP method | Sign each proof for the actual method you're calling. |
+| `invalid_dpop_proof` (`htu` mismatch) | Proof signed for a different URL | Use `scheme://host/path` only — strip query and fragment. |
+| `invalid_dpop_proof` (`iat` skew) | Your clock is more than 60s off | Sync via NTP. |
+| `invalid_dpop_proof` (`jti` replay) | You sent the same proof twice | Generate a fresh `jti` per request (use a UUID). |
+| `invalid_dpop_proof` (jkt mismatch) | The DPoP key in the proof header isn't the one you registered | Re-register the keypair, or fix your client to use the registered key. |
+| `invalid_token` (`ath` mismatch) | The `ath` claim doesn't match SHA-256 of the access token | Recompute `ath = base64url(sha256(access_token))` per request. |
+| `invalid_token` (expired) | Access token past its `exp` | Mint a new token via `POST /oauth/token`. |
+| `invalid_client` | Wrong `client_id` / `client_secret` / revoked client | Check secrets; rotate via portal if compromised. |
+| `key_environment_mismatch` | Test creds against prod (or vice versa) | Use the right pair. Sandbox credentials only work on `api.antonpayments.dev`. |
+| `static_api_keys_disabled` | You sent `Authorization: Bearer ak_*` | Static API keys are not accepted on v1. Migrate to OAuth. |
 
-A test key will be rejected in production. A live key will be rejected in sandbox. A leaked key only exposes one environment's data.
+## Security model
 
-## Using a key
+**DPoP defends against bearer-token theft.** A leaked access token alone is useless without the matching private DPoP key. This neutralises a common class of incidents — tokens captured via stack traces, error reports, network proxies, or misconfigured logging.
 
-<CodeGroup>
+**DPoP does NOT defend against full credential-store theft.** If an attacker exfiltrates both the private DPoP key AND a live access token from your infrastructure, they can forge proofs and act as you for up to one token TTL. The mitigations are short token TTLs (1 hour in production), key rotation discipline, and reducing blast radius via the credential's revoke endpoint.
 
-```bash cURL
-curl https://api.antonpayments.dev/v1/beneficiaries \
-  -H "Authorization: Bearer ak_test_kS2f..."
-```
+**Token TTL is the revocation mechanism.** If you suspect a credential is compromised, rotate the `client_secret` (the rotate endpoint issues a new one) and revoke the client. Outstanding tokens will continue to verify until their `exp` — at most 1 hour in production. For emergency revocation of in-flight tokens, contact support.
 
-```javascript JavaScript
-const response = await fetch("https://api.antonpayments.dev/v1/beneficiaries", {
-  headers: {
-    Authorization: `Bearer ${process.env.ANTON_API_KEY}`,
-  },
-});
-const data = await response.json();
-```
+**Anton's signing key rotates every 90 days** with a 24-hour publication overlap. The JWKS endpoint at `/v1/.well-known/jwks.json` always reflects the currently-trusted set; cache it for ≤5 minutes (the response includes a matching `Cache-Control`).
 
-```php PHP
-$ch = curl_init("https://api.antonpayments.dev/v1/beneficiaries");
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Authorization: Bearer " . getenv("ANTON_API_KEY"),
-]);
-$response = curl_exec($ch);
-curl_close($ch);
-```
+## SDKs
 
-```go Go
-req, _ := http.NewRequest("GET", "https://api.antonpayments.dev/v1/beneficiaries", nil)
-req.Header.Set("Authorization", "Bearer "+os.Getenv("ANTON_API_KEY"))
-resp, err := http.DefaultClient.Do(req)
-```
-
-</CodeGroup>
-
-## Creating and rotating keys
-
-API keys are created and managed in the [merchant dashboard](https://app.antonpayments.com). Keys are only shown once at creation — store them in your secrets manager immediately. Anton does not retain the plaintext and cannot recover a lost key.
-
-To rotate:
-
-<Steps>
-  <Step title="Create a new key">
-    Generate a new key in the dashboard. Label it with the service or environment that will use it.
-  </Step>
-  <Step title="Deploy the new key">
-    Update your secrets store and roll out the new key. Verify traffic is flowing against it.
-  </Step>
-  <Step title="Revoke the old key">
-    Only after the new key is serving all traffic, revoke the old one from the dashboard. Revocation is immediate and cannot be undone.
-  </Step>
-</Steps>
-
-## If a key is exposed
-
-Revoke it immediately from the dashboard, then review recent activity in the dashboard's audit log for anything unexpected. Contact [help.antonpayments.com](https://help.antonpayments.com) if the leaked key belonged to production.
+SDKs are not part of v1. Programmatic clients integrate against the raw HTTP surface; the curl example above is the canonical reference. Official SDKs for Go, Node, and Python are tracked as a follow-up initiative — when they ship, the canonical authentication examples will move into the per-language quickstarts.
 
 ## Requirements
 
 - **Use HTTPS.** Anton only accepts TLS 1.2+ connections. Plaintext requests are dropped at the edge.
-- **Never commit keys to source control.** Use environment variables or a dedicated secrets manager.
-- **Never include keys in frontend code.** All API calls must originate from a trusted backend.
-- **Prefer one key per service.** Narrower blast radius when a key needs to be rotated.
+- **Never commit credentials to source control.** Use environment variables or a dedicated secrets manager. The DPoP private key especially — it's the second half of your bearer-token defense.
+- **Never include credentials in frontend code.** All API calls must originate from a trusted backend.
+- **Prefer one credential per service.** Narrower blast radius when a credential needs to be rotated.
+- **Wall clock within 60 seconds of UTC.** NTP in your container/host. DPoP `iat` claims are time-bounded.

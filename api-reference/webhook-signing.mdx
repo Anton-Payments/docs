@@ -243,7 +243,7 @@ Every subscription has one signing secret. The secret is returned once — in th
   <Accordion title="Retrieve the current secret">
     ```bash
     curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret \
-      -H "Authorization: Bearer ak_test_..."
+      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
     ```
 
     Response:
@@ -256,7 +256,7 @@ Every subscription has one signing secret. The secret is returned once — in th
     ```bash
     curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret/rotate \
       -X POST \
-      -H "Authorization: Bearer ak_test_..."
+      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
     ```
 
     Response:

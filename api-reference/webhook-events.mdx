@@ -594,7 +594,7 @@ Create a subscription with the list of event types you want to receive. The sign
 ```bash
 curl https://api.antonpayments.dev/v1/webhooks \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/webhooks/anton",

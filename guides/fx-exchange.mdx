@@ -23,11 +23,11 @@ Plus — cross-currency payouts automatically use FX under the hood when you sub
 
 ## Indicative rates
 
-For display-only use. Two currencies, optional sell amount:
+For display-only use. Two currencies, optional recipient-side (`buy`) amount:
 
 ```bash
-curl "https://api.antonpayments.dev/v1/fx/rate?sell_currency=USD&buy_currency=EUR&sell_amount=1000" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+curl "https://api.antonpayments.dev/v1/fx/rate?sell_currency=USD&buy_currency=EUR&buy_amount=1000" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Response:
@@ -39,17 +39,17 @@ Response:
   "mid_market_rate": "0.9215",
   "customer_rate": "0.9173",
   "fx_markup_bps": 45,
-  "sell_amount": "1000.00",
-  "buy_amount": "917.30",
-  "rate_timestamp": "2026-04-15T14:30:00Z"
+  "sell_amount": "1090.18",
+  "buy_amount": "1000.00"
 }
 ```
 
 - `mid_market_rate` — raw interbank rate
 - `customer_rate` — mid-market adjusted by your pricing plan's FX markup (`fx_markup_bps`)
-- `buy_amount` — computed using `customer_rate`
+- `sell_amount` — computed using `customer_rate` from the supplied `buy_amount`
+- When `buy_amount` is omitted, the response prices a single unit (`buy_amount=1`) for rate display
 
-Rate-limited to 30 per minute per IP. The rate is not locked — by the time you execute, it may have moved.
+In sandbox, rates are served by the frankfurter.app public data feed. Rate-limited to 30 per minute per IP. The rate is not locked — by the time you execute, it may have moved.
 
 ## Lockable quotes
 
@@ -58,7 +58,7 @@ When you need certainty:
 ```bash
 curl https://api.antonpayments.dev/v1/fx/quote \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "sell_currency": "USD",
@@ -94,7 +94,7 @@ Exchange is idempotent:
 ```bash
 curl https://api.antonpayments.dev/v1/fx/exchange \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: fxx-$CUSTOMER_ORDER_ID" \
   -d '{"quote_id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFX"}'
@@ -115,7 +115,7 @@ You typically don't call `/v1/fx/*` explicitly when sending a payout — Anton h
 ```bash
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Idempotency-Key: pay-xborder-001" \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,7 +142,7 @@ The returned `Payout` carries FX detail — `exchange_rate`, `fee`, `fee_currenc
 
 ```bash
 curl "https://api.antonpayments.dev/v1/fx/exchanges?sell_currency=USD&limit=50" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Filters: `sell_currency`, `buy_currency`, `created_after`, `created_before`. Cursor-paginated.

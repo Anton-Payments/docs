@@ -137,7 +137,8 @@
               "api-reference/beneficiaries/get-beneficiary-pii",
               "api-reference/beneficiaries/update-beneficiary-pii",
               "api-reference/beneficiaries/archive-beneficiary",
-              "api-reference/beneficiaries/restore-beneficiary"
+              "api-reference/beneficiaries/restore-beneficiary",
+              "api-reference/beneficiaries/rescore-beneficiary"
             ]
           },
           {
@@ -174,6 +175,7 @@
               "api-reference/batches/confirm-batch",
               "api-reference/batches/cancel-batch",
               "api-reference/batches/list-batch-payouts",
+              "api-reference/batches/list-batch-beneficiaries",
               "api-reference/batches/list-batch-errors",
               "api-reference/batches/list-batch-results"
             ]

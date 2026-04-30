@@ -20,7 +20,7 @@ A crypto/stablecoin instrument uses `method: "crypto"` on creation. Credentials 
 ```bash
 curl "https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/instruments" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: ins-crypto-001" \
   -d '{
@@ -61,7 +61,7 @@ Same endpoint as fiat. The `method` and `rail_type` distinguish the flow:
 ```bash
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: pay-onchain-001" \
   -d '{

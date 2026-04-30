@@ -45,7 +45,7 @@ A **corridor** is a `(currency, country, method, network)` combination Anton can
 
 ```bash
 curl "https://api.antonpayments.dev/v1/corridors?currency=EUR&country=DE" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 The `method` field on `POST /v1/payouts` selects the delivery method. For fiat:
@@ -117,7 +117,7 @@ You can cancel a payout that has not yet been submitted to a rail — from `crea
 ```bash
 curl https://api.antonpayments.dev/v1/payouts/$PAYOUT_ID/cancel \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Idempotency-Key: cancel-$PAYOUT_ID" \
   -H "Content-Type: application/json" \
   -d '{"reason": "beneficiary requested change of account"}'

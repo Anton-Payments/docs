@@ -7,11 +7,12 @@ info:
   description: |
     The Anton Payments merchant API. Versioned, idempotent, cursor-paginated.
 
-    - Authentication: bearer API key in the `Authorization` header.
+    - **Authentication**: OAuth 2.0 client_credentials with DPoP proof-of-possession (RFC 6749 §4.4 + RFC 9449). Programmatic clients exchange `(client_id, client_secret)` for a short-lived access token at `POST /oauth/token`, then send each request with `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. Static API keys are not accepted on v1.
     - Base URLs: `https://api.antonpayments.com` (production), `https://api.antonpayments.dev` (sandbox).
     - Monetary amounts are decimal strings. Never floats.
     - Timestamps are RFC 3339 UTC.
     - All mutating endpoints support the `Idempotency-Key` header.
+    - Anton's OAuth public signing key is published at `GET /v1/.well-known/jwks.json` (5-minute cache).
 
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
@@ -28,9 +29,14 @@ servers:
     description: Sandbox
 
 security:
-  - bearerAuth: []
+  - oauthDPoP: []
+    dpopHeader: []
 
 tags:
+  - name: Authentication
+    description: OAuth 2.0 token endpoint and JWKS publication. See the API description for the full DPoP-bound flow.
+  - name: OAuth Clients
+    description: Manage OAuth credentials (programmatic access). Portal-only — JWT auth required.
   - name: Reference Data
     description: Currencies, countries, and supported payment methods.
   - name: Beneficiaries
@@ -79,6 +85,187 @@ tags:
     description: Session-authenticated hosted onboarding flow. Not intended for SDK consumption.
 
 paths:
+  /oauth/token:
+    post:
+      tags: [Authentication]
+      summary: Mint a DPoP-bound access token
+      description: |
+        Exchange `(client_id, client_secret)` plus a DPoP proof for an OAuth 2.0 access token bound to the merchant's registered DPoP keypair. RFC 6749 §4.4 (client_credentials) + RFC 9449 §5.
+
+        Send credentials via HTTP Basic auth (`Authorization: Basic <base64(client_id:client_secret)>`) — body fallback is also accepted. The `DPoP` header is required and MUST carry a proof JWT signed by the merchant's private DPoP key with `htm=POST`, `htu=https://api.../oauth/token`, fresh `iat` / `jti`, and NO `ath` claim (the access token does not exist yet).
+
+        Token TTL is **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call this endpoint again to mint a fresh token.
+      security: []
+      parameters:
+        - in: header
+          name: DPoP
+          required: true
+          schema: { type: string }
+          description: DPoP proof JWT for this token request.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials]
+                client_id:
+                  type: string
+                  description: Optional when supplied via Basic auth header.
+                client_secret:
+                  type: string
+                  description: Optional when supplied via Basic auth header.
+      responses:
+        '200':
+          description: Access token minted.
+          headers:
+            Cache-Control: { schema: { type: string }, description: '`no-store` per RFC 6749 §5.1.' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token:
+                    type: string
+                    description: "Signed JWT to send as `Authorization: DPoP <token>`."
+                  token_type:
+                    type: string
+                    enum: [DPoP]
+                  expires_in:
+                    type: integer
+                    description: Token lifetime in seconds.
+        '400':
+          description: Invalid request, unsupported_grant_type, or invalid DPoP proof.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: invalid_client (unknown client_id or wrong secret).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '403':
+          description: Test client used in production.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+
+  /v1/.well-known/jwks.json:
+    get:
+      tags: [Authentication]
+      summary: Public OAuth signing key set
+      description: |
+        Serves the public half of Anton's OAuth signing key (or keys, during a 24h rotation overlap) as a JSON Web Key Set. SDKs and external verifiers fetch this to verify access tokens locally without a DB hit. Cached 5 minutes.
+      security: []
+      responses:
+        '200':
+          description: JWKS document.
+          headers:
+            Cache-Control: { schema: { type: string }, description: '`public, max-age=300`.' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items: { $ref: '#/components/schemas/JSONWebKey' }
+
+  /v1/oauth-clients:
+    get:
+      tags: [OAuth Clients]
+      summary: List your OAuth clients
+      description: Portal-only. Lists the calling merchant's registered OAuth clients. JWT auth required.
+      responses:
+        '200':
+          description: Array of oauth_clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/OAuthClient' } }
+                  has_more: { type: boolean }
+    post:
+      tags: [OAuth Clients]
+      summary: Register a new OAuth client
+      description: |
+        Portal-only. Generates a fresh `client_id` + `client_secret` for the calling merchant and registers their DPoP public JWK.
+
+        The `client_secret` and (if browser-generated) the DPoP private key are returned ONCE in the create response and never recoverable.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, dpop_jwk]
+              properties:
+                name: { type: string, maxLength: 100 }
+                dpop_jwk:
+                  type: object
+                  description: DPoP public JWK (EC P-256 / ES256 or OKP Ed25519 / EdDSA — RSA refused).
+      responses:
+        '201':
+          description: Client created. Raw secret shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client: { $ref: '#/components/schemas/OAuthClient' }
+                  raw_secret: { type: string, description: Shown ONCE — store securely. Format `ant_ocs_<env>_<48hex>`. }
+                  warning: { type: string }
+
+  /v1/oauth-clients/{id}/rotate-secret:
+    post:
+      tags: [OAuth Clients]
+      summary: Rotate client_secret
+      description: |
+        Portal-only. Issues a fresh `client_secret` for an existing client. The `client_id` and registered DPoP key are unchanged.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: New raw_secret returned (shown once).
+
+  /v1/oauth-clients/{id}/revoke:
+    post:
+      tags: [OAuth Clients]
+      summary: Revoke an OAuth client
+      description: |
+        Portal-only. Marks the client as revoked. Outstanding access tokens minted against it will continue to verify until their TTL expires (token-TTL is the revocation mechanism — at most 1h in prod, 8h in sandbox).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Revoked.
+
   /v1/currencies:
     get:
       tags: [Reference Data]
@@ -87,6 +274,11 @@ paths:
       description: |
         Return every currency Anton supports, across fiat, crypto, and stablecoin.
         Use these codes when building payout or FX requests.
+
+        The catalog is pruned at call time to currencies with at least one active
+        corridor. Each entry carries a lifecycle `status` (`active` or `deprecated`)
+        and `supported_rails` indicating which rail families (`fiat`, `crypto`,
+        `stablecoin`) can carry the token.
       responses:
         '200':
           description: Supported currencies.
@@ -107,11 +299,19 @@ paths:
                     decimals: 2
                     symbol: "$"
                     type: fiat
+                    status: active
+                    supported_rails: [fiat]
                   - code: USDC
                     name: USD Coin
                     decimals: 6
                     symbol: USDC
                     type: stablecoin
+                    status: active
+                    supported_rails: [stablecoin]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/countries:
     get:
@@ -119,8 +319,13 @@ paths:
       summary: List supported countries
       operationId: listCountries
       description: |
-        Return every destination country Anton can deliver payouts to, along with
-        the currencies each country supports.
+        Return every country Anton recognizes (the full 159-country superset derived
+        from the instrument registry), along with the currencies each country
+        supports and whether Anton currently has an active, non-wildcard payout
+        corridor for the destination (`payout_supported`).
+
+        Clients that previously relied on `/v1/countries` returning only routable
+        destinations should filter on `payout_supported == true`.
       responses:
         '200':
           description: Supported countries.
@@ -134,6 +339,10 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Country'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/payment-methods:
     get:
@@ -160,6 +369,12 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/PaymentMethodDescriptor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /v1/beneficiaries:
     post:
@@ -538,6 +753,157 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/beneficiaries/{id}/rescore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Rescore a beneficiary
+      operationId: rescoreBeneficiary
+      description: |
+        Triggers a manual Payee-pillar rescore of this beneficiary via the Anton
+        Engine. Use this after remediating a data issue (completed verification,
+        resolved an adverse event, updated PII) when you want a fresh verdict
+        before the next payout rather than waiting for the next scheduled
+        evaluation.
+
+        The engine response is returned directly so the portal can render the
+        old vs new score. The merchant-initiated `reason` is always recorded as
+        `ops_review`; no request body is required.
+
+        Requires an `Idempotency-Key` header.
+
+        Concurrency and rate limiting are enforced by the engine:
+        - If another rescore is already in flight for this beneficiary, the API
+          returns `202 Accepted` with `{"status": "in_flight"}` (no retry needed).
+        - If a rescore completed very recently, the API returns
+          `429 rescore_rate_limited`. Honor `Retry-After` before retrying.
+        - If the beneficiary is in a terminal state (permanently locked), the
+          API returns `409 beneficiary_scoring_locked`.
+        - If the engine has not yet seeded a profile for this beneficiary, the
+          API returns `404 engine_beneficiary_not_found`. Retry after the next
+          payout, which seeds the profile.
+        - If the engine admin token is not configured on this environment, the
+          API returns `501 rescore_not_configured`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: No request body is required. Any body is ignored.
+      responses:
+        '200':
+          description: Rescore completed. The body is the engine's verdict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryRescoreResponse'
+        '202':
+          description: |
+            A rescore is already running for this beneficiary. No retry is
+            needed; wait for the next scheduled reconciliation or poll the
+            beneficiary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, message]
+                properties:
+                  status:
+                    type: string
+                    enum: [in_flight]
+                  message:
+                    type: string
+                    example: a rescore for this beneficiary is already running
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: |
+            Beneficiary not found (`beneficiary_not_found`) or the engine has
+            no profile for this beneficiary yet (`engine_beneficiary_not_found`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                beneficiary_not_found:
+                  summary: Beneficiary does not exist under this merchant
+                  value:
+                    error:
+                      message: beneficiary not found
+                      code: beneficiary_not_found
+                engine_beneficiary_not_found:
+                  summary: Engine has no profile for this beneficiary yet
+                  value:
+                    error:
+                      message: engine has no profile for this beneficiary yet — please try again after the next payout
+                      code: engine_beneficiary_not_found
+        '409':
+          description: |
+            Either an idempotency key conflict (`idempotency_conflict`) or the
+            beneficiary is in a terminal scoring state (`beneficiary_scoring_locked`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                beneficiary_scoring_locked:
+                  summary: Beneficiary is permanently locked and cannot be rescored
+                  value:
+                    error:
+                      message: this beneficiary is in a terminal state and cannot be rescored
+                      code: beneficiary_scoring_locked
+                idempotency_conflict:
+                  summary: Idempotency key was replayed with a different payload
+                  value:
+                    error:
+                      message: idempotency key conflict
+                      code: idempotency_conflict
+        '429':
+          description: |
+            Either the standard per-merchant rate limit (`rate_limit_exceeded`)
+            or the beneficiary-specific rescore cooldown (`rescore_rate_limited`).
+            Honor `Retry-After`.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                rescore_rate_limited:
+                  summary: A rescore for this beneficiary completed recently
+                  value:
+                    error:
+                      message: a rescore completed recently; please wait before retrying
+                      code: rescore_rate_limited
+        '501':
+          description: |
+            Manual rescore is not configured on this API instance (the engine
+            admin token is not set). This is an environment-level configuration
+            issue, not a caller mistake.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                rescore_not_configured:
+                  value:
+                    error:
+                      message: manual rescore is not enabled on this API
+                      code: rescore_not_configured
+
   /v1/payouts:
     post:
       tags: [Payouts]
@@ -807,6 +1173,65 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/payouts/{id}/velocity-results:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Payout ID (prefixed `pay_`).
+        schema:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+    get:
+      tags: [Payouts]
+      summary: List velocity rule results for a payout
+      operationId: listPayoutVelocityResults
+      description: |
+        Returns the per-rule velocity / risk evaluation snapshot captured at
+        payout-creation time. Each row is one rule the engine evaluated against
+        this payout with the triggered/threshold/action values recorded for that
+        specific evaluation — rules edited or deleted after the fact don't
+        rewrite history here.
+
+        **Portal-only (JWT auth).** API-key callers get `403 api_key_not_accepted`
+        — this endpoint is only reachable through the merchant dashboard. The
+        same data is not exposed on public API keys to avoid encoding internal
+        risk-policy surface into merchant integrations.
+      x-anton-portal-only: true
+      responses:
+        '200':
+          description: Velocity rule evaluation snapshot. May be empty if no rules ran (e.g. pre-screening payouts, or engine-bypassed flows).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayoutVelocityResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Forbidden — the request authenticated via an API key. This endpoint
+            is only available through the merchant dashboard (JWT auth).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                api_key_rejected:
+                  value:
+                    error:
+                      code: api_key_not_accepted
+                      message: this endpoint is only available through the merchant dashboard
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/payouts/{id}/cancel:
     parameters:
       - name: id
@@ -938,29 +1363,80 @@ paths:
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            The request failed validation or a business rule on the instrument.
+
+            Common error codes:
+              * `validation_error` — body shape or field validation failed (e.g. `end_user_ip` not a valid IPv4/IPv6).
+              * `invalid_credentials` — method-specific credential check failed (IBAN checksum, ABA routing checksum, wallet address format, etc.).
+              * `method_not_supported` — the requested `method` is valid globally but is not supported for the beneficiary's country (e.g. `us_bank` on a `GB` beneficiary).
+              * `duplicate_instrument` — an instrument with the same credentials already exists on this beneficiary. Reuse the existing instrument.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
   /v1/batches/template:
     get:
       tags: [Batches]
-      summary: Download the batch CSV template
+      summary: Download the batch template
       operationId: downloadBatchTemplate
       description: |
-        Returns a ready-to-fill CSV template with the canonical header row and a
+        Returns a ready-to-fill batch template with the canonical header row and a
         handful of example rows. Use this to anchor your batch format — column
         order and casing matter.
+
+        Two formats are offered and are byte-for-byte aligned — the XLSX template
+        uses the same columns in the same order as the CSV and is preferred for
+        merchants editing in Excel / Google Sheets (richer data validation). The
+        default format is `xlsx` when the `format` query parameter is omitted.
+
+        Reconciliation columns of note:
+          * `external_id` — your opaque internal payee reference (CRM ID, HR
+            system ID, accounting-package payee code). Stored on every payout
+            and beneficiary created from this batch and echoed back on reads so
+            you can reconcile against your system of record. Must not contain
+            PII, card data, or account numbers.
+          * `source_currency` — optional per-row override of the funding
+            currency; if unset, rows fall back to the `source_currency` passed
+            on `POST /v1/batches/{id}/confirm`.
+      parameters:
+        - name: format
+          in: query
+          description: |
+            Template format to download. Defaults to `xlsx` when omitted.
+          schema:
+            type: string
+            enum: [xlsx, csv]
+            default: xlsx
       responses:
         '200':
-          description: CSV template.
+          description: Batch template in the requested format.
           content:
             text/csv:
               schema:
                 type: string
                 format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: '`invalid_template_format` — `format` is not `xlsx` or `csv`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`template_not_found` — the template file is missing on this API instance (environment misconfiguration).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -980,8 +1456,13 @@ paths:
         call `POST /v1/batches/{id}/confirm` to actually create the payouts.
         Confirmation expires — see `expires_at` on the batch record.
 
-        Maximum file size: 32 MB. Maximum rows per batch: check current limits
-        with support.
+        If any other batch is already in a pending lifecycle state (`uploaded`,
+        `validating`, `validated`, or `confirmed`) for this merchant, the
+        response includes a `pending_batches` array as a soft warning — the
+        upload still succeeds, but you should likely confirm or cancel the
+        earlier batches first so funding calculations don't collide.
+
+        Maximum file size: 32 MB. Maximum rows per batch: 10,000.
       requestBody:
         required: true
         content:
@@ -994,15 +1475,51 @@ paths:
                   type: string
                   format: binary
                   description: CSV or XLSX file. Filename is preserved.
+                file_hash:
+                  type: string
+                  pattern: '^sha256:[a-f0-9]{64}$'
+                  description: |
+                    Optional client-computed SHA-256 of the file for defence-in-depth
+                    verification. If provided, the server recomputes the hash and
+                    rejects the upload with `file_hash_mismatch` (400) on any drift.
+                    Format: `sha256:<64-hex>` (lowercase hex).
+                  example: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
       responses:
         '201':
           description: Batch accepted and queued for validation.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                allOf:
+                  - $ref: '#/components/schemas/Batch'
+                  - type: object
+                    properties:
+                      pending_batches:
+                        type: array
+                        description: |
+                          Other in-flight batches for this merchant at the time of
+                          upload. Present only when at least one prior batch is in
+                          `validated` or `confirmed` state. Use the IDs to confirm
+                          or cancel the earlier batches.
+                        items:
+                          type: object
+                          required: [id, status]
+                          properties:
+                            id:
+                              type: string
+                              pattern: '^bat_[a-zA-Z0-9]+$'
+                            status:
+                              $ref: '#/components/schemas/BatchStatus'
         '400':
-          description: Malformed upload — missing file, empty file, or unsupported format.
+          description: |
+            Malformed upload.
+
+            Common error codes:
+              * `invalid_multipart_form` — request body could not be parsed as multipart.
+              * `invalid_file` — the `file` form field is missing.
+              * `invalid_file_format` — file extension is not `.csv` or `.xlsx`.
+              * `file_hash_mismatch` — client-supplied `file_hash` does not match the server-computed SHA-256.
+              * `file_too_large` — file exceeds the 32 MB limit. (Historically documented as 413; the 32 MB BodySizeLimit middleware currently surfaces oversize uploads as 400.)
           content:
             application/json:
               schema:
@@ -1010,13 +1527,13 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
-          description: '`duplicate_file` — a batch with this exact file hash was uploaded in the last 24 hours.'
+          description: '`duplicate_file` — a batch with this exact SHA-256 file hash is already `uploaded`, `validating`, `validated`, `confirmed`, or `processing` for this merchant. Wait for it to finish or cancel it; retry after.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        '413':
-          description: '`file_too_large` — file exceeds the 32 MB limit.'
+        '422':
+          description: '`batch_upload_failed` — generic upload-flow failure not covered by the 400/409 codes above. Retry; share `X-Request-ID` on support tickets.'
           content:
             application/json:
               schema:
@@ -1033,8 +1550,22 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - name: status
           in: query
+          description: Restrict to a single batch status.
           schema:
             $ref: '#/components/schemas/BatchStatus'
+        - name: created_after
+          in: query
+          description: |
+            RFC 3339 timestamp — inclusive lower bound on `created_at`.
+            Unparseable values are silently ignored (degrades to "no lower
+            bound") rather than returning 400, to match `GET /v1/payouts`.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          description: RFC 3339 timestamp — inclusive upper bound on `created_at`. Unparseable values are silently ignored.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Paginated list of batches.
@@ -1049,6 +1580,12 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/Batch'
+        '400':
+          description: '`invalid_cursor` — the supplied cursor is malformed or tampered.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1130,6 +1667,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            - `batch_confirm_failed` — generic confirmation failure not covered by the 409 codes above.
+            - `validation_error` — the optional `source_currency` body field is not a valid ISO 4217 currency code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -1149,6 +1694,10 @@ paths:
         Cancel a batch before processing begins. Valid from `uploaded`,
         `validating`, `validated`, `validation_failed`, or `confirmed`. Once
         `processing` begins, use per-payout cancellation instead.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Batch cancelled.
@@ -1162,6 +1711,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: '`batch_not_cancellable` — batch is already in a terminal state or is actively processing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: '`batch_cancel_failed` — generic cancel-flow failure.'
           content:
             application/json:
               schema:
@@ -1203,6 +1758,61 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /v1/batches/{id}/beneficiaries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List beneficiaries touched by a batch
+      operationId: listBatchBeneficiaries
+      description: |
+        List the beneficiaries that this batch created or first referenced.
+        Covers both the auto-create path (a row with inline beneficiary
+        details for which no matching beneficiary existed — Anton creates one
+        and tags it with `source_batch_id`) and the match path (a row that
+        resolved by `external_id` or display-name heuristic against an
+        existing beneficiary, but where this batch was the first to touch it).
+
+        Returned beneficiaries have `created_via: "batch"` and a
+        `source_batch_id` equal to the batch ID in the URL. The response is
+        merchant-scoped — cross-merchant ID probing returns 404.
+
+        This endpoint may return `501 not_configured` on API instances where
+        the beneficiary service is not wired into the batch handler (not the
+        case for production or sandbox).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Paginated list of beneficiaries created or first referenced by this batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorList'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: '`not_configured` — batch beneficiary listing is not enabled on this API instance.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/batches/{id}/errors:
     parameters:
@@ -1451,6 +2061,12 @@ paths:
                   enum: [active, disabled]
                 end_user_ip:
                   type: string
+                  format: ip
+                  description: |
+                    The end-user's public IP address for the session that initiated
+                    this update. Captured on the audit trail and fed into risk scoring.
+                    Must be a valid IPv4 or IPv6 address.
+                  example: "203.0.113.42"
       responses:
         '200':
           description: Instrument updated.
@@ -1474,6 +2090,25 @@ paths:
         Soft-delete an instrument. The instrument is removed from active listings
         and cannot be used on new payouts. Historical payouts referencing it
         remain accessible and unchanged.
+
+        An optional JSON body may supply `end_user_ip` — the public IP of the
+        end-user session that initiated the delete — for audit and risk. The
+        field must be a valid IPv4 or IPv6 address.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                end_user_ip:
+                  type: string
+                  format: ip
+                  description: |
+                    The end-user's public IP address for the session that
+                    initiated this deletion. Captured on the audit trail and
+                    used as a risk signal. Must be a valid IPv4 or IPv6 address.
+                  example: "203.0.113.42"
       responses:
         '204':
           description: Instrument deleted.
@@ -1481,6 +2116,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -1665,27 +2302,13 @@ paths:
       operationId: listTransactions
       description: |
         Cursor-paginated list of transactions across every funding account you
-        hold. Filter by currency, type, or time range as needed.
+        hold. Only `limit` and `cursor` are honored; server-side filtering by
+        currency, type, or time range is not yet supported — filter client-side
+        on the returned `MerchantTransaction` objects, or call
+        `GET /v1/accounts/{currency}/transactions` to narrow by currency.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
-        - name: currency
-          in: query
-          schema:
-            $ref: '#/components/schemas/CurrencyCode'
-        - name: type
-          in: query
-          description: Transaction type — `credit`, `debit`, `fee`, `fx`, etc.
-          schema:
-            type: string
-        - name: created_after
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
-        - name: created_before
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Transactions.
@@ -1772,22 +2395,59 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                required:
+                  - fee
+                  - fee_currency
+                  - plan_id
+                  - quote_id
+                  - source_currency
+                  - dest_currency
+                  - source_amount
+                  - dest_amount
+                  - rate
+                  - total_cost
+                  - total_currency
+                  - created_at
+                  - expires_at
                 properties:
-                  fee:
-                    $ref: '#/components/schemas/Money'
-                  fee_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  fee_type:
-                    type: string
-                    enum: [fixed, percentage, hybrid, tiered]
-                  plan_id:
-                    type: string
-                    pattern: '^prc_[a-zA-Z0-9]+$'
                   quote_id:
                     type: string
                     pattern: '^pq_[a-zA-Z0-9]+$'
                     description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                  plan_id:
+                    type: string
+                    pattern: '^prc_[a-zA-Z0-9]+$'
+                  source_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  dest_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  source_amount:
+                    $ref: '#/components/schemas/Money'
+                  dest_amount:
+                    $ref: '#/components/schemas/Money'
+                  fee:
+                    $ref: '#/components/schemas/Money'
+                  fee_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  rate:
+                    type: string
+                    description: |
+                      FX rate applied to produce `dest_amount` from `source_amount`.
+                      `"1"` for same-currency quotes. Decimal string.
+                  rail_type:
+                    $ref: '#/components/schemas/RailType'
+                  method:
+                    $ref: '#/components/schemas/PayoutMethod'
+                  total_cost:
+                    allOf:
+                      - $ref: '#/components/schemas/Money'
+                    description: |
+                      `source_amount + fee` when the fee is charged in
+                      `source_currency`. Decimal string.
+                  total_currency:
+                    $ref: '#/components/schemas/CurrencyCode'
+                  created_at:
+                    $ref: '#/components/schemas/Timestamp'
                   expires_at:
                     $ref: '#/components/schemas/Timestamp'
         '401':
@@ -1901,7 +2561,13 @@ paths:
       tags: [Webhooks]
       summary: List webhook subscriptions
       operationId: listWebhookSubscriptions
-      description: Return all webhook subscriptions on your merchant account.
+      description: |
+        Return all webhook subscriptions on your merchant account.
+
+        Subscriptions that have been deleted via `DELETE /v1/webhooks/{id}`
+        are soft-deleted and excluded from this list. Their delivery
+        history is retained and can be inspected via the deliveries
+        endpoint with `include_deleted=true`.
       parameters:
         - name: status
           in: query
@@ -1931,11 +2597,17 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve a webhook subscription
       operationId: getWebhookSubscription
+      description: |
+        Retrieve a single subscription by ID. Subscriptions that have been
+        deleted via `DELETE /v1/webhooks/{id}` are soft-deleted and return
+        `404 webhook_subscription_not_found` here — they are not visible
+        to merchant reads. Delivery history is still accessible via
+        `GET /v1/webhooks/events/{id}/deliveries?include_deleted=true`.
       responses:
         '200':
           description: Subscription.
@@ -1952,16 +2624,30 @@ paths:
       summary: Delete a webhook subscription
       operationId: deleteWebhookSubscription
       description: |
-        Permanently delete a subscription. Event history and past delivery
-        records are retained for audit, but no new deliveries will be attempted.
-        Prefer `POST /v1/webhooks/{id}/deactivate` if you may re-enable later.
+        Soft-delete a subscription. The subscription disappears from
+        `GET /v1/webhooks` and `GET /v1/webhooks/{id}` (which will return
+        404) and will not receive any further event deliveries. The full
+        delivery history is preserved for audit retention and can be
+        retrieved via `GET /v1/webhooks/events/{id}/deliveries` with
+        `include_deleted=true`.
+
+        This endpoint is **idempotent**. Calling `DELETE` on a
+        subscription that was never created, or on one that has already
+        been deleted, also returns `204 No Content`. Clients can safely
+        retry `DELETE` after a timeout without worrying about spurious
+        404s.
+
+        Prefer `POST /v1/webhooks/{id}/deactivate` if you may re-enable
+        the same subscription later — deactivate is reversible;
+        delete is not.
       responses:
         '204':
-          description: Subscription deleted.
+          description: |
+            Subscription is now in the deleted state. Returned whether the
+            subscription existed and was freshly deleted, or was already
+            deleted, or never existed.
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /v1/webhooks/{id}/secret:
     parameters:
@@ -1970,7 +2656,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve the current signing secret
@@ -1986,11 +2672,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: '`whsec_` + 64 hex.'
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: '`whsec_` + 64 hex.'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2003,7 +2693,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Send a test delivery
@@ -2016,15 +2706,20 @@ paths:
         Rate-limited.
       responses:
         '202':
-          description: Test event queued for delivery.
+          description: |
+            Test event queued for delivery. The response contains the full
+            `WebhookEvent` envelope — ID, type, timestamp, and the
+            synthetic payload — so the caller can correlate the queued
+            event with the delivery that arrives at the endpoint shortly
+            after.
           content:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  event_id:
-                    type: string
-                    pattern: '^evt_[a-zA-Z0-9]+$'
+                  data:
+                    $ref: '#/components/schemas/WebhookEvent'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2039,15 +2734,18 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Deactivate a webhook subscription
       operationId: deactivateWebhookSubscription
       description: |
         Stop delivering events to this subscription without deleting it. The
-        subscription moves to `inactive` and can be reactivated by updating its
-        status (contact support or wait for a re-activation endpoint).
+        subscription moves to `inactive` and stops receiving further
+        deliveries. To re-enable a subscription later, contact support —
+        there is no public reactivation endpoint. If you expect to
+        re-enable an endpoint programmatically, prefer creating a fresh
+        subscription over deactivating the existing one.
       responses:
         '200':
           description: Subscription deactivated.
@@ -2142,6 +2840,23 @@ paths:
         subscribed endpoint. Each attempt records the request headers, response
         status, body, duration, and retry schedule — useful for debugging
         failing integrations.
+
+        By default, deliveries that targeted a subscription which has
+        since been deleted (`DELETE /v1/webhooks/{id}`) are excluded
+        from this list. Pass `include_deleted=true` to include them —
+        useful when auditing historical delivery activity from a
+        subscription you have since removed.
+      parameters:
+        - name: include_deleted
+          in: query
+          required: false
+          description: |
+            When `true`, include deliveries whose target subscription
+            has been soft-deleted. Accepts standard boolean values
+            (`true`/`false`, `1`/`0`). Defaults to `false`.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Delivery history.
@@ -2198,11 +2913,34 @@ paths:
                 properties:
                   status:
                     type: string
-                    enum: [reset, deleted]
+                    enum: [reset, deleted, cleaned]
+                    description: |
+                      Outcome of the reset. Varies by `scope`:
+                      - `reset` — balances re-seeded (`scope=balances` or `scope=full-reset`)
+                      - `cleaned` — everything wiped and balances re-seeded (`scope=all`)
+                      - `deleted` — everything wiped without re-seed (`scope=delete-all`)
                   scope:
                     type: string
                   merchant_id:
                     type: string
+                  beneficiaries:
+                    type: integer
+                    description: |
+                      Sample beneficiaries re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
+                  instruments:
+                    type: integer
+                    description: |
+                      Sample instruments re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
+                  payouts:
+                    type: integer
+                    description: |
+                      Sample payouts re-seeded. Only populated when
+                      `scope=full-reset`; omitted otherwise.
+                    example: 4
         '400':
           description: '`invalid_scope` — the `scope` query parameter is not one of the accepted values.'
           content:
@@ -2239,9 +2977,18 @@ paths:
                   status:
                     type: string
                     example: seeded
-                  created_count:
+                  merchant_id:
+                    type: string
+                  beneficiaries:
                     type: integer
-                    example: 12
+                    description: Number of sample beneficiaries created.
+                    example: 4
+                  instruments:
+                    type: integer
+                    description: |
+                      Number of payment instruments created across the
+                      seeded beneficiaries.
+                    example: 4
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2293,6 +3040,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: |
+            `locked_rate_unavailable` — the request asked for a locked quote
+            (the default) but the upstream provider could not issue a rate
+            lock. Retry with backoff, or set `locked: false` for an
+            indicative quote.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/fx/rate:
     get:
@@ -2302,6 +3059,10 @@ paths:
       description: |
         Non-binding rate between two currencies. Cheaper than a lockable quote;
         use for display purposes. Rate-limited to 30 per minute per IP.
+
+        **Provider note.** In sandbox, indicative rates are served by the
+        frankfurter.app public data feed (sandbox-only). Production uses the
+        same locked-rate providers as `POST /v1/fx/quote`.
       parameters:
         - name: sell_currency
           in: query
@@ -2313,9 +3074,12 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/CurrencyCode'
-        - name: sell_amount
+        - name: buy_amount
           in: query
-          description: Optional — amount to convert. When present, the response includes a `buy_amount`.
+          description: |
+            Optional — the recipient-side (`buy_currency`) amount to price. When
+            present, the response includes a computed `sell_amount`. Defaults
+            to `1` unit of `buy_currency` when omitted (rate display).
           schema:
             $ref: '#/components/schemas/Money'
       responses:
@@ -2343,8 +3107,6 @@ paths:
                     $ref: '#/components/schemas/Money'
                   buy_amount:
                     $ref: '#/components/schemas/Money'
-                  rate_timestamp:
-                    $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -2406,6 +3168,8 @@ paths:
           description: |
             - `quote_not_locked` — quote must be lockable.
             - `insufficient_balance` — sell currency balance cannot cover the exchange.
+            - `no_buy_account` — the merchant has no funding account in the
+              `buy_currency`. Provision the account (via ops) before retrying.
           content:
             application/json:
               schema:
@@ -2483,9 +3247,12 @@ paths:
                   status:
                     type: string
                     example: seeded
-                  created_count:
+                  merchant_id:
+                    type: string
+                  created:
                     type: integer
-                    example: 30
+                    description: Number of sample payouts created.
+                    example: 4
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2522,25 +3289,43 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: Raw signing secret. Shown once — store immediately.
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: Raw signing secret. Shown once — store immediately.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: API Key
+    oauthDPoP:
+      type: oauth2
       description: |
-        API keys are opaque strings prefixed by environment:
-        - `ak_live_*` — production keys, accepted only on `api.antonpayments.com`.
-        - `ak_test_*` — sandbox keys, accepted only on `api.antonpayments.dev`.
+        OAuth 2.0 client_credentials grant (RFC 6749 §4.4) bound to a DPoP keypair (RFC 9449).
 
-        Include your key in the `Authorization` header: `Bearer ak_test_...`.
+        **Flow** (every authenticated `/v1` call requires both an access token AND a fresh per-request DPoP proof):
+
+        1. Register a credential via the merchant portal. Anton issues a `client_id` (`ant_oc_<env>_<32hex>`) and a `client_secret` (`ant_ocs_<env>_<48hex>`, shown ONCE). The portal generates an ES256 or Ed25519 DPoP keypair in your browser; you store the private half.
+        2. Mint an access token: `POST /oauth/token` with `Authorization: Basic <client_id:client_secret>` and `Content-Type: application/x-www-form-urlencoded`. Body: `grant_type=client_credentials`. A `DPoP` header carrying a proof signed for the token endpoint is required (no `ath` claim on this proof).
+        3. Use the token: send `Authorization: DPoP <access_token>` plus a fresh `DPoP: <proof>` header on every `/v1` request. The proof JWT MUST carry `htm` (request method), `htu` (request URL, no query/fragment), `iat` (within ±60s), `jti` (unique within 5 min), and `ath` (SHA-256 of the access token, base64url).
+
+        Tokens expire in **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call `/oauth/token` again with your secret. Anton's public signing key is published at `/v1/.well-known/jwks.json`.
+
+        OpenAPI 3.0 has no native DPoP scheme; this declaration plus `dpopHeader` together convey both the access-token Authorization and the per-request proof header.
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes: {}
+    dpopHeader:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: |
+        Per-request DPoP proof JWT (RFC 9449). MUST accompany the `Authorization: DPoP <access_token>` header on every protected operation. The proof is signed by the merchant's private DPoP key and carries `htm`, `htu`, `iat`, `jti`, and `ath` claims.
 
   parameters:
     Limit:
@@ -2659,6 +3444,57 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
 
   schemas:
+    OAuthError:
+      type: object
+      description: |
+        RFC 6749 §5.2 / RFC 9449 error envelope. Distinct from Anton's standard `ErrorEnvelope` — the OAuth endpoints (`/oauth/token`) return this flat shape so any OAuth-conformant SDK can branch on `error` without learning Anton-specific shapes.
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - unauthorized_client
+            - unsupported_grant_type
+            - invalid_scope
+            - invalid_dpop_proof
+            - invalid_token
+            - server_error
+        error_description: { type: string }
+
+    JSONWebKey:
+      type: object
+      description: ES256 (P-256) public key in JWK form, as published by `/v1/.well-known/jwks.json`.
+      required: [kty, crv, x, y, alg, use, kid]
+      properties:
+        kty: { type: string, enum: [EC] }
+        crv: { type: string, enum: [P-256] }
+        x:   { type: string, description: Base64url-encoded x coordinate (32 bytes). }
+        y:   { type: string, description: Base64url-encoded y coordinate (32 bytes). }
+        alg: { type: string, enum: [ES256] }
+        use: { type: string, enum: [sig] }
+        kid: { type: string }
+
+    OAuthClient:
+      type: object
+      description: A merchant's registered OAuth credential. Authenticates calls to `/oauth/token`.
+      required: [id, merchant_id, name, client_id, environment, dpop_jkt, created_at]
+      properties:
+        id:                 { type: string, description: 'Row ID, e.g. `oc_xxxxxxxxxxxx`.' }
+        merchant_id:        { type: string }
+        created_by_id:      { type: string, nullable: true }
+        name:               { type: string }
+        client_id:          { type: string, description: 'Public client identifier, format `ant_oc_<env>_<32hex>`.' }
+        environment:        { type: string, enum: [test, live] }
+        dpop_jwk:           { type: object, description: Registered DPoP public JWK. }
+        dpop_jkt:           { type: string, description: RFC 7638 SHA-256 thumbprint of `dpop_jwk`; published in every minted access token's `cnf.jkt` claim. }
+        expires_at:         { type: string, format: date-time, nullable: true }
+        last_used_at:       { type: string, format: date-time, nullable: true }
+        revoked_at:         { type: string, format: date-time, nullable: true }
+        created_at:         { type: string, format: date-time }
+
     ErrorEnvelope:
       type: object
       required: [error]
@@ -2936,6 +3772,35 @@ components:
           type: object
           additionalProperties:
             type: string
+        trust_score:
+          type: [number, "null"]
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Cross-merchant composite Payee-pillar trust score computed by the Anton
+            Engine. Range `0.0`–`1.0`; higher is more trustworthy. `null` when the
+            engine has not yet seeded a profile for this beneficiary — a beneficiary
+            created moments ago may land in this state briefly until the engine's
+            beneficiary events consumer writes the first profile row.
+
+            **Convention.** Every beneficiary-scoped endpoint that surfaces a
+            trust signal uses this same 0.0–1.0 scale — including `trust_score`
+            here, `new_trust_score` / `previous_trust_score` on the rescore
+            response, and `beneficiary.trust_score` on the engine-verdict
+            response. `trust_score` is the inverse of the engine's raw Payee
+            risk integer: `trust = (1000 - raw_risk) / 1000`. Do not mix the
+            two scales — prefer the `*_trust_score` fields and treat the raw
+            engine score fields as internal-audit detail.
+          example: 0.87
+        trust_tier:
+          type: [string, "null"]
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
+          description: |
+            Bucketed label for `trust_score` using the engine's Payee cut-points.
+            Provided so merchant UIs can colour the beneficiary without reimplementing
+            the thresholds. `null` when `trust_score` is `null`.
+          example: HIGH
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -2950,12 +3815,113 @@ components:
         external_ref: contractor-1042
         metadata:
           department: engineering
+        trust_score: 0.87
+        trust_tier: HIGH
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
 
+    BeneficiaryRescoreResponse:
+      type: object
+      description: |
+        Verdict returned by a successful `POST /v1/beneficiaries/{id}/rescore`.
+        Carries both the new evaluation and, when available, the previous one
+        so clients can render old-vs-new score comparisons.
+
+        **Scale.** The `new_trust_score` / `previous_trust_score` fields use
+        the same `0.0`–`1.0` trust-score convention as
+        `GET /v1/beneficiaries/{id}.trust_score` — higher is more trustworthy.
+        Prefer these fields on merchant-facing surfaces.
+        `new_score` / `previous_score` are the engine's raw 0–1000 Payee-pillar
+        risk integers and are **deprecated** — they remain on the response for
+        backward compatibility and ops-audit use and will be removed in a
+        future release.
+      required: [pillar, resource_id, new_evaluation_id, new_score, new_trust_score, new_tier]
+      properties:
+        pillar:
+          type: string
+          enum: [payee]
+          description: |
+            The engine scoring pillar that was recomputed. Merchant rescores
+            are always Payee-pillar.
+        resource_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+          description: The beneficiary ID this verdict applies to.
+        new_evaluation_id:
+          type: string
+          description: |
+            Engine evaluation ID for the rescore run. Persistent — can be used
+            to correlate with the engine's audit trail.
+        new_trust_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalized trust score for the rescore run, on the same `0.0`–`1.0`
+            scale as `GET /v1/beneficiaries/{id}.trust_score`. Higher is more
+            trustworthy. Derived from the raw Payee-pillar risk integer as
+            `trust = (1000 - raw_risk) / 1000`. Always present on a successful
+            rescore response.
+        new_score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          deprecated: true
+          description: |
+            **Deprecated.** The engine's raw 0–1000 Payee-pillar risk integer
+            for the rescore run (lower is more trustworthy — the inverse of the
+            merchant trust score). Use `new_trust_score` instead; this field
+            will be removed in a future release.
+        new_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+          description: Bucketed tier for the rescore (see `trust_tier` on the beneficiary resource).
+        previous_evaluation_id:
+          type: string
+          description: |
+            Engine evaluation ID of the prior evaluation, if any. Omitted when
+            this is the first evaluation for the beneficiary.
+        previous_trust_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalized trust score from the prior evaluation, on the same
+            `0.0`–`1.0` scale as `new_trust_score`. Omitted when there was no
+            prior evaluation (distinguishable from a legitimate prior of
+            exactly `0.0` or `1.0`).
+        previous_score:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 1000
+          deprecated: true
+          description: |
+            **Deprecated.** Prior engine raw 0–1000 Payee-pillar risk integer,
+            if any. Nullable (not omitted) so a legitimate prior score of `0`
+            is distinguishable from "no previous evaluation." Use
+            `previous_trust_score` instead; this field will be removed in a
+            future release.
+        previous_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+          description: Prior tier, if any. Omitted when there was no prior evaluation.
+      example:
+        pillar: payee
+        resource_id: ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1
+        new_evaluation_id: eval_01HXA1B2C3D4E5F6G7H8J9K0
+        new_score: 423
+        new_trust_score: 0.577
+        new_tier: MEDIUM
+        previous_evaluation_id: eval_01HX9Z0Y8X7W6V5U4T3S2R1Q
+        previous_score: 720
+        previous_trust_score: 0.28
+        previous_tier: HIGH
+
     Currency:
       type: object
-      required: [code, name, decimals, type]
+      required: [code, name, decimals, type, status]
       properties:
         code:
           $ref: '#/components/schemas/CurrencyCode'
@@ -2972,16 +3938,40 @@ components:
         type:
           type: string
           enum: [fiat, crypto, stablecoin]
+        status:
+          type: string
+          enum: [active, deprecated]
+          description: |
+            Lifecycle state of the currency. `active` means at least one corridor
+            currently routes the currency end-to-end; `deprecated` means Anton
+            still recognizes the symbol but no corridor can carry it. New payouts
+            against deprecated currencies are rejected upstream.
+          example: active
+        supported_rails:
+          type: array
+          description: |
+            Rail families that can carry this currency. Used to build corridor-aware
+            payout UIs without a round-trip to `/v1/corridors`. Omitted when no rail
+            carries the currency (the entry will still appear if declared in the
+            catalog, but `supported_rails` will be absent).
+          items:
+            type: string
+            enum: [fiat, crypto, stablecoin]
+          example: [fiat]
 
     Country:
       type: object
-      required: [iso2, iso3, name, supported_currencies]
+      required: [iso2, iso3, name, supported_currencies, payout_supported]
       properties:
         iso2:
           $ref: '#/components/schemas/CountryCode'
         iso3:
-          type: string
-          pattern: '^[A-Z]{3}$'
+          type: [string, "null"]
+          description: |
+            ISO 3166-1 alpha-3 country code. Always three uppercase letters for
+            countries with an assigned alpha-3. Kosovo (`XK`) has no ISO-assigned
+            alpha-3 and is returned as an empty string — treat empty string as
+            "unassigned" and fall back to `iso2`.
           example: USA
         name:
           type: string
@@ -2991,6 +3981,14 @@ components:
           description: Currencies Anton can deliver in this country.
           items:
             $ref: '#/components/schemas/CurrencyCode'
+        payout_supported:
+          type: boolean
+          description: |
+            `true` when Anton has at least one active, non-wildcard payout corridor
+            for the destination country. Clients that need only routable
+            destinations should filter on this field rather than assuming every
+            country in the response is payout-ready.
+          example: true
 
     PaymentMethodDescriptor:
       type: object
@@ -3108,14 +4106,14 @@ components:
 
         The `credentials` object shape varies by `method`. A few common shapes:
 
-        - `iban`: `{ "iban": "GB82WEST12345698765432", "bic": "WESTGB22" }` (BIC optional)
-        - `uk_bank`: `{ "account_number": "12345678", "sort_code": "123456" }`
-        - `us_bank`: `{ "routing_number": "026073150", "account_number": "...", "account_type": "checking" }`
+        - `iban`: `{ "account_holder_name": "Ada Lovelace", "iban": "GB82WEST12345698765432", "bic": "WESTGB22" }` (BIC optional; `account_holder_name` required)
+        - `uk_bank`: `{ "account_holder_name": "Ada Lovelace", "account_number": "12345678", "sort_code": "123456" }`
+        - `us_bank`: `{ "account_holder_name": "Ada Lovelace", "routing_number": "026073150", "account_number": "...", "account_type": "checking" }`
         - `crypto`: `{ "wallet_address": "0x...", "network": "ethereum", "token_symbol": "USDC" }`
-        - `card`: `{ "pan": "...", "expiry_month": 12, "expiry_year": 2028 }` (routed through PCI vault)
+        - `card`: `{ "number": "...", "exp_month": "12", "exp_year": "2028" }` (routed through PCI vault; all fields are strings)
 
-        Call `GET /v1/payment-methods?country=XX` for the complete per-country catalog
-        with the exact credential schema required.
+        Call `GET /v1/instruments/methods?country=XX` for the complete per-country
+        catalog with the exact credential schema required for each method.
       properties:
         method:
           $ref: '#/components/schemas/PaymentMethodCode'
@@ -3137,6 +4135,15 @@ components:
           default: false
         end_user_ip:
           type: string
+          format: ip
+          description: |
+            The end-user's public IP address, forwarded by you from the session that
+            submitted these credentials. Captured on the audit trail and used as a
+            signal in Anton's risk scoring.
+
+            Must be a valid IPv4 or IPv6 address. Requests with a malformed value
+            are rejected with `422 validation_error`.
+          example: "203.0.113.42"
 
     Instrument:
       type: object
@@ -3240,7 +4247,7 @@ components:
         - faster_payment
         - mobile_money
         - wallet
-        - on_chain
+        - crypto
         - layer2
         - exchange
         - stablecoin
@@ -3306,6 +4313,12 @@ components:
         rail_type:
           $ref: '#/components/schemas/RailType'
           description: Hint for rail routing. Anton may override based on corridor availability.
+        network:
+          $ref: '#/components/schemas/Network'
+          description: |
+            Optional rail network hint (e.g. `swift`, `sepa`, `ethereum`). If
+            omitted Anton derives the network from the instrument and corridor
+            pricing. Populated on the response regardless.
         fixed_side:
           type: string
           enum: [fixed_source, fixed_dest]
@@ -3563,6 +4576,54 @@ components:
         created_at:
           $ref: '#/components/schemas/Timestamp'
 
+    PayoutVelocityResult:
+      type: object
+      description: |
+        A single velocity/risk rule evaluated against a payout. Snapshot
+        semantics — `rule_name`, `rule_type`, `action`, and `threshold` reflect
+        the rule's configuration at evaluation time. Editing or deleting the
+        underlying rule later does not alter these historical rows.
+      required: [id, payout_id, merchant_id, rule_id, rule_name, rule_type, action, triggered, current_value, threshold, evaluated_at, created_at]
+      properties:
+        id:
+          type: string
+          pattern: '^vrs_[a-zA-Z0-9]+$'
+        payout_id:
+          type: string
+          pattern: '^pay_[a-zA-Z0-9]+$'
+        merchant_id:
+          type: string
+          pattern: '^mer_[a-zA-Z0-9]+$'
+        rule_id:
+          type: string
+          description: The velocity rule this row was evaluated against.
+        rule_name:
+          type: string
+          description: Snapshot of the rule's display name at evaluation time.
+        rule_type:
+          type: string
+          description: Rule family — e.g. `volume`, `count`, `geo`, `amount`.
+        action:
+          type: string
+          enum: [block, review, alert]
+          description: The action the rule would have taken if `triggered` is true.
+        triggered:
+          type: boolean
+          description: Whether `current_value` crossed `threshold` on this evaluation.
+        current_value:
+          $ref: '#/components/schemas/Money'
+          description: The measured value at evaluation time.
+        threshold:
+          $ref: '#/components/schemas/Money'
+          description: The rule's configured threshold at evaluation time.
+        message:
+          type: string
+          description: Optional human-readable context for the evaluation.
+        evaluated_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
     BatchStatus:
       type: string
       enum:
@@ -3613,7 +4674,14 @@ components:
           description: Beneficiaries that would be created from the file.
         matched_beneficiaries:
           type: integer
-          description: Rows that matched an existing beneficiary.
+          description: Rows that matched an existing beneficiary via display-name heuristic.
+        external_id_matched_beneficiaries:
+          type: integer
+          description: |
+            Rows that resolved to an existing beneficiary via merchant-supplied
+            `external_id` lookup. Counted separately from `matched_beneficiaries`
+            because `external_id` is a stronger match signal than a name
+            heuristic.
         existing_beneficiaries:
           type: integer
           description: Distinct existing beneficiaries referenced.
@@ -3809,6 +4877,11 @@ components:
             $ref: '#/components/schemas/WebhookEventType'
         metadata:
           type: object
+          description: |
+            Arbitrary string-to-string map attached to the subscription.
+            Echoed back on reads unchanged. Useful for correlating
+            subscriptions with your own internal IDs (environment,
+            tenant, integration name, etc.). Not interpreted by Anton.
           additionalProperties:
             type: string
 
@@ -3819,8 +4892,8 @@ components:
       properties:
         id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
-          example: wbh_01HX8Z9K0M2N3P4Q5R6S7T8UW
+          pattern: '^whk_[a-zA-Z0-9]+$'
+          example: whk_01HX8Z9K0M2N3P4Q5R6S7T8UW
         merchant_id:
           type: string
           pattern: '^mer_[a-zA-Z0-9]+$'
@@ -3840,6 +4913,9 @@ components:
           example: "2024-01-01"
         metadata:
           type: object
+          description: |
+            Arbitrary string-to-string map attached at creation. Returned
+            unchanged on reads. Not interpreted by Anton.
           additionalProperties:
             type: string
         created_at:
@@ -3879,7 +4955,7 @@ components:
           pattern: '^evt_[a-zA-Z0-9]+$'
         subscription_id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
         status:
           type: string
           enum: [pending, success, failed, abandoned]
@@ -3975,12 +5051,9 @@ components:
           $ref: '#/components/schemas/Network'
         method:
           type: string
-          description: Delivery method within the corridor (bank_transfer, on_chain, stablecoin, etc.).
+          description: Delivery method within the corridor (bank_transfer, crypto, stablecoin, etc.).
         active:
           type: boolean
-        priority:
-          type: integer
-          description: Anton uses lowest priority first when multiple corridors match.
         cutoff_time:
           type: string
           description: Daily cutoff for same-day processing (fiat rails, HH:MM UTC).
@@ -4061,7 +5134,13 @@ components:
           $ref: '#/components/schemas/Money'
         locked:
           type: boolean
-          description: Request a locked quote with a short expiry window. Defaults to true.
+          description: |
+            Request a rate-locked quote whose `customer_rate` is held until
+            `lock_expires_at`. Redeem the lock by passing the returned `id`
+            (or equivalently `lock_id`) as `quote_id` on
+            `POST /v1/fx/exchange` before expiry. Defaults to `true`.
+            Set to `false` for an indicative (non-binding) quote that cannot
+            be redeemed on `/v1/fx/exchange`.
           default: true
 
     FXQuote:
@@ -4069,7 +5148,6 @@ components:
       description: An FX rate quote, optionally locked for execution.
       required:
         - id
-        - merchant_id
         - sell_currency
         - buy_currency
         - sell_amount
@@ -4077,13 +5155,15 @@ components:
         - mid_market_rate
         - customer_rate
         - locked
-        - created_at
       properties:
         id:
           type: string
           pattern: '^fxq_[a-zA-Z0-9]+$'
         merchant_id:
           type: string
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
         sell_currency:
           $ref: '#/components/schemas/CurrencyCode'
         buy_currency:
@@ -4113,15 +5193,35 @@ components:
           $ref: '#/components/schemas/Timestamp'
         locked:
           type: boolean
+        lock_id:
+          type: string
+          pattern: '^fxq_[a-zA-Z0-9]+$'
+          description: |
+            Identifier of the rate lock. Pass this value as `quote_id` on
+            `POST /v1/fx/exchange` to redeem the locked rate before
+            `lock_expires_at`. Equal to `id` on locked quotes, and omitted
+            entirely on indicative quotes (`locked: false`).
+        lock_expires_at:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            UTC timestamp past which the rate lock is no longer honored.
+            Omitted on indicative quotes. Equal to `expires_at` on locked
+            quotes — kept as a dedicated field so clients can distinguish
+            "the quote payload expired" from "the merchant's rate lock
+            expired" when those semantics diverge in future revisions.
         created_at:
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
 
     FXExchange:
       type: object
       description: An executed currency exchange between two merchant balances.
       required:
         - id
-        - merchant_id
         - sell_currency
         - buy_currency
         - sell_amount
@@ -4129,13 +5229,15 @@ components:
         - customer_rate
         - status
         - quote_id
-        - created_at
       properties:
         id:
           type: string
           pattern: '^fxx_[a-zA-Z0-9]+$'
         merchant_id:
           type: string
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
         sell_currency:
           $ref: '#/components/schemas/CurrencyCode'
         buy_currency:
@@ -4163,7 +5265,11 @@ components:
           type: string
           enum: [pending, completed, failed]
         created_at:
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          description: |
+            Reserved. Not present on current responses — clients must not rely
+            on this field being set.
 
     MerchantAccount:
       type: object
@@ -4590,8 +5696,14 @@ components:
           required: [trust_score, identity_consistency, third_party_verification]
           properties:
             trust_score:
-              type: string
-              description: Decimal string 0..1.
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: |
+                Normalized Payee-pillar trust score, `0.0`–`1.0`, higher is
+                more trustworthy. Same scale as
+                `GET /v1/beneficiaries/{id}.trust_score`.
             identity_consistency:
               type: string
               description: Decimal string 0..1.

@@ -24,7 +24,7 @@ Download the template to start:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/template" \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -o batch-template.csv
 ```
 
@@ -46,7 +46,7 @@ Consult the downloaded template for the exact schema; do not reorder columns.
 ```bash
 curl "https://api.antonpayments.dev/v1/batches" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -F "file=@payroll-2026-04-30.csv"
 ```
 
@@ -63,7 +63,7 @@ Validation is asynchronous. Poll or subscribe to webhooks:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 When `status` moves to `validated`, the response includes a `summary` block:
@@ -82,7 +82,7 @@ Row-level validation errors and warnings:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/errors" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Errors block specific rows; warnings don't. Typical errors:
@@ -102,7 +102,7 @@ Confirmation is irrevocable — once confirmed, Anton creates payouts from valid
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/confirm" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Idempotency-Key: confirm-$BATCH_ID" \
   -H "Content-Type: application/json" \
   -d '{"source_currency": "USD"}'
@@ -134,7 +134,7 @@ Once processing finishes, pull the per-row outcomes:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/results" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Each result has the original row number, outcome (`success` / `failed` / `skipped` / `pending`), and the created `payout_id` (if any). Use this to reconcile your source file with what actually shipped.
@@ -143,7 +143,7 @@ For the created payouts themselves:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/payouts" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 These are normal `Payout` records — the full state machine applies, and each fires its own `payout.*` webhook events as it moves through processing and settlement.
@@ -155,7 +155,7 @@ Before processing starts (states: `uploaded`, `validating`, `validated`, `valida
 ```bash
 curl "https://api.antonpayments.dev/v1/batches/$BATCH_ID/cancel" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Once `processing` starts, cancel individual payouts instead.
