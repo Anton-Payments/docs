@@ -7,11 +7,12 @@ info:
   description: |
     The Anton Payments merchant API. Versioned, idempotent, cursor-paginated.
 
-    - Authentication: bearer API key in the `Authorization` header.
+    - **Authentication**: OAuth 2.0 client_credentials with DPoP proof-of-possession (RFC 6749 §4.4 + RFC 9449). Programmatic clients exchange `(client_id, client_secret)` for a short-lived access token at `POST /oauth/token`, then send each request with `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. Static API keys are not accepted on v1.
     - Base URLs: `https://api.antonpayments.com` (production), `https://api.antonpayments.dev` (sandbox).
     - Monetary amounts are decimal strings. Never floats.
     - Timestamps are RFC 3339 UTC.
     - All mutating endpoints support the `Idempotency-Key` header.
+    - Anton's OAuth public signing key is published at `GET /v1/.well-known/jwks.json` (5-minute cache).
 
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
@@ -28,9 +29,14 @@ servers:
     description: Sandbox
 
 security:
-  - bearerAuth: []
+  - oauthDPoP: []
+    dpopHeader: []
 
 tags:
+  - name: Authentication
+    description: OAuth 2.0 token endpoint and JWKS publication. See the API description for the full DPoP-bound flow.
+  - name: OAuth Clients
+    description: Manage OAuth credentials (programmatic access). Portal-only — JWT auth required.
   - name: Reference Data
     description: Currencies, countries, and supported payment methods.
   - name: Beneficiaries
@@ -79,6 +85,187 @@ tags:
     description: Session-authenticated hosted onboarding flow. Not intended for SDK consumption.
 
 paths:
+  /oauth/token:
+    post:
+      tags: [Authentication]
+      summary: Mint a DPoP-bound access token
+      description: |
+        Exchange `(client_id, client_secret)` plus a DPoP proof for an OAuth 2.0 access token bound to the merchant's registered DPoP keypair. RFC 6749 §4.4 (client_credentials) + RFC 9449 §5.
+
+        Send credentials via HTTP Basic auth (`Authorization: Basic <base64(client_id:client_secret)>`) — body fallback is also accepted. The `DPoP` header is required and MUST carry a proof JWT signed by the merchant's private DPoP key with `htm=POST`, `htu=https://api.../oauth/token`, fresh `iat` / `jti`, and NO `ath` claim (the access token does not exist yet).
+
+        Token TTL is **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call this endpoint again to mint a fresh token.
+      security: []
+      parameters:
+        - in: header
+          name: DPoP
+          required: true
+          schema: { type: string }
+          description: DPoP proof JWT for this token request.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials]
+                client_id:
+                  type: string
+                  description: Optional when supplied via Basic auth header.
+                client_secret:
+                  type: string
+                  description: Optional when supplied via Basic auth header.
+      responses:
+        '200':
+          description: Access token minted.
+          headers:
+            Cache-Control: { schema: { type: string }, description: '`no-store` per RFC 6749 §5.1.' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token:
+                    type: string
+                    description: "Signed JWT to send as `Authorization: DPoP <token>`."
+                  token_type:
+                    type: string
+                    enum: [DPoP]
+                  expires_in:
+                    type: integer
+                    description: Token lifetime in seconds.
+        '400':
+          description: Invalid request, unsupported_grant_type, or invalid DPoP proof.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: invalid_client (unknown client_id or wrong secret).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '403':
+          description: Test client used in production.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+
+  /v1/.well-known/jwks.json:
+    get:
+      tags: [Authentication]
+      summary: Public OAuth signing key set
+      description: |
+        Serves the public half of Anton's OAuth signing key (or keys, during a 24h rotation overlap) as a JSON Web Key Set. SDKs and external verifiers fetch this to verify access tokens locally without a DB hit. Cached 5 minutes.
+      security: []
+      responses:
+        '200':
+          description: JWKS document.
+          headers:
+            Cache-Control: { schema: { type: string }, description: '`public, max-age=300`.' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items: { $ref: '#/components/schemas/JSONWebKey' }
+
+  /v1/oauth-clients:
+    get:
+      tags: [OAuth Clients]
+      summary: List your OAuth clients
+      description: Portal-only. Lists the calling merchant's registered OAuth clients. JWT auth required.
+      responses:
+        '200':
+          description: Array of oauth_clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/OAuthClient' } }
+                  has_more: { type: boolean }
+    post:
+      tags: [OAuth Clients]
+      summary: Register a new OAuth client
+      description: |
+        Portal-only. Generates a fresh `client_id` + `client_secret` for the calling merchant and registers their DPoP public JWK.
+
+        The `client_secret` and (if browser-generated) the DPoP private key are returned ONCE in the create response and never recoverable.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, dpop_jwk]
+              properties:
+                name: { type: string, maxLength: 100 }
+                dpop_jwk:
+                  type: object
+                  description: DPoP public JWK (EC P-256 / ES256 or OKP Ed25519 / EdDSA — RSA refused).
+      responses:
+        '201':
+          description: Client created. Raw secret shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client: { $ref: '#/components/schemas/OAuthClient' }
+                  raw_secret: { type: string, description: Shown ONCE — store securely. Format `ant_ocs_<env>_<48hex>`. }
+                  warning: { type: string }
+
+  /v1/oauth-clients/{id}/rotate-secret:
+    post:
+      tags: [OAuth Clients]
+      summary: Rotate client_secret
+      description: |
+        Portal-only. Issues a fresh `client_secret` for an existing client. The `client_id` and registered DPoP key are unchanged.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: New raw_secret returned (shown once).
+
+  /v1/oauth-clients/{id}/revoke:
+    post:
+      tags: [OAuth Clients]
+      summary: Revoke an OAuth client
+      description: |
+        Portal-only. Marks the client as revoked. Outstanding access tokens minted against it will continue to verify until their TTL expires (token-TTL is the revocation mechanism — at most 1h in prod, 8h in sandbox).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Revoked.
+
   /v1/currencies:
     get:
       tags: [Reference Data]
@@ -3115,16 +3302,30 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: API Key
+    oauthDPoP:
+      type: oauth2
       description: |
-        API keys are opaque strings prefixed by environment:
-        - `ak_live_*` — production keys, accepted only on `api.antonpayments.com`.
-        - `ak_test_*` — sandbox keys, accepted only on `api.antonpayments.dev`.
+        OAuth 2.0 client_credentials grant (RFC 6749 §4.4) bound to a DPoP keypair (RFC 9449).
 
-        Include your key in the `Authorization` header: `Bearer ak_test_...`.
+        **Flow** (every authenticated `/v1` call requires both an access token AND a fresh per-request DPoP proof):
+
+        1. Register a credential via the merchant portal. Anton issues a `client_id` (`ant_oc_<env>_<32hex>`) and a `client_secret` (`ant_ocs_<env>_<48hex>`, shown ONCE). The portal generates an ES256 or Ed25519 DPoP keypair in your browser; you store the private half.
+        2. Mint an access token: `POST /oauth/token` with `Authorization: Basic <client_id:client_secret>` and `Content-Type: application/x-www-form-urlencoded`. Body: `grant_type=client_credentials`. A `DPoP` header carrying a proof signed for the token endpoint is required (no `ath` claim on this proof).
+        3. Use the token: send `Authorization: DPoP <access_token>` plus a fresh `DPoP: <proof>` header on every `/v1` request. The proof JWT MUST carry `htm` (request method), `htu` (request URL, no query/fragment), `iat` (within ±60s), `jti` (unique within 5 min), and `ath` (SHA-256 of the access token, base64url).
+
+        Tokens expire in **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call `/oauth/token` again with your secret. Anton's public signing key is published at `/v1/.well-known/jwks.json`.
+
+        OpenAPI 3.0 has no native DPoP scheme; this declaration plus `dpopHeader` together convey both the access-token Authorization and the per-request proof header.
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes: {}
+    dpopHeader:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: |
+        Per-request DPoP proof JWT (RFC 9449). MUST accompany the `Authorization: DPoP <access_token>` header on every protected operation. The proof is signed by the merchant's private DPoP key and carries `htm`, `htu`, `iat`, `jti`, and `ath` claims.
 
   parameters:
     Limit:
@@ -3243,6 +3444,57 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
 
   schemas:
+    OAuthError:
+      type: object
+      description: |
+        RFC 6749 §5.2 / RFC 9449 error envelope. Distinct from Anton's standard `ErrorEnvelope` — the OAuth endpoints (`/oauth/token`) return this flat shape so any OAuth-conformant SDK can branch on `error` without learning Anton-specific shapes.
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - unauthorized_client
+            - unsupported_grant_type
+            - invalid_scope
+            - invalid_dpop_proof
+            - invalid_token
+            - server_error
+        error_description: { type: string }
+
+    JSONWebKey:
+      type: object
+      description: ES256 (P-256) public key in JWK form, as published by `/v1/.well-known/jwks.json`.
+      required: [kty, crv, x, y, alg, use, kid]
+      properties:
+        kty: { type: string, enum: [EC] }
+        crv: { type: string, enum: [P-256] }
+        x:   { type: string, description: Base64url-encoded x coordinate (32 bytes). }
+        y:   { type: string, description: Base64url-encoded y coordinate (32 bytes). }
+        alg: { type: string, enum: [ES256] }
+        use: { type: string, enum: [sig] }
+        kid: { type: string }
+
+    OAuthClient:
+      type: object
+      description: A merchant's registered OAuth credential. Authenticates calls to `/oauth/token`.
+      required: [id, merchant_id, name, client_id, environment, dpop_jkt, created_at]
+      properties:
+        id:                 { type: string, description: 'Row ID, e.g. `oc_xxxxxxxxxxxx`.' }
+        merchant_id:        { type: string }
+        created_by_id:      { type: string, nullable: true }
+        name:               { type: string }
+        client_id:          { type: string, description: 'Public client identifier, format `ant_oc_<env>_<32hex>`.' }
+        environment:        { type: string, enum: [test, live] }
+        dpop_jwk:           { type: object, description: Registered DPoP public JWK. }
+        dpop_jkt:           { type: string, description: RFC 7638 SHA-256 thumbprint of `dpop_jwk`; published in every minted access token's `cnf.jkt` claim. }
+        expires_at:         { type: string, format: date-time, nullable: true }
+        last_used_at:       { type: string, format: date-time, nullable: true }
+        revoked_at:         { type: string, format: date-time, nullable: true }
+        created_at:         { type: string, format: date-time }
+
     ErrorEnvelope:
       type: object
       required: [error]
