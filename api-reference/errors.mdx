@@ -90,15 +90,15 @@ The following codes are returned via the `code` field of the error envelope. Cod
 
 | HTTP | `code` | Typical `error.message` | Cause | Remediation |
 |---|---|---|---|---|
-| `401` | `unauthorized` | `missing Authorization header` | No `Authorization` header sent. | Add `Authorization: Bearer <token>`. |
-| `401` | `unauthorized` | `invalid Authorization header format` | Header is not `Bearer <token>`. | Use the `Bearer ` prefix. |
-| `401` | `unauthorized` | `invalid or expired token` | JWT signature, expiry, or issuer is invalid. | Have the portal session refresh. |
-| `401` | `unauthorized` | `API keys are not accepted on this endpoint` | Used an API key on a JWT-only endpoint. | Use a WorkOS portal JWT. |
-| `401` | `invalid_api_key` | `invalid API key format` | Token does not begin with `ak_`. | Use a valid `ak_live_...` or `ak_test_...` key. |
-| `401` | `invalid_api_key` | `invalid API key` | Key was not found, is revoked, expired, or has been deleted. | Rotate via the dashboard. |
+| `401` | `unauthorized` | `missing Authorization header` | No `Authorization` header sent. | Add `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. See [Authentication](/authentication). |
+| `401` | `unauthorized` | `invalid Authorization header format` | Header scheme is neither `DPoP` nor `Bearer`. | Use `Authorization: DPoP <token>` for OAuth, `Bearer <jwt>` for portal JWT. |
+| `401` | `invalid_token` | `invalid or expired token` | OAuth access token signature, expiry, or audience is invalid. | Mint a new token via `POST /oauth/token`. |
+| `401` | `invalid_dpop_proof` | `invalid DPoP proof` | The `DPoP` header proof failed signature, `htm`, `htu`, `iat`, `jti`, `ath`, or `jkt` verification. | See the troubleshooting matrix on the [Authentication](/authentication) page. |
+| `401` | `static_api_keys_disabled` | `static API keys are no longer accepted` | An `Authorization: Bearer ak_*` header was sent. | Migrate to OAuth 2.0 + DPoP. See [Authentication](/authentication). |
 | `401` | `not_authenticated` | `not authenticated` | A handler ran without a resolved merchant or user context. Defense-in-depth check after the auth middleware. | Re-authenticate. The portal should redirect to the login flow. |
 | `401` | `merchant_context_required` | `merchant context required` | Token validated, but Anton could not resolve a merchant from it. | Re-authenticate; confirm the merchant binding on your portal user. |
-| `403` | `key_environment_mismatch` | `test API keys are not allowed in production` | An `ak_test_...` key was used against the production or staging environment. | Use a live key in production; keep test keys to sandbox. |
+| `403` | `key_environment_mismatch` | `test tokens are not allowed in production` | A test-environment OAuth token was used against the production or staging API. | Use the right environment: production credentials issue tokens for `api.antonpayments.com`; sandbox credentials for `api.antonpayments.dev`. |
+| `503` | `oauth_unavailable` | `OAuth authentication is not configured on this instance` | Misconfigured deploy: OAuth signing key not set. Production refuses to start in this state, so this only surfaces in misconfigured non-prod environments. | Contact support. |
 
 ### Authorization and access
 
@@ -341,7 +341,8 @@ Not every error is safe to retry. The table below is a safe default — apply st
 const res = await fetch("https://api.antonpayments.dev/v1/payouts", {
   method: "POST",
   headers: {
-    Authorization: `Bearer ${apiKey}`,
+    Authorization: `DPoP ${accessToken}`,
+    DPoP: dpopProof("POST", "https://api.antonpayments.dev/v1/payouts", accessToken),
     "Content-Type": "application/json",
     "Idempotency-Key": idempotencyKey,
   },

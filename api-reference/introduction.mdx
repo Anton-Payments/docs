@@ -15,10 +15,11 @@ The Anton API is a REST API over HTTPS. All requests and responses are JSON. All
 
 ## Authentication
 
-Every request requires a bearer API key in the `Authorization` header. See [Authentication](/authentication) for details.
+Every request requires an OAuth 2.0 access token (DPoP-bound) AND a per-request DPoP proof. Static API keys are not accepted on v1. See [Authentication](/authentication) for the full flow, including a copy-paste curl quickstart.
 
 ```http
-Authorization: Bearer ak_test_...
+Authorization: DPoP <access_token>
+DPoP: <proof JWT, fresh per request>
 ```
 
 ## Conventions

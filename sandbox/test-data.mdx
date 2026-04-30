@@ -27,12 +27,12 @@ Four reset scopes:
 # Clean balances, keep your beneficiaries and payouts
 curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=balances" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 
 # Nuclear option — fresh merchant state with demo data
 curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=full-reset" \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Rate-limited to 10 resets per merchant per hour — enough for active development, tight enough to catch a runaway test suite.
@@ -75,7 +75,7 @@ Creates a curated set of realistic beneficiaries across multiple countries and p
 ```bash
 curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-beneficiaries \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Response:
@@ -103,7 +103,7 @@ Creates payouts in a mix of states — `completed`, `failed`, `cancelled`, `manu
 ```bash
 curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-payouts \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 ```json

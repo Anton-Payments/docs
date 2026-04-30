@@ -72,7 +72,7 @@ retry() {
   local url=$1
   for attempt in 1 2 3 4 5; do
     response=$(curl -sS -D /tmp/hdr -o /tmp/body -w "%{http_code}" "$url" \
-      -H "Authorization: Bearer $ANTON_API_KEY")
+      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN")
     if [ "$response" != "429" ]; then
       cat /tmp/body
       return 0

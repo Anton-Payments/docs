@@ -22,7 +22,7 @@ The API validates shape at creation; rail-specific validation (some rails requir
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: ben-$INVOICE_ID" \
   -d @beneficiary.json
@@ -48,7 +48,7 @@ Anton computes a content fingerprint from beneficiary PII and uses it internally
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID \
   -X PUT \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "metadata": {
@@ -68,7 +68,7 @@ Tokens in Basis Theory are immutable. Updating PII replaces the entire token —
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/pii \
   -X PUT \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d @updated-pii.json
 ```
@@ -99,7 +99,7 @@ Prefer archive unless you know you will never need this beneficiary again. Resto
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/restore \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Idempotency-Key: restore-$BEN_ID"
 ```
 

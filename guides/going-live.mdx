@@ -62,7 +62,7 @@ Moving from sandbox to production is a deliberate switch, not an upgrade. The en
 
 ## Cutover day
 
-Swap `ak_test_*` for `ak_live_*` in your production secrets manager and redeploy. Verify the first live request with a **very small payout** to a beneficiary you control — confirm the full lifecycle (`created → approved → sent → completed`) before ramping traffic.
+Swap `ant_oc_test_*` for `ant_oc_live_*` in your production secrets manager and redeploy. Verify the first live request with a **very small payout** to a beneficiary you control — confirm the full lifecycle (`created → approved → sent → completed`) before ramping traffic.
 
 <Note>
   Production payouts cannot be rolled back once a rail accepts them. There is no undo. Test the lifecycle end-to-end at minimum volume first.

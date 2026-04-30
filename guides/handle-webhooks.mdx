@@ -23,7 +23,7 @@ Polling is fine during development when you don't yet have a public HTTPS endpoi
 ```bash
 curl https://api.antonpayments.dev/v1/webhooks \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://your-app.example.com/webhooks/anton",
@@ -128,7 +128,7 @@ When a delivery is failing, this is where you look:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/webhooks/events/$EVENT_ID/deliveries" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Common failure modes:
@@ -145,7 +145,7 @@ Fire a synthetic delivery via `POST /v1/webhooks/{id}/test`:
 ```bash
 curl https://api.antonpayments.dev/v1/webhooks/$WBH_ID/test \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Anton sends a `test` event to your subscription. Use it to validate connectivity, signature verification, and response handling before depending on real events in sandbox tests.
@@ -157,7 +157,7 @@ When a secret might be compromised — or on a schedule — rotate it:
 ```bash
 curl https://api.antonpayments.dev/v1/webhooks/$WBH_ID/secret/rotate \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 The response contains the new secret — again, shown once. **Rotation has no overlap window** — the old secret is invalidated immediately. Plan rotations for low-traffic periods, and update your receiver's secret in lockstep.

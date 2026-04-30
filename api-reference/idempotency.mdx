@@ -15,7 +15,7 @@ Add the `Idempotency-Key` header to any `POST`, `PUT`, or `PATCH` request:
 ```bash
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
-  -H "Authorization: Bearer ak_test_..." \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: payout-inv-1042-2026-04-15" \
   -d '{
