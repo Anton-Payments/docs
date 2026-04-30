@@ -61,11 +61,11 @@ The last page omits `next_cursor` and sets `has_more` to `false`:
 ```bash cURL
 # First page
 curl "https://api.antonpayments.dev/v1/payouts?limit=100" \
-  -H "Authorization: Bearer ak_test_..."
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 
 # Subsequent page — pass next_cursor from the prior response as cursor
 curl "https://api.antonpayments.dev/v1/payouts?limit=100&cursor=eyJpZCI6InBheV9kZWY0NTYifQ" \
-  -H "Authorization: Bearer ak_test_..."
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 ```javascript JavaScript
@@ -79,7 +79,7 @@ async function listAllPayouts(apiKey) {
     if (cursor) url.searchParams.set("cursor", cursor);
 
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `DPoP ${accessToken}` },
     });
     const page = await response.json();
     payouts.push(...page.data);
@@ -106,7 +106,7 @@ function listAllPayouts(string $apiKey): array {
         $ch = curl_init("https://api.antonpayments.dev/v1/payouts?$query");
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["Authorization: Bearer $apiKey"],
+            CURLOPT_HTTPHEADER => ["Authorization: DPoP $accessToken"],
         ]);
         $page = json_decode(curl_exec($ch), true);
         curl_close($ch);
@@ -136,7 +136,7 @@ func ListAllPayouts(apiKey string) ([]Payout, error) {
         u.RawQuery = q.Encode()
 
         req, _ := http.NewRequest("GET", u.String(), nil)
-        req.Header.Set("Authorization", "Bearer "+apiKey)
+        req.Header.Set("Authorization", "DPoP "+accessToken)
         resp, err := http.DefaultClient.Do(req)
         if err != nil {
             return nil, err

@@ -27,7 +27,7 @@ For display-only use. Two currencies, optional recipient-side (`buy`) amount:
 
 ```bash
 curl "https://api.antonpayments.dev/v1/fx/rate?sell_currency=USD&buy_currency=EUR&buy_amount=1000" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Response:
@@ -58,7 +58,7 @@ When you need certainty:
 ```bash
 curl https://api.antonpayments.dev/v1/fx/quote \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "sell_currency": "USD",
@@ -94,7 +94,7 @@ Exchange is idempotent:
 ```bash
 curl https://api.antonpayments.dev/v1/fx/exchange \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: fxx-$CUSTOMER_ORDER_ID" \
   -d '{"quote_id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFX"}'
@@ -115,7 +115,7 @@ You typically don't call `/v1/fx/*` explicitly when sending a payout — Anton h
 ```bash
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
-  -H "Authorization: Bearer $ANTON_API_KEY" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Idempotency-Key: pay-xborder-001" \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,7 +142,7 @@ The returned `Payout` carries FX detail — `exchange_rate`, `fee`, `fee_currenc
 
 ```bash
 curl "https://api.antonpayments.dev/v1/fx/exchanges?sell_currency=USD&limit=50" \
-  -H "Authorization: Bearer $ANTON_API_KEY"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
 Filters: `sell_currency`, `buy_currency`, `created_after`, `created_before`. Cursor-paginated.

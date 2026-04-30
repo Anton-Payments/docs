@@ -1,14 +1,14 @@
 ---
 title: "Environments"
-description: "Anton exposes a fully functional sandbox for development and a production environment for live money movement. The two are isolated — keys, data, and infrastructure are separate."
+description: "Anton exposes a fully functional sandbox for development and a production environment for live money movement. The two are isolated — credentials, data, and infrastructure are separate."
 ---
 
-| Environment | Base URL | API key prefix | What it moves |
-|---|---|---|---|
-| **Production** | `https://api.antonpayments.com` | `ak_live_` | Real funds |
-| **Sandbox** | `https://api.antonpayments.dev` | `ak_test_` | Simulated payouts, no settlement |
+| Environment | Base URL | Credential prefix | Token TTL | What it moves |
+|---|---|---|---|---|
+| **Production** | `https://api.antonpayments.com` | `ant_oc_live_` | 1 hour | Real funds |
+| **Sandbox** | `https://api.antonpayments.dev` | `ant_oc_test_` | 8 hours | Simulated payouts, no settlement |
 
-A test key cannot call production. A live key cannot call sandbox. Attempting either returns `401` with `code: "key_environment_mismatch"`.
+Credentials are environment-scoped. A sandbox client cannot mint tokens against production, and vice versa. Mismatched attempts return `403` with `error: "invalid_client"`. See [Authentication](/authentication) for the OAuth+DPoP flow.
 
 ## Sandbox
 
@@ -22,7 +22,7 @@ Sandbox data is isolated per merchant. You can reset your sandbox or seed it wit
 
 ## Production
 
-Production moves real money. Before a live API key will issue anything but a `403`, your merchant account must be:
+Production moves real money. Before a live OAuth client will issue anything but a `403`, your merchant account must be:
 
 1. **KYB approved** — identity verification completed through the merchant dashboard.
 2. **Risk underwritten** — Anton's underwriting team has reviewed and approved your account for live operation.
