@@ -1,0 +1,26 @@
+# CODEOWNERS for the docs repo.
+#
+# Mintlify-rendered API reference + guides for Anton Payments. Editor
+# changes flow through PRs against develop; promotion to main updates
+# the live docs site.
+#
+# Single-owner today. Granular paths scaffolded for future hires —
+# swap @ryanolson for team handles where appropriate.
+
+# Default.
+*                          @ryanolson
+
+# OpenAPI specs — drive the auto-generated reference pages. Drift
+# here breaks API consumers, so it deserves a deliberate review.
+/api-reference/            @ryanolson
+/_api-archive/             @ryanolson
+/_engine-archive/          @ryanolson
+
+# Site config + nav — Mintlify reads docs.json for routing.
+/docs.json                 @ryanolson
+/mint.json                 @ryanolson
+
+# CI / dependency / repo metadata.
+/.github/                  @ryanolson
+/package.json              @ryanolson
+/package-lock.json         @ryanolson
