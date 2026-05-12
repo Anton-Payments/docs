@@ -1,0 +1,42 @@
+# Dependabot for the docs repo.
+#
+# Docs is a Mintlify site. The package.json has a single direct dep
+# (`mintlify`); the 40+ transitive deps that show up as Dependabot
+# alerts are inside mintlify's tree. They mostly resolve when mintlify
+# itself ships a patched release, so a weekly mintlify bump is the
+# main lever here.
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    target-branch: 'develop'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Toronto'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+    groups:
+      production-dependencies:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    target-branch: 'develop'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Toronto'
+    open-pull-requests-limit: 3
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+    groups:
+      actions:
+        patterns: ['*']
