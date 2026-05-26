@@ -1,0 +1,70 @@
+---
+title: "Instrument Screening"
+description: "Screen bank accounts, crypto wallets, cards, and IBANs through one normalized instrument object."
+---
+
+Use `instrument_screening` when a payment instrument is added or evaluated.
+
+Required:
+
+| Field | Requirement |
+|---|---|
+| `use_case` | Must be `instrument_screening` |
+| `entity.type` | `person` or `business` |
+| `instrument.type` | `bank_account`, `crypto_wallet`, `card`, or `iban` |
+| Matching instrument payload or `instrument.vault_token_id` | One is required |
+
+The nested payload must match `instrument.type`. For example, `instrument.type: "crypto_wallet"` must use `instrument.crypto_wallet`, not `instrument.bank_account`.
+
+## Crypto wallet
+
+```bash
+curl -sS -X POST "https://api.antonpayments.build/v1/intelligence/evaluations" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-wallet-john-doe-001" \
+  -d '{
+    "use_case": "instrument_screening",
+    "entity": {
+      "type": "person",
+      "reference_id": "payee-john-doe",
+      "name": "John Doe",
+      "country": "US"
+    },
+    "instrument": {
+      "type": "crypto_wallet",
+      "country": "US",
+      "currency": "BTC",
+      "crypto_wallet": {
+        "network": "bitcoin",
+        "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+      }
+    }
+  }' | jq
+```
+
+## Bank account
+
+```bash
+curl -sS -X POST "https://api.antonpayments.build/v1/intelligence/evaluations" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-bank-john-doe-001" \
+  -d '{
+    "use_case": "instrument_screening",
+    "entity": {
+      "type": "person",
+      "reference_id": "payee-john-doe",
+      "name": "John Doe",
+      "country": "US"
+    },
+    "instrument": {
+      "type": "bank_account",
+      "country": "US",
+      "currency": "USD",
+      "bank_account": {
+        "routing_number": "021000021",
+        "account_number": "000123456789",
+        "account_type": "checking"
+      }
+    }
+  }' | jq
+```

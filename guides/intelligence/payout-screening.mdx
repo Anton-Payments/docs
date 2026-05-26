@@ -1,0 +1,43 @@
+---
+title: "Payout Screening"
+description: "Evaluate payout amount, corridor, rail, payee, and optional instrument context."
+---
+
+Use `payout_screening` when evaluating a payment event before or during payout creation.
+
+Required:
+
+| Field | Requirement |
+|---|---|
+| `use_case` | Must be `payout_screening` |
+| `entity.type` | `person` or `business` |
+| `payout.amount.value` and `payout.amount.currency` | Required |
+| `payout.destination_country` | Required |
+| Searchable entity or instrument data | Required |
+
+```bash
+curl -sS -X POST "https://api.antonpayments.build/v1/intelligence/evaluations" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-payout-001" \
+  -d '{
+    "use_case": "payout_screening",
+    "client_reference_id": "payout-001",
+    "entity": {
+      "type": "person",
+      "reference_id": "payee-john-doe",
+      "name": "John Doe",
+      "country": "US"
+    },
+    "payout": {
+      "reference_id": "payout-001",
+      "amount": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "source_country": "US",
+      "destination_country": "CA",
+      "rail": "bank"
+    }
+  }' | jq
+```
+

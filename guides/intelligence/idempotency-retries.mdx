@@ -1,0 +1,15 @@
+---
+title: "Idempotency and Retries"
+description: "Safely retry Intelligence create requests."
+---
+
+Use the `Idempotency-Key` header on `POST /v1/intelligence/evaluations`.
+
+```http
+Idempotency-Key: intel-payee-john-doe-001
+```
+
+If a network timeout occurs, retry the exact same request with the same key. Anton returns the original response when the operation has already completed.
+
+The JSON body also accepts `idempotency_key` for testing, but the header is the enterprise contract. If both are present, the header wins.
+
