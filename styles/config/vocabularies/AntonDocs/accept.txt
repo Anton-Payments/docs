@@ -6,8 +6,14 @@
 backoff
 Bindable
 booleans
+detokenization
+detokenize
+detokenized
+detokenizes
 deduplicate
 Deduplication
+enum
+enums
 hostname
 hostnames
 idempotency
@@ -26,16 +32,28 @@ request_id
 requestId
 Resave
 rollout
+SDK
+SDKs
 tokenization
 velocity_blocked
 
 # Abbreviations / plurals
+IBAN
+IBANs
 JWTs
+LLC
+PII
 NATs
 RFIs
 
 # Finance / operations
 counterparty
+crypto
+Doe
+payee
+payees
+payout
+payouts
 
 # Python keywords that appear in code samples and Vale flags
 elif
