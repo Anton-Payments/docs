@@ -3,6 +3,7 @@
 # variants are honoured exactly. Keep sorted within sections.
 
 # API / web concepts
+allowlist
 backoff
 Bindable
 booleans
@@ -14,6 +15,7 @@ detokenized
 detokenizes
 deduplicate
 Deduplication
+disambiguators
 enum
 enums
 hostname
@@ -28,6 +30,8 @@ insufficient_balance
 manual_review
 merchant_onboarding
 non-production
+onboarding
+Onboarding
 payment-risk
 payee_registration
 provider-neutral
