@@ -1,0 +1,29 @@
+---
+title: "Decisions and Next Actions"
+description: "Understand Intelligence decisions, risk levels, and next actions."
+---
+
+Anton Intelligence peers return evidence. The orchestrator makes the final decision.
+
+## Decisions
+
+| Decision | Meaning |
+|---|---|
+| `approve` | No meaningful evidence, or evidence was cleared by contradictions |
+| `review_auto` | Possible match that needs more data or vault enrichment |
+| `review_manual` | High-risk or incomplete evidence requires human review |
+| `decline` | High-confidence prohibited evidence |
+
+## Risk levels
+
+`low`, `medium`, `high`, `critical`
+
+## Next actions
+
+| Next action | Meaning |
+|---|---|
+| `none` | No follow-up required |
+| `request_more_information` | Ask for missing disambiguators such as date of birth or address |
+| `manual_review` | Route to compliance review |
+| `decline` | Do not continue the flow |
+

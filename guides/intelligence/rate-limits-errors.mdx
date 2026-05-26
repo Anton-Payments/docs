@@ -1,0 +1,17 @@
+---
+title: "Rate Limits and Errors"
+description: "Public test rate limits and strict request errors."
+---
+
+The public test endpoint is unauthenticated while Anton Intelligence is in staging validation. It is protected by rate limits and strict JSON decoding.
+
+Common errors:
+
+| Code | Meaning |
+|---|---|
+| `unknown_field` | Request contains a field outside the strict contract |
+| `validation_error` | Required field missing or enum value invalid |
+| `type_mismatch` | Field has the wrong JSON type |
+| `rate_limited` | Too many requests; retry after `Retry-After` |
+
+For production enterprise integrations, auth and tighter tenant-level controls will be layered onto the same strict request contract.

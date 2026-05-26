@@ -1,0 +1,33 @@
+---
+title: "Anton Intelligence"
+sidebarTitle: "Overview"
+description: "Create normalized risk intelligence evaluations for payees, instruments, payouts, and merchant onboarding."
+---
+
+Anton Intelligence turns payment-risk inputs into one concise evaluation result. You send a strict request with a `use_case`, an `entity`, and optional instrument or payout context. Anton normalizes the request internally, calls independent peer systems, applies deterministic policy, and returns a final decision.
+
+The create endpoint is intentionally strict. Unknown fields are rejected, enum values are fixed, and sensitive values are used only in memory. Anton persists redacted decision evidence, not raw PII.
+
+## Use cases
+
+| Use case | When to use it | Event type |
+|---|---|---|
+| `payee_registration` | Registering or screening a person or business payee | `payee.create` |
+| `instrument_screening` | Adding or screening a bank account, wallet, card, or IBAN | `instrument.create` |
+| `payout_screening` | Evaluating payment movement context | `payout.create` |
+| `merchant_onboarding` | Evaluating business onboarding data | `merchant.onboard` |
+| `monitoring` | Generic/manual screening | `monitoring.evaluate` |
+
+## Required shape
+
+```json
+{
+  "use_case": "payee_registration",
+  "entity": {
+    "type": "person"
+  }
+}
+```
+
+For a meaningful evaluation, include at least one searchable input: `entity.name`, `entity.vault_token_id`, `instrument.vault_token_id`, or the matching instrument fields.
+
