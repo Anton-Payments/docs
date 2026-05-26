@@ -185,6 +185,44 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/intelligence/evaluations/validate:
+    post:
+      tags: [Intelligence]
+      summary: Validate an intelligence evaluation request
+      description: Validates the strict public request contract without creating or persisting an evaluation.
+      security: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+          description: Optional. If both this header and body `idempotency_key` are supplied, the header wins during validation mapping.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntelligenceEvaluationRequest'
+      responses:
+        '200':
+          description: Request is valid and can be mapped to an internal event.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ValidateIntelligenceEvaluationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/intelligence/evaluations/{id}:
     get:
       tags: [Intelligence]
@@ -3677,7 +3715,7 @@ components:
         method:
           $ref: '#/components/schemas/PaymentMethodCode'
         currency:
-          $ref: '#/components/schemas/CurrencyCode'
+          $ref: '#/components/schemas/IntelligenceCurrencyOrAssetCode'
         country:
           $ref: '#/components/schemas/CountryCode'
         label:
@@ -5015,6 +5053,22 @@ components:
         context:
           $ref: '#/components/schemas/IntelligenceContext'
 
+    ValidateIntelligenceEvaluationResponse:
+      type: object
+      required: [valid, contract_version, event_type, use_case]
+      properties:
+        valid:
+          type: boolean
+        contract_version:
+          type: string
+          enum: [intelligence-public-v1]
+        event_type:
+          type: string
+          enum: [payout.create, payee.create, instrument.create, merchant.onboard, monitoring.evaluate]
+        use_case:
+          type: string
+          enum: [payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring]
+
     IntelligenceEntity:
       type: object
       additionalProperties: false
@@ -5166,7 +5220,13 @@ components:
         value:
           $ref: '#/components/schemas/Money'
         currency:
-          $ref: '#/components/schemas/CurrencyCode'
+          $ref: '#/components/schemas/IntelligenceCurrencyOrAssetCode'
+
+    IntelligenceCurrencyOrAssetCode:
+      type: string
+      description: Uppercase supported fiat currency or crypto asset code.
+      pattern: '^[A-Z]{3,5}$'
+      examples: [USD, BTC, USDC]
 
     IntelligenceContext:
       type: object
@@ -5190,8 +5250,11 @@ components:
 
     IntelligenceEvaluation:
       type: object
-      required: [evaluation_id, event_id, event_type, status, decision, rationale, peer_statuses, policy, audit, evaluated_at, latency_ms]
+      required: [contract_version, evaluation_id, event_id, event_type, status, decision, rationale, peer_statuses, policy, audit, evaluated_at, latency_ms]
       properties:
+        contract_version:
+          type: string
+          enum: [intelligence-public-v1]
         evaluation_id:
           type: string
         event_id:
@@ -5214,8 +5277,7 @@ components:
           type: string
           enum: [none, request_more_information, manual_review, decline]
         summary:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/IntelligenceEvaluationSummary'
         missing_disambiguators:
           type: array
           items: { type: string }
@@ -5232,6 +5294,36 @@ components:
         latency_ms:
           type: integer
           format: int64
+
+    IntelligenceEvaluationSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        screened:
+          type: array
+          items:
+            type: string
+            enum: [entity, instrument, payout, context]
+        use_case:
+          type: string
+          enum: [payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring]
+        instrument_type:
+          type: string
+          enum: [bank_account, crypto_wallet, card, iban]
+        payout_rail:
+          type: string
+          enum: [bank, card, crypto, wallet, internal, other]
+        findings_count:
+          type: integer
+        highest_severity:
+          type: string
+          enum: [low, medium, high, critical]
+        identity_confidence:
+          type: string
+          enum: [none, possible, likely, confirmed]
+        missing_fields:
+          type: array
+          items: { type: string }
 
     IntelligencePeerStatus:
       type: object

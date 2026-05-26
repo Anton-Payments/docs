@@ -10,8 +10,43 @@ Common errors:
 | Code | Meaning |
 |---|---|
 | `unknown_field` | Request contains a field outside the strict contract |
-| `validation_error` | Required field missing or enum value invalid |
+| `validation_error` | Required field missing, enum value invalid, country/date/currency invalid, or instrument payload mismatched |
 | `type_mismatch` | Field has the wrong JSON type |
 | `rate_limited` | Too many requests; retry after `Retry-After` |
+
+## Examples
+
+Missing `use_case`:
+
+```json
+{
+  "error": {
+    "message": "use_case must be one of payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring",
+    "code": "validation_error"
+  }
+}
+```
+
+Old raw `subject` shape:
+
+```json
+{
+  "error": {
+    "message": "unknown field \"subject\"",
+    "code": "unknown_field"
+  }
+}
+```
+
+Wrong instrument nesting:
+
+```json
+{
+  "error": {
+    "message": "instrument.bank_account cannot be supplied when instrument.type is crypto_wallet",
+    "code": "validation_error"
+  }
+}
+```
 
 For production enterprise integrations, auth and tighter tenant-level controls will be layered onto the same strict request contract.

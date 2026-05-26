@@ -173,6 +173,7 @@
             "group": "Intelligence",
             "pages": [
               "api-reference/intelligence/create-evaluation",
+              "api-reference/intelligence/validate-evaluation",
               "api-reference/intelligence/get-evaluation",
               "api-reference/intelligence/get-evidence"
             ]

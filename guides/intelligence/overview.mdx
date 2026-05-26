@@ -6,7 +6,7 @@ description: "Create normalized risk intelligence evaluations for payees, instru
 
 Anton Intelligence turns payment-risk inputs into one concise evaluation result. You send a strict request with a `use_case`, an `entity`, and optional instrument or payout context. Anton normalizes the request internally, calls independent peer systems, applies deterministic policy, and returns a final decision.
 
-The create endpoint is intentionally strict. Unknown fields are rejected, enum values are fixed, and sensitive values are used only in memory. Anton persists redacted decision evidence, not raw PII.
+The create endpoint is intentionally strict. Unknown fields are rejected, enum values are fixed, and sensitive values are used only in memory. Anton persists redacted decision evidence, not raw PII. The public response includes `contract_version: "intelligence-public-v1"` so clients can pin and test against a stable schema.
 
 ## Use cases
 
@@ -31,3 +31,48 @@ The create endpoint is intentionally strict. Unknown fields are rejected, enum v
 
 For a meaningful evaluation, include at least one searchable input: `entity.name`, `entity.vault_token_id`, `instrument.vault_token_id`, or the matching instrument fields.
 
+## Validate before creating
+
+Use validation to test request shape without creating an evaluation:
+
+```bash
+curl -sS -X POST "https://api.antonpayments.build/v1/intelligence/evaluations/validate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "use_case": "payee_registration",
+    "entity": {
+      "type": "person",
+      "name": "John Doe",
+      "country": "US"
+    }
+  }' | jq
+```
+
+## Field rules
+
+| Field class | Rule |
+|---|---|
+| Countries | Uppercase ISO 3166 alpha-2, such as `US` or `CA` |
+| Dates | Real calendar dates in `YYYY-MM-DD` format |
+| Currencies and assets | Uppercase supported currency or asset codes, such as `USD` or `BTC` |
+| Instrument payloads | The nested payload must match `instrument.type` |
+
+## Response summary
+
+The concise response includes a normalized summary:
+
+```json
+{
+  "contract_version": "intelligence-public-v1",
+  "decision": "review_auto",
+  "next_action": "request_more_information",
+  "summary": {
+    "screened": ["entity", "instrument"],
+    "use_case": "instrument_screening",
+    "instrument_type": "crypto_wallet",
+    "findings_count": 1,
+    "identity_confidence": "possible",
+    "missing_fields": ["address", "birth_date", "identifier"]
+  }
+}
+```

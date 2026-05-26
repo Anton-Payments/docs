@@ -27,3 +27,6 @@ Anton Intelligence peers return evidence. The orchestrator makes the final decis
 | `manual_review` | Route to compliance review |
 | `decline` | Do not continue the flow |
 
+## Automated review
+
+`review_auto` means the deterministic policy found possible evidence but needs more data before manual review or decline. The response includes `next_action: "request_more_information"` and repeats the missing fields in both `missing_disambiguators` and `summary.missing_fields`.

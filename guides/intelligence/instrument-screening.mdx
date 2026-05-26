@@ -14,6 +14,8 @@ Required:
 | `instrument.type` | `bank_account`, `crypto_wallet`, `card`, or `iban` |
 | Matching instrument payload or `instrument.vault_token_id` | One is required |
 
+The nested payload must match `instrument.type`. For example, `instrument.type: "crypto_wallet"` must use `instrument.crypto_wallet`, not `instrument.bank_account`.
+
 ## Crypto wallet
 
 ```bash
@@ -66,4 +68,3 @@ curl -sS -X POST "https://api.antonpayments.build/v1/intelligence/evaluations" \
     }
   }' | jq
 ```
-
