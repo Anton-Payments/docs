@@ -3177,6 +3177,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            rate_limit_exceeded:
+              summary: Retry after the limiter resets
+              value:
+                error:
+                  code: rate_limit_exceeded
+                  message: rate limit exceeded, retry after 60 seconds
     InternalError:
       description: Something went wrong on our end.
       content:
