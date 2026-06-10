@@ -38,6 +38,8 @@ Sign in to the [merchant portal](https://app.antonpayments.com), go to **Setting
 
 Store the secret + private key in your secrets manager. Pass them to your service via env vars or a secrets mount. Never check them in.
 
+Each credential carries a **scope set** (`payouts`, `intelligence`) fixed at creation time. Unless you narrow it, a new credential defaults to your account's full capability set. Scopes are immutable after creation — create a new credential and revoke the old one to change them. Calls outside a credential's scope fail with `403 insufficient_scope`; calls outside your account's capabilities fail with `403 capability_required`. See [Capabilities & Scopes](/capabilities).
+
 Sandbox credentials are issued by `app.antonpayments.dev` and only authenticate against `api.antonpayments.dev`. Production credentials similarly only work against `api.antonpayments.com`.
 
 ## Token endpoint
@@ -57,11 +59,14 @@ Sandbox credentials are issued by `app.antonpayments.dev` and only authenticate 
 {
   "access_token": "eyJhbGciOiJFUzI1NiIs...",
   "token_type": "DPoP",
-  "expires_in": 28800
+  "expires_in": 28800,
+  "scope": "payouts intelligence"
 }
 ```
 
 `expires_in` is in seconds. Cache the token until `exp - 60s` then re-mint. There are no refresh tokens — call the endpoint again with your secret.
+
+`scope` echoes the credential's grants, space-delimited (RFC 6749 §3.3) — the same values are embedded in the access token's `scope` claim. There is no scope request parameter: tokens always carry exactly the scopes the OAuth client was created with. See [Capabilities & Scopes](/capabilities).
 
 **Errors** (RFC 6749 §5.2 envelope):
 
@@ -194,6 +199,8 @@ curl -fsS "$REQ_URL" \
 | `invalid_client` | Wrong `client_id` / `client_secret` / revoked client | Check secrets; rotate via portal if compromised. |
 | `key_environment_mismatch` | Test creds against prod (or vice versa) | Use the right pair. Sandbox credentials only work on `api.antonpayments.dev`. |
 | `static_api_keys_disabled` | You sent `Authorization: Bearer ak_*` | Static API keys are not accepted on v1. Migrate to OAuth. |
+| `insufficient_scope` | The credential was created without the scope this endpoint needs | Use (or create) a credential carrying the right scope. See [Capabilities & Scopes](/capabilities). |
+| `capability_required` | Your account doesn't hold the capability this endpoint needs (e.g. AI-compliance-only account calling a payout endpoint) | Contact Anton to change your account's tier. |
 
 ## Security model
 

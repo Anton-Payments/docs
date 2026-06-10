@@ -25,6 +25,13 @@ info:
     - All mutating endpoints support the `Idempotency-Key` header.
     - Anton's OAuth public signing key is published at `GET /.well-known/jwks.json` (5-minute cache; RFC 8615).
 
+    **Capabilities and scopes.** Every account carries a capability set (`payouts`, `intelligence`) and every
+    credential carries a scope set validated against it at creation. AI-compliance-only accounts hold only
+    `intelligence` — all payout-surface endpoints return `403 capability_required` for them. A credential
+    minted without a scope returns `403 insufficient_scope` on that surface. Effective access is
+    `scopes ∩ capabilities`. Access tokens embed the grants as a space-delimited `scope` claim, echoed in the
+    token response.
+
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
     name: Anton Payments Support
@@ -90,12 +97,247 @@ tags:
     description: Merchant-scoped risk rules and what-if simulation.
   - name: Engine
     description: Glass-box view of Anton's risk intelligence.
+  - name: Intelligence
+    description: Normalized payee, instrument, payout, and merchant risk intelligence evaluations.
   - name: Onboarding
     description: Authenticated KYB onboarding draft and submission.
   - name: Public Onboarding
     description: Session-authenticated hosted onboarding flow. Not intended for SDK consumption.
 
 paths:
+  /v1/intelligence/evaluations:
+    post:
+      tags: [Intelligence]
+      summary: Create an intelligence evaluation
+      description: |
+        Evaluates payee, instrument, payout, merchant onboarding, or monitoring inputs through Anton Intelligence.
+
+        The request contract is strict and uses fixed enums so enterprise clients can generate SDKs safely.
+        Direct PII may be supplied over TLS or recovered from a vault token; Anton uses it in memory for the evaluation and persists only redacted decision evidence.
+
+        **Dual surface.** With OAuth+DPoP credentials, the evaluation is persisted under YOUR merchant account
+        (retrievable via the scoped reads below) and the `Idempotency-Key` header is REQUIRED. The credential
+        must carry the `intelligence` scope and the account the `intelligence` capability — every Anton account
+        has it, including AI-compliance-only merchants. Vault-token enrichment only accepts tokens owned by the
+        calling merchant. Without credentials, the request runs on the anonymous public TEST surface (where
+        enabled) under a synthetic shared merchant — public evaluations are not tied to your account.
+      security:
+        - {}
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+          description: Recommended for enterprise retries (REQUIRED on the authenticated surface). If both this header and body `idempotency_key` are supplied, the header wins.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntelligenceEvaluationRequest'
+            examples:
+              payee_registration:
+                summary: Payee registration
+                value:
+                  use_case: payee_registration
+                  client_reference_id: payee_john_doe_001
+                  entity:
+                    type: person
+                    reference_id: payee_john_doe
+                    name: John Doe
+                    country: US
+                    birth_date: "1979-12-30"
+              crypto_wallet:
+                summary: Crypto wallet screening
+                value:
+                  use_case: instrument_screening
+                  entity:
+                    type: person
+                    reference_id: payee_john_doe
+                    name: John Doe
+                    country: US
+                  instrument:
+                    type: crypto_wallet
+                    country: US
+                    currency: BTC
+                    crypto_wallet:
+                      network: bitcoin
+                      address: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+              bank_account:
+                summary: Bank account screening
+                value:
+                  use_case: instrument_screening
+                  entity:
+                    type: person
+                    reference_id: payee_john_doe
+                    name: John Doe
+                    country: US
+                  instrument:
+                    type: bank_account
+                    country: US
+                    currency: USD
+                    bank_account:
+                      routing_number: "021000021"
+                      account_number: "000123456789"
+                      account_type: checking
+      responses:
+        '200':
+          description: Evaluation created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IntelligenceEvaluation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Intelligence]
+      summary: List your intelligence evaluations
+      description: |
+        Pages the authenticated merchant's evaluations, newest first. Authenticated-only — there is no
+        anonymous variant. Strictly merchant-scoped: only evaluations created under your account appear.
+        Requires the `intelligence` credential scope and account capability.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of evaluations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IntelligenceEvaluation'
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+                    description: Opaque keyset cursor. Empty string on the last page.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/intelligence/evaluations/validate:
+    post:
+      tags: [Intelligence]
+      summary: Validate an intelligence evaluation request
+      description: Validates the strict request contract without creating or persisting an evaluation. Works on both the authenticated and (where enabled) anonymous public surface.
+      security:
+        - {}
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+          description: Optional. If both this header and body `idempotency_key` are supplied, the header wins during validation mapping.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntelligenceEvaluationRequest'
+      responses:
+        '200':
+          description: Request is valid and can be mapped to an internal event.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ValidateIntelligenceEvaluationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/intelligence/evaluations/{id}:
+    get:
+      tags: [Intelligence]
+      summary: Retrieve an intelligence evaluation
+      description: |
+        Strictly scoped to the calling surface: authenticated callers can only retrieve evaluations created
+        under their own merchant account; anonymous callers can only retrieve public-test evaluations.
+        A foreign evaluation ID is a 404 — indistinguishable from a nonexistent one.
+      security:
+        - {}
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/IntelligenceEvaluationID'
+      responses:
+        '200':
+          description: Concise evaluation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IntelligenceEvaluation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/intelligence/evaluations/{id}/evidence:
+    get:
+      tags: [Intelligence]
+      summary: Retrieve obscured intelligence evidence
+      description: Returns provider-neutral, PII-free evidence and records an audit event. Scoped identically to the evaluation read — your own evaluations only.
+      security:
+        - {}
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/IntelligenceEvaluationID'
+      responses:
+        '200':
+          description: Obscured normalized evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IntelligenceEvidence'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /oauth/token:
     post:
       tags: [Authentication]
@@ -2872,7 +3114,9 @@ components:
       flows:
         clientCredentials:
           tokenUrl: /oauth/token
-          scopes: {}
+          scopes:
+            payouts: Money movement — payouts, batches, beneficiaries, instruments, balances, funding, FX.
+            intelligence: Anton Intelligence — screening evaluations and evidence.
     dpopHeader:
       type: apiKey
       in: header
@@ -2908,6 +3152,14 @@ components:
       schema:
         type: string
         maxLength: 255
+    IntelligenceEvaluationID:
+      name: id
+      in: path
+      required: true
+      description: Intelligence evaluation ID.
+      schema:
+        type: string
+        pattern: '^eval_[a-zA-Z0-9]+$'
 
   headers:
     X-Request-ID:
@@ -2937,6 +3189,12 @@ components:
         enum: ["true"]
 
   responses:
+    BadRequest:
+      description: The request body could not be parsed or contains unknown fields.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
     Unauthorized:
       description: Missing or invalid API key, or key used against the wrong environment.
       content:
@@ -2962,6 +3220,30 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+    CapabilityForbidden:
+      description: |
+        The account capability or credential scope required by this endpoint is missing.
+        `capability_required` — the merchant account does not hold the required capability
+        (e.g. an AI-compliance-only account calling a payout endpoint). `insufficient_scope` —
+        the account holds it, but this credential was created without the matching scope.
+        Effective access is always `scopes ∩ capabilities`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            capability_required:
+              summary: Account lacks the capability
+              value:
+                error:
+                  code: capability_required
+                  message: this endpoint requires the "payouts" account capability
+            insufficient_scope:
+              summary: Credential lacks the scope
+              value:
+                error:
+                  code: insufficient_scope
+                  message: this endpoint requires a credential with the "payouts" scope
     NotFound:
       description: The resource does not exist, or belongs to a different merchant.
       content:
@@ -2981,14 +3263,30 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
     RateLimited:
-      description: Rate limit exceeded. See `Retry-After`.
+      description: >-
+        Rate limit exceeded. See `Retry-After`. The `X-RateLimit-*` headers are
+        present on every API response, not only on 429s — they are documented
+        here because this is where clients act on them.
       headers:
         Retry-After:
           $ref: '#/components/headers/Retry-After'
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            rate_limit_exceeded:
+              summary: Retry after the limiter resets
+              value:
+                error:
+                  code: rate_limit_exceeded
+                  message: rate limit exceeded, retry after 60 seconds
     InternalError:
       description: Something went wrong on our end.
       content:
@@ -3308,8 +3606,7 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: Your own reference, if you supplied one at creation.
         metadata:
           type: object
@@ -3375,8 +3672,7 @@ components:
         iso2:
           $ref: '#/components/schemas/CountryCode'
         iso3:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             ISO 3166-1 alpha-3 country code. Empty string for the ISO-assigned
             exception of Kosovo (XK), which has no alpha-3.
@@ -3429,9 +3725,8 @@ components:
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
-          type: string
+          type: [string, 'null']
           maxLength: 255
-          nullable: true
           description: Set to `null` to clear.
         metadata:
           type: object
@@ -3527,7 +3822,7 @@ components:
         method:
           $ref: '#/components/schemas/PaymentMethodCode'
         currency:
-          $ref: '#/components/schemas/CurrencyCode'
+          $ref: '#/components/schemas/IntelligenceCurrencyOrAssetCode'
         country:
           $ref: '#/components/schemas/CountryCode'
         label:
@@ -3794,8 +4089,7 @@ components:
           type: string
           pattern: '^ins_[a-zA-Z0-9]+$'
         batch_id:
-          type: string
-          nullable: true
+          type: [string, 'null']
           pattern: '^bat_[a-zA-Z0-9]+$'
           description: Set when the payout was created as part of a batch upload.
         status:
@@ -4838,3 +5132,482 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
+
+    CreateIntelligenceEvaluationRequest:
+      type: object
+      additionalProperties: false
+      required: [use_case, entity]
+      properties:
+        use_case:
+          type: string
+          enum: [payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring]
+        client_reference_id:
+          type: string
+          description: Client-supplied reference for reconciliation. Not used for merchant scoping.
+        idempotency_key:
+          type: string
+          description: Body fallback for testing. Prefer the `Idempotency-Key` header.
+        entity:
+          $ref: '#/components/schemas/IntelligenceEntity'
+        instrument:
+          $ref: '#/components/schemas/IntelligenceInstrument'
+        payout:
+          $ref: '#/components/schemas/IntelligencePayout'
+        merchant:
+          type: object
+          description: Accepted for future compatibility but ignored on the public test endpoint.
+        context:
+          $ref: '#/components/schemas/IntelligenceContext'
+
+    ValidateIntelligenceEvaluationResponse:
+      type: object
+      required: [valid, contract_version, event_type, use_case]
+      properties:
+        valid:
+          type: boolean
+        contract_version:
+          type: string
+          enum: [intelligence-public-v1]
+        event_type:
+          type: string
+          enum: [payout.create, payee.create, instrument.create, merchant.onboard, monitoring.evaluate]
+        use_case:
+          type: string
+          enum: [payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring]
+
+    IntelligenceEntity:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [person, business]
+        reference_id:
+          type: string
+        name:
+          type: string
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        birth_date:
+          type: string
+          format: date
+        address:
+          $ref: '#/components/schemas/IntelligenceAddress'
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        nationality:
+          type: array
+          items:
+            $ref: '#/components/schemas/CountryCode'
+        document:
+          $ref: '#/components/schemas/IntelligenceDocument'
+        vault_token_id:
+          type: string
+          description: Vault token containing PII to detokenize in memory.
+
+    IntelligenceAddress:
+      type: object
+      additionalProperties: false
+      properties:
+        line_1: { type: string }
+        line_2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postal_code: { type: string }
+        country:
+          $ref: '#/components/schemas/CountryCode'
+
+    IntelligenceDocument:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [passport, national_id, drivers_license, tax_id, business_registration, other]
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        number:
+          type: string
+
+    IntelligenceInstrument:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [bank_account, crypto_wallet, card, iban]
+        reference_id:
+          type: string
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        bank_account:
+          $ref: '#/components/schemas/IntelligenceBankAccount'
+        crypto_wallet:
+          $ref: '#/components/schemas/IntelligenceCryptoWallet'
+        card:
+          $ref: '#/components/schemas/IntelligenceCard'
+        iban:
+          $ref: '#/components/schemas/IntelligenceIBAN'
+        vault_token_id:
+          type: string
+
+    IntelligenceBankAccount:
+      type: object
+      additionalProperties: false
+      properties:
+        routing_number:
+          type: string
+        account_number:
+          type: string
+        account_type:
+          type: string
+          enum: [checking, savings, business_checking, other]
+
+    IntelligenceCryptoWallet:
+      type: object
+      additionalProperties: false
+      properties:
+        network:
+          type: string
+          enum: [bitcoin, ethereum, solana, polygon, tron, other]
+        address:
+          type: string
+
+    IntelligenceCard:
+      type: object
+      additionalProperties: false
+      properties:
+        fingerprint:
+          type: string
+        bin:
+          type: string
+        last4:
+          type: string
+
+    IntelligenceIBAN:
+      type: object
+      additionalProperties: false
+      properties:
+        iban:
+          type: string
+        bic:
+          type: string
+
+    IntelligencePayout:
+      type: object
+      additionalProperties: false
+      required: [amount, destination_country]
+      properties:
+        reference_id:
+          type: string
+        amount:
+          $ref: '#/components/schemas/IntelligenceMoney'
+        source_country:
+          $ref: '#/components/schemas/CountryCode'
+        destination_country:
+          $ref: '#/components/schemas/CountryCode'
+        rail:
+          type: string
+          enum: [bank, card, crypto, wallet, internal, other]
+
+    IntelligenceMoney:
+      type: object
+      additionalProperties: false
+      required: [value, currency]
+      properties:
+        value:
+          $ref: '#/components/schemas/Money'
+        currency:
+          $ref: '#/components/schemas/IntelligenceCurrencyOrAssetCode'
+
+    IntelligenceCurrencyOrAssetCode:
+      type: string
+      description: Uppercase supported fiat currency or crypto asset code.
+      pattern: '^[A-Z]{3,5}$'
+      examples: [USD, BTC, USDC]
+
+    IntelligenceContext:
+      type: object
+      additionalProperties: false
+      properties:
+        velocity:
+          type: object
+          additionalProperties: true
+        fingerprints:
+          type: object
+          additionalProperties: true
+        history:
+          type: object
+          additionalProperties: true
+        industry:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+
+    IntelligenceEvaluation:
+      type: object
+      required: [contract_version, evaluation_id, event_id, event_type, status, decision, rationale, scoring, peer_statuses, policy, audit, evaluated_at, latency_ms]
+      properties:
+        contract_version:
+          type: string
+          enum: [intelligence-public-v1]
+        evaluation_id:
+          type: string
+        event_id:
+          type: string
+        event_type:
+          type: string
+          enum: [payout.create, payee.create, instrument.create, merchant.onboard, monitoring.evaluate]
+        status:
+          type: string
+          enum: [complete, partial, error]
+        decision:
+          type: string
+          enum: [approve, review_auto, review_manual, decline]
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        rationale:
+          type: string
+        next_action:
+          type: string
+          enum: [none, request_more_information, manual_review, decline]
+        summary:
+          $ref: '#/components/schemas/IntelligenceEvaluationSummary'
+        scoring:
+          $ref: '#/components/schemas/IntelligenceScoring'
+        missing_disambiguators:
+          type: array
+          items: { type: string }
+        peer_statuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntelligencePeerStatus'
+        policy:
+          $ref: '#/components/schemas/IntelligencePolicy'
+        audit:
+          $ref: '#/components/schemas/IntelligenceAudit'
+        evaluated_at:
+          $ref: '#/components/schemas/Timestamp'
+        latency_ms:
+          type: integer
+          format: int64
+
+    IntelligenceEvaluationSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        screened:
+          type: array
+          items:
+            type: string
+            enum: [entity, instrument, payout, context]
+        use_case:
+          type: string
+          enum: [payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring]
+        instrument_type:
+          type: string
+          enum: [bank_account, crypto_wallet, card, iban]
+        payout_rail:
+          type: string
+          enum: [bank, card, crypto, wallet, internal, other]
+        findings_count:
+          type: integer
+        highest_severity:
+          type: string
+          enum: [low, medium, high, critical]
+        identity_confidence:
+          type: string
+          enum: [none, possible, likely, confirmed]
+        missing_fields:
+          type: array
+          items: { type: string }
+
+    IntelligenceScoring:
+      type: object
+      required: [model, scale, overall_score, risk_level, dimensions]
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+          enum: [anton-scoring-v1]
+        scale:
+          $ref: '#/components/schemas/IntelligenceScoringScale'
+        overall_score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        dimensions:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/IntelligenceScoringDimension'
+
+    IntelligenceScoringScale:
+      type: object
+      required: [min, max]
+      additionalProperties: false
+      properties:
+        min:
+          type: integer
+          enum: [0]
+        max:
+          type: integer
+          enum: [1000]
+
+    IntelligenceScoringDimension:
+      type: object
+      required: [code, name, score, risk_level, status]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [TRS, ORS, TM, AD, GI]
+        name:
+          type: string
+          enum: [Transaction Risk, Onboarding Risk, Transaction Monitoring, Anomaly Detection, Graph Intelligence]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [complete, not_applicable, not_configured, partial, error]
+        signals:
+          type: array
+          items:
+            type: string
+
+    IntelligencePeerStatus:
+      type: object
+      required: [peer, status, found]
+      properties:
+        peer:
+          type: string
+          enum: [sentinel, engine, brain]
+        status:
+          type: string
+          enum: [complete, partial, error, timeout, not_configured, skipped]
+        found:
+          type: boolean
+
+    IntelligencePolicy:
+      type: object
+      required: [version, rule_fired]
+      properties:
+        version:
+          type: string
+          example: triad-policy-v2
+        rule_fired:
+          type: string
+        reasons:
+          type: array
+          items: { type: string }
+
+    IntelligenceAudit:
+      type: object
+      required: [hash, persisted]
+      properties:
+        hash:
+          type: string
+        persisted:
+          type: boolean
+
+    IntelligenceEvidence:
+      type: object
+      required: [evaluation, peer_results]
+      properties:
+        evaluation:
+          $ref: '#/components/schemas/IntelligenceEvaluation'
+        peer_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntelligenceEvidencePeerResult'
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntelligenceFinding'
+
+    IntelligenceEvidencePeerResult:
+      type: object
+      required: [peer, status, found, latency_ms, evaluated_at]
+      properties:
+        peer:
+          type: string
+          enum: [sentinel, engine, brain]
+        status:
+          type: string
+          enum: [complete, partial, error, timeout, not_configured, skipped]
+        found:
+          type: boolean
+        latency_ms:
+          type: integer
+          format: int64
+        error_count:
+          type: integer
+        evaluated_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    IntelligenceFinding:
+      type: object
+      required: [id, peer, kind]
+      properties:
+        id: { type: string }
+        peer:
+          type: string
+          enum: [sentinel, engine, brain]
+        kind: { type: string }
+        subject_ref: { type: string }
+        query_ref: { type: string }
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        identity_confidence:
+          type: string
+          enum: [none, possible, likely, confirmed]
+        score:
+          type: number
+        match:
+          type: boolean
+        matched_entity_id:
+          type: string
+        matched_schema:
+          type: string
+        topics:
+          type: array
+          items: { type: string }
+        datasets:
+          type: array
+          items: { type: string }
+        matched_fields:
+          type: array
+          items: { type: string }
+        contradicted_fields:
+          type: array
+          items: { type: string }
+        missing_disambiguators:
+          type: array
+          items: { type: string }
+        cleared:
+          type: boolean
+        first_seen:
+          type: string
+        last_seen:
+          type: string

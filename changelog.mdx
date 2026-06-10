@@ -3,6 +3,26 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-06-10 — Capabilities, AI-Compliance tier, authenticated Intelligence
+
+Additive, non-breaking changes to the v1 contract. Existing integrations are unaffected: every existing account keeps both capabilities, and every existing credential behaves as full-scope.
+
+### Added
+
+- **Account capabilities and credential scopes.** Every merchant account carries a capability set (`payouts`, `intelligence`); every OAuth client carries a scope set fixed at creation and embedded in access tokens as a `scope` claim (echoed in the token response). Effective access is `scopes ∩ capabilities`. See [Capabilities & Scopes](/capabilities).
+- **AI-Compliance-only tier.** Accounts can be provisioned with the `intelligence` capability only — full access to Anton Intelligence, dashboards, webhooks, and credential management, with the entire payout surface structurally unreachable (`403 capability_required`).
+- **Authenticated Intelligence API.** `POST /v1/intelligence/evaluations` (with required `Idempotency-Key`), `GET /v1/intelligence/evaluations` (new, cursor-paginated), `GET /v1/intelligence/evaluations/{id}`, `GET /v1/intelligence/evaluations/{id}/evidence`, and `POST /v1/intelligence/evaluations/validate` now run under merchant credentials with the `intelligence` scope. Evaluations persist under your account and reads are strictly merchant-scoped. A dedicated 120 req/min per-merchant limit applies on top of the global quota. The anonymous public test surface keeps its existing contract where enabled.
+- **Intelligence scoring block.** Evaluation responses now include a `scoring` object: model `anton-scoring-v1`, a 0–1000 scale, an overall score and risk level, and five dimensions (Transaction Risk, Onboarding Risk, Transaction Monitoring, Anomaly Detection, Graph Intelligence).
+- **Stable payout failure codes.** Terminal asynchronous payout failures now record a machine-readable `failure_code` + `failure_category` (and, for provider failures, `rail_error_code` / `rail_provider` / `rail_provider_code`) in the payout event metadata served by `GET /v1/payouts/{id}/events`. See [Errors](/api-reference/errors#stable-failure-codes-on-payout-events).
+- **New error codes.** `403 capability_required`, `403 insufficient_scope`, `409 idempotency_in_flight`, `503 idempotency_unavailable` are now documented across the [error catalog](/api-reference/errors).
+
+### Changed
+
+- **`X-RateLimit-*` headers documented in the OpenAPI spec.** `X-RateLimit-Limit` / `-Remaining` / `-Reset` (present on every response since v1.0.0) are now part of the published spec on the `429` response.
+- **OpenAPI 3.1 hygiene.** Nullable fields now use `type: [string, "null"]` per OpenAPI 3.1; the spec lints clean.
+
+---
+
 ## v1.0.0 — 2026-04-18
 
 The v1.0.0 merchant contract is now frozen. Merchant integrations built against this surface will not break in minor or patch releases. Breaking changes will only arrive in a future v2.

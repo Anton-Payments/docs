@@ -1,0 +1,16 @@
+---
+title: "Idempotency and Retries"
+description: "Safely retry Intelligence create requests."
+---
+
+The `Idempotency-Key` header is **required** on authenticated `POST /v1/intelligence/evaluations` calls (omitting it returns `400 missing_idempotency_key`). On the anonymous public test surface it is optional but recommended.
+
+```http
+Idempotency-Key: intel-payee-crm-84012-v1
+```
+
+If a network timeout occurs, retry the exact same request with the same key. Anton returns the original evaluation when the operation has already completed — the evaluation is not re-run and no duplicate is persisted. A replay while the first attempt is still processing returns `409 idempotency_in_flight`; wait briefly and retry with the same key.
+
+The JSON body also accepts `idempotency_key` for testing, but the header is the enterprise contract. If both are present, the header wins.
+
+Standard idempotency semantics apply — 24-hour key retention, `409 idempotency_conflict` on key reuse with a different body, `X-Idempotent-Replayed: true` on replays. See [Idempotency](/api-reference/idempotency).

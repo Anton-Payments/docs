@@ -22,6 +22,8 @@ Authorization: DPoP <access_token>
 DPoP: <proof JWT, fresh per request>
 ```
 
+Access is additionally governed by **account capabilities** and **credential scopes** (`payouts`, `intelligence`) — effective access is `scopes ∩ capabilities`, and out-of-capability calls fail with `403 capability_required` / `403 insufficient_scope`. See [Capabilities & Scopes](/capabilities).
+
 ## Conventions
 
 - **Versioning.** All endpoints live under `/v1/`. Breaking changes ship as a new version; `/v1/` remains available for the life of the contract.

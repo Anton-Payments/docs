@@ -30,7 +30,7 @@ If you send the same request with the same key again, Anton returns the original
 
 ## Required vs. optional
 
-Some endpoints require an idempotency key and return `400 missing_idempotency_key` if you omit one — payout creation, beneficiary creation, batch confirmation, webhook subscription creation, and a handful of others. The endpoint documentation lists the requirement explicitly.
+Some endpoints require an idempotency key and return `400 missing_idempotency_key` if you omit one — payout creation, beneficiary creation, batch confirmation, webhook subscription creation, authenticated intelligence evaluation creation, and a handful of others. The endpoint documentation lists the requirement explicitly.
 
 Endpoints that accept an optional key will still honor it — a good default is to send one on every mutation.
 
@@ -104,8 +104,10 @@ uuidKey := uuid.NewString()
 |---|---|
 | Same key + same body | Original response replayed with `X-Idempotent-Replayed: true`. |
 | Same key + different body | `409 idempotency_conflict` — Anton refuses to replay a different operation under an existing key. |
+| Same key while the first attempt is still processing | `409 idempotency_in_flight` — wait briefly and retry with the same key to replay the settled response. |
 | Different key + same body | Treated as a new request. Creates a new resource. |
 | No key on a required endpoint | `400 missing_idempotency_key`. |
+| Idempotency subsystem unavailable | `503 idempotency_unavailable` — Anton fails closed rather than risk double-processing. Retry with backoff, same key. |
 
 ## What idempotency does not cover
 
