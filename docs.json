@@ -66,6 +66,7 @@
               "introduction",
               "quickstart",
               "authentication",
+              "capabilities",
               "environments",
               "how-anton-evaluates-payouts"
             ]
@@ -80,6 +81,22 @@
               "guides/batch-payouts",
               "guides/fx-exchange",
               "guides/going-live"
+            ]
+          },
+          {
+            "group": "Anton Intelligence",
+            "pages": [
+              "guides/intelligence/overview",
+              "guides/intelligence/quickstart",
+              "guides/intelligence/payee-registration",
+              "guides/intelligence/instrument-screening",
+              "guides/intelligence/payout-screening",
+              "guides/intelligence/merchant-onboarding",
+              "guides/intelligence/decisions",
+              "guides/intelligence/evidence",
+              "guides/intelligence/pii-and-vault",
+              "guides/intelligence/idempotency-retries",
+              "guides/intelligence/rate-limits-errors"
             ]
           },
           {
@@ -152,6 +169,16 @@
               "api-reference/instruments/get-instrument",
               "api-reference/instruments/update-instrument",
               "api-reference/instruments/delete-instrument"
+            ]
+          },
+          {
+            "group": "Intelligence",
+            "pages": [
+              "api-reference/intelligence/create-evaluation",
+              "api-reference/intelligence/validate-evaluation",
+              "api-reference/intelligence/list-evaluations",
+              "api-reference/intelligence/get-evaluation",
+              "api-reference/intelligence/get-evidence"
             ]
           },
           {

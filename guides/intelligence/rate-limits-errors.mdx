@@ -1,0 +1,82 @@
+---
+title: "Rate Limits and Errors"
+description: "Intelligence rate limits, capability and scope gates, and strict request errors."
+---
+
+## Rate limits
+
+| Surface | Limit |
+|---|---|
+| Authenticated (`/v1/intelligence/*` with credentials) | **120 requests / minute per merchant** by default, on top of the global per-merchant quota. |
+| Anonymous public test surface (where enabled) | 120 requests / minute per IP. |
+
+When a request is limited, Anton returns `429 Too Many Requests`, a `Retry-After` header, and the standard JSON error envelope:
+
+```json
+{
+  "error": {
+    "message": "rate limit exceeded, retry after 60 seconds",
+    "code": "rate_limit_exceeded"
+  }
+}
+```
+
+Honor `Retry-After` and use jittered backoff — see [Rate Limits](/api-reference/rate-limits) for handling patterns and the `X-RateLimit-*` headers present on every response. Sustained-volume screening integrations can request a higher ceiling via [help.antonpayments.com](https://help.antonpayments.com).
+
+## Common errors
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `unknown_field` | 400 | Request contains a field outside the strict contract |
+| `type_mismatch` | 400 | Field has the wrong JSON type |
+| `missing_idempotency_key` | 400 | Authenticated creates require the `Idempotency-Key` header |
+| `validation_error` | 422 | Required field missing, enum value invalid, country/date/currency invalid, or instrument payload mismatched |
+| `capability_required` | 403 | Your account does not hold the `intelligence` capability — see [Capabilities & Scopes](/capabilities) |
+| `insufficient_scope` | 403 | The calling credential was created without the `intelligence` scope |
+| `rate_limit_exceeded` | 429 | Too many requests; retry after `Retry-After` |
+
+## Examples
+
+Missing `use_case`:
+
+```json
+{
+  "error": {
+    "message": "use_case must be one of payee_registration, instrument_screening, payout_screening, merchant_onboarding, monitoring",
+    "code": "validation_error"
+  }
+}
+```
+
+Old raw `subject` shape:
+
+```json
+{
+  "error": {
+    "message": "unknown field \"subject\"",
+    "code": "unknown_field"
+  }
+}
+```
+
+Wrong instrument nesting:
+
+```json
+{
+  "error": {
+    "message": "instrument.bank_account cannot be supplied when instrument.type is crypto_wallet",
+    "code": "validation_error"
+  }
+}
+```
+
+Credential without the `intelligence` scope:
+
+```json
+{
+  "error": {
+    "message": "this endpoint requires a credential with the \"intelligence\" scope",
+    "code": "insufficient_scope"
+  }
+}
+```

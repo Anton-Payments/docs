@@ -104,6 +104,8 @@ The following codes are returned via the `code` field of the error envelope. Cod
 
 | HTTP | `code` | `error.message` | Cause | Remediation |
 |---|---|---|---|---|
+| `403` | `capability_required` | `this endpoint requires the "payouts" account capability` | The merchant account does not hold the capability this endpoint requires — typical for an [AI-compliance-only account](/capabilities) calling a payout-surface endpoint. Effective access is always `scopes ∩ capabilities`, and the capability gate is checked first. | Not retryable. Contact Anton to change the account's capability tier. |
+| `403` | `insufficient_scope` | `this endpoint requires a credential with the "payouts" scope` | The account holds the capability, but the calling credential was created without the matching scope. | Not retryable with this credential. Use or create a credential carrying the required scope, then retry. See [Capabilities & Scopes](/capabilities). |
 | `403` | `insufficient_permissions` | `insufficient permissions` | The caller's role does not grant the required permission on this endpoint. | Have a user with the right role perform the action, or adjust team role assignments. |
 | `403` | `role_forbidden` | various role-specific phrases (e.g. `only admin users can…`, `access denied`) | A handler-level role gate refused the action — admin-only fields, owner-only resources, technical/admin-only branding writes, etc. Distinct from `insufficient_permissions` (which is the middleware-level RBAC gate). | Have a user with the required role take the action. The UI should hide the affected control. |
 | `403` | `sandbox_only` | `sandbox … is not available in this environment` | A `/v1/merchant/sandbox/*` endpoint was called against production. | Only call sandbox endpoints in the sandbox environment. |
@@ -160,6 +162,8 @@ The following codes are returned via the `code` field of the error envelope. Cod
 |---|---|---|---|
 | `400` | `missing_idempotency_key` | The endpoint requires an `Idempotency-Key` header and none was supplied. | Add a unique `Idempotency-Key` header. See [Idempotency](./idempotency). |
 | `409` | `idempotency_conflict` | An `Idempotency-Key` was reused with a different request payload. | Either retry the original payload with the same key, or use a new key for the new payload. Never mix. |
+| `409` | `idempotency_in_flight` | A prior request with the same `Idempotency-Key` is still being processed. | Wait briefly and retry with the **same** key — once the first attempt settles, the retry replays its response. |
+| `503` | `idempotency_unavailable` | The idempotency subsystem is temporarily unavailable. Anton fails closed rather than risk double-processing. | Retry with backoff, same key. |
 
 ### Rate limiting
 
@@ -195,6 +199,39 @@ minimum 90-day deprecation window on the catch-all.
 | Merchant not active / approved | The merchant is not in `active` status (still onboarding, suspended, etc.). | Complete onboarding or contact support. State-changes to `active` arrive via webhook. |
 | Invalid corridor | The source / destination currency pair is not enabled on your account. | Call `GET /v1/corridors` to enumerate enabled corridors. Contact support to request a new corridor. |
 | Pricing service unavailable | Transient backend failure computing the quote for this payout. | Retry with back-off. The same `Idempotency-Key` is safe to reuse once the service recovers. |
+
+#### Stable failure codes on payout events
+
+A payout that fails **after** creation (during asynchronous rail submission) transitions to `failed` and records a sanitized failure on its event timeline. Read it from `GET /v1/payouts/{id}/events` — the terminal event's `metadata` carries:
+
+| Metadata key | Contents |
+|---|---|
+| `failure_code` | Stable machine-readable code (table below). Branch on this, not on `reason`. |
+| `failure_category` | `validation`, `vault`, or `provider` — coarse grouping for dashboards and triage. |
+| `reason` | Short human-readable message. Safe to log and display; never contains internal error chains. |
+| `rail_error_code` | Present on provider-originated failures: the canonical rail classification, e.g. `rail_provider_rejected`, `rail_insufficient_funds`, `rail_timeout`. |
+| `rail_provider`, `rail_provider_code` | Present on provider-originated failures: which provider refused and its native code, where available. |
+
+| `failure_code` | Category | Meaning | Remediation |
+|---|---|---|---|
+| `beneficiary_not_found` | `validation` | The beneficiary record could not be loaded at submission time. | Verify the beneficiary exists and is active, then create a new payout. |
+| `vault_unavailable` | `vault` | The credential vault was temporarily unavailable; reserved funds were released. | Transient — create a new payout (fresh `Idempotency-Key`) after a short backoff. |
+| `detokenization_failed` | `vault` | Payment credentials or beneficiary details could not be retrieved from the vault; reserved funds were released. | Retry later; if persistent, re-create the instrument or contact support with the payout ID. |
+| `provider_registration_failed` | `provider` | The beneficiary could not be registered with the payment provider. | Check the beneficiary/instrument details for the destination corridor; contact support if they look correct. |
+| `provider_unavailable` | `provider` | The provider was unreachable, rate-limited, or timed out. | Transient — create a new payout after a backoff. |
+| `provider_rejected` | `provider` | The provider refused the payment instruction. Terminal for this payout. | Inspect `reason` and `rail_provider_code`; fix the beneficiary/instrument data before re-submitting. |
+| `insufficient_funds` | `provider` | The provider reported insufficient funds for the instruction. | Reserved funds are released back to your balance. Retry later or contact support. |
+
+On every terminal failure the full reserved amount (source + fees) is released back to your available balance, and a `payout.failed` webhook fires. The webhook payload carries the payout resource; fetch the events endpoint for the `failure_code`.
+
+### Intelligence
+
+The strict Intelligence request contract returns two codes beyond the standard set. See [Intelligence — Rate Limits and Errors](/guides/intelligence/rate-limits-errors).
+
+| HTTP | `code` | Meaning | Remediation |
+|---|---|---|---|
+| `400` | `unknown_field` | The request contains a field outside the strict contract (unknown fields are rejected, not ignored). | Remove the field; pin to `contract_version: intelligence-public-v1`. |
+| `400` | `type_mismatch` | A field has the wrong JSON type. | Fix the type. |
 
 ### Batches
 
@@ -324,7 +361,9 @@ Not every error is safe to retry. The table below is a safe default — apply st
 | `400`, `404`, `410`, `413`, `422 validation_error` | No | Fix the request. Retrying will fail identically. |
 | `401` | No | Re-authenticate first. Do not loop on 401. |
 | `403 insufficient_permissions`, `403 mfa_enrollment_required`, `403 velocity_blocked` | No | Policy or permission issue. Resolve upstream before retrying. |
+| `403 capability_required`, `403 insufficient_scope` | No | Account-tier or credential-scope gate. Fails identically until the account capability or credential changes. See [Capabilities & Scopes](/capabilities). |
 | `409 idempotency_conflict` | No | You sent a new payload under a used key. Generate a new key. |
+| `409 idempotency_in_flight` | Yes (same key) | The original attempt is still processing. Wait briefly, retry with the same key to replay its response. |
 | `409` state conflicts (batch, payout, approval) | Conditional | Re-fetch the resource; retry only if the current state actually permits the action. |
 | `422 insufficient_balance` | No | Top up first. |
 | `422` beneficiary/instrument service errors (`duplicate_beneficiary`, `invalid_display_name`, `missing_beneficiary_details`, `duplicate_instrument`, `invalid_credentials`, `method_not_supported`, etc.) | No | Fix input, then retry with a fresh idempotency key. |
