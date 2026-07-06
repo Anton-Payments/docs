@@ -892,6 +892,152 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/beneficiaries/{id}/rescore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Rescore a beneficiary
+      operationId: rescoreBeneficiary
+      description: |
+        Ask the Anton Engine for a fresh Payee-pillar risk evaluation of this
+        beneficiary now, instead of waiting for the next scheduled cadence.
+        Synchronous: on success the response carries the new and previous
+        risk scores (0–1000 integers, higher is ALWAYS worse) and tiers.
+
+        Not the same as `POST /v1/beneficiaries/{id}/rescreen`, which runs
+        compliance screening (sanctions/PEP) rather than risk scoring.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rescore complete.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryRescoreResult'
+        '202':
+          description: A rescore for this beneficiary is already running; no retry needed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [in_flight]
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: >-
+            Unknown beneficiary (`beneficiary_not_found`), or the engine has
+            no profile for it yet (`engine_beneficiary_not_found`) — try again
+            after the beneficiary's next payout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: >-
+            The beneficiary is in a terminal scoring state and cannot be
+            rescored (`beneficiary_scoring_locked`), or the same
+            `Idempotency-Key` was reused with a different body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: >-
+            A rescore completed recently (`rescore_rate_limited`) — retry
+            after the `Retry-After` interval — or the standard rate limit.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '501':
+          description: Manual rescore is not enabled on this API (`rescore_not_configured`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/beneficiaries/{id}/rescreen:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+    post:
+      tags: [Beneficiaries]
+      summary: Re-screen a beneficiary
+      operationId: rescreenBeneficiary
+      description: |
+        Queue a fresh compliance screen (sanctions / PEP / adverse media) of
+        an active beneficiary. Asynchronous: responds `202` immediately and
+        the screening worker runs the check. A non-clear outcome blocks the
+        beneficiary pending review and dispatches `screening.hit` and
+        `beneficiary.blocked` webhook events; a clear outcome changes
+        nothing. Both the request and the screening outcome are audited.
+
+        Not the same as `POST /v1/beneficiaries/{id}/rescore`, which
+        recomputes the engine risk score.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Screening queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [beneficiary_id, status]
+                properties:
+                  beneficiary_id:
+                    type: string
+                    pattern: '^ben_[a-zA-Z0-9]+$'
+                  status:
+                    type: string
+                    enum: [queued]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            Only active beneficiaries can be re-screened
+            (`beneficiary_not_active`), or the same `Idempotency-Key` was
+            reused with a different body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '501':
+          description: Compliance rescreen is not enabled on this API (`rescreen_not_configured`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /v1/payouts:
     post:
       tags: [Payouts]
@@ -2592,7 +2738,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve a webhook subscription
@@ -2608,6 +2754,62 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Webhooks]
+      summary: Update a webhook subscription
+      operationId: updateWebhookSubscription
+      description: |
+        Partial update: any of `url`, `events`, `metadata`. Absent fields are
+        left unchanged; a body carrying none of the three is rejected with
+        `400 missing_required_field`.
+
+        - `url` — validated with the same HTTPS/SSRF rules as creation.
+        - `events` — must be non-empty when present; every entry must be a
+          known event type or the `"*"` wildcard (unknown types fail with
+          `422`, keyed by position).
+        - `metadata` — replaces the whole map (`{}` clears it); no per-key
+          merge.
+
+        `status` and the signing secret are not patchable — unknown fields
+        are rejected with `400 unknown_field`. Use
+        `POST /v1/webhooks/{id}/deactivate` and
+        `POST /v1/webhooks/{id}/secret/rotate` instead.
+
+        Requires an `Idempotency-Key` header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscriptionUpdateRequest'
+      responses:
+        '200':
+          description: The updated subscription (same shape as GET; the secret is never included).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          description: >-
+            No patchable field present (`missing_required_field`), an unknown
+            field such as `status` or `secret` (`unknown_field`), or an
+            invalid URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
     delete:
       tags: [Webhooks]
       summary: Delete a webhook subscription
@@ -2631,7 +2833,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     get:
       tags: [Webhooks]
       summary: Retrieve the current signing secret
@@ -2664,7 +2866,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Rotate the signing secret
@@ -2701,7 +2903,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Send a test delivery
@@ -2737,7 +2939,7 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
     post:
       tags: [Webhooks]
       summary: Deactivate a webhook subscription
@@ -3578,7 +3780,7 @@ components:
         raw identifiers are never returned in this response. Use
         `GET /v1/beneficiaries/{id}/pii` to retrieve detokenized PII for a
         beneficiary you own.
-      required: [id, merchant_id, type, status, display_name, country, created_at, updated_at]
+      required: [id, merchant_id, type, status, display_name, country, risk_score, risk_tier, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3612,6 +3814,21 @@ components:
           type: object
           additionalProperties:
             type: string
+        risk_score:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 1000
+          description: |
+            Anton Engine payee risk score, 0–1000 integer. Higher is ALWAYS
+            worse. `null` until the engine has profiled this beneficiary
+            (typically after its first payout). Derived from the payee
+            profile at read time.
+        risk_tier:
+          type: [string, 'null']
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
+          description: >-
+            Risk band for `risk_score` — `>= 900` CRITICAL, `>= 700` HIGH,
+            `>= 400` MEDIUM, else LOW. `null` while unscored.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -3624,10 +3841,47 @@ components:
         display_name: Jane Smith
         country: GB
         external_ref: contractor-1042
+        risk_score: 120
+        risk_tier: LOW
         metadata:
           department: engineering
         created_at: "2026-04-15T14:30:00Z"
         updated_at: "2026-04-15T14:30:00Z"
+
+    BeneficiaryRescoreResult:
+      type: object
+      description: |
+        Result of a manual Payee-pillar rescore. Scores are 0–1000 integers
+        where higher is ALWAYS worse — the same orientation as `risk_score`
+        on the beneficiary resource. The `previous_*` fields are absent when
+        the engine had no prior evaluation on record.
+      required: [pillar, resource_id, new_evaluation_id, new_risk_score, new_tier]
+      properties:
+        pillar:
+          type: string
+          example: payee
+        resource_id:
+          type: string
+          pattern: '^ben_[a-zA-Z0-9]+$'
+        new_evaluation_id:
+          type: string
+        new_risk_score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Fresh Payee-pillar risk score. Higher is ALWAYS worse.
+        new_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        previous_evaluation_id:
+          type: string
+        previous_risk_score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        previous_tier:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
 
     Currency:
       type: object
@@ -4181,6 +4435,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        created_by:
+          type: string
+          description: |
+            ID of the portal user who created the payout (`usr_...`). Omitted
+            for payouts created with programmatic credentials and for payouts
+            predating maker-checker support. Drives the maker-checker guard:
+            the creator can never approve or reject their own payout.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -4618,6 +4879,27 @@ components:
           additionalProperties:
             type: string
 
+    WebhookSubscriptionUpdateRequest:
+      type: object
+      description: |
+        Partial update for `PATCH /v1/webhooks/{id}`. Include at least one
+        field. `metadata` replaces the entire map. Status changes and secret
+        rotation go through their dedicated endpoints.
+      properties:
+        url:
+          type: string
+          format: uri
+          description: New HTTPS delivery URL. Same validation rules as creation.
+        events:
+          type: array
+          description: Full replacement event filter. Must be non-empty when present.
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
     WebhookSubscription:
       type: object
       description: A registered webhook endpoint and its event filter.
@@ -4625,8 +4907,8 @@ components:
       properties:
         id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
-          example: wbh_01HX8Z9K0M2N3P4Q5R6S7T8UW
+          pattern: '^whk_[a-zA-Z0-9]+$'
+          example: whk_01HX8Z9K0M2N3P4Q5R6S7T8UW
         merchant_id:
           type: string
           pattern: '^mer_[a-zA-Z0-9]+$'
@@ -4685,7 +4967,7 @@ components:
           pattern: '^evt_[a-zA-Z0-9]+$'
         subscription_id:
           type: string
-          pattern: '^wbh_[a-zA-Z0-9]+$'
+          pattern: '^whk_[a-zA-Z0-9]+$'
         status:
           type: string
           enum: [pending, success, failed, abandoned]
