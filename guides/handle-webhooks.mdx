@@ -83,6 +83,7 @@ Core payout lifecycle:
 - `payout.returned` — funds returned after send
 - `payout.screening_failed` — sanctions or compliance block
 - `payout.velocity_blocked` — velocity rule rejected
+- `payout.engine_blocked` — engine-driven block; fires alongside `payout.velocity_blocked`
 
 Beneficiary lifecycle:
 - `beneficiary.created`
