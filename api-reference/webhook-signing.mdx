@@ -315,7 +315,7 @@ Every subscription has one signing secret. The secret is returned once — in th
 </Note>
 
 <Warning>
-  A grace window means the previous secret stays valid for 24 hours. If you are rotating because a secret **leaked**, that window is a liability — rotate a second time to drop the compromised secret immediately, or contact support.
+  A grace window means the previous secret stays valid for 24 hours. If you are rotating because a secret **leaked**, that window is a liability — rotate with `?immediate=true` (`POST /v1/webhooks/{id}/secret/rotate?immediate=true`) to skip the window and kill the compromised secret at once. In-flight deliveries to an endpoint that hasn't picked up the new secret yet will fail verification and retry, which is the right trade-off for a compromised secret.
 </Warning>
 
 ## Common pitfalls
