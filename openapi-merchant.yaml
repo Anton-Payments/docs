@@ -4579,6 +4579,7 @@ components:
         - payout.returned
         - payout.screening_failed
         - payout.velocity_blocked
+        - payout.engine_blocked
         - beneficiary.created
         - beneficiary.updated
         - beneficiary.deleted
