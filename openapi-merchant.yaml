@@ -2872,12 +2872,29 @@ paths:
       summary: Rotate the signing secret
       operationId: rotateWebhookSecret
       description: |
-        Generate a fresh signing secret. The old secret is invalidated immediately.
-        There is no overlap window — any delivery in flight may be signed with
-        either secret depending on when it was queued; plan rotations for a
-        quiet period.
+        Generate a fresh signing secret. By default rotation opens a 24-hour
+        dual-signature grace window: the new secret signs immediately, and the
+        outgoing secret keeps signing as a second `v1=` entry in
+        `X-Webhook-Signature` until `previous_secret_expires_at`. A verifier
+        that matches ANY entry keeps accepting deliveries, so you can deploy
+        the new secret without dropping events.
+
+        Pass `?immediate=true` to skip the window — the old secret stops
+        verifying at once. Use this when rotating a leaked secret, accepting
+        that deliveries to a not-yet-updated endpoint will fail verification.
 
         The new secret is shown **once** in the response. Store it now.
+      parameters:
+        - name: immediate
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >-
+            When true, skip the dual-signature grace window: the previous
+            secret is dropped at once and `previous_secret_expires_at` is
+            null.
       responses:
         '200':
           description: Rotated. Response carries the new secret.
@@ -2885,10 +2902,18 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [secret, previous_secret_expires_at]
                 properties:
                   secret:
                     type: string
+                  previous_secret_expires_at:
+                    type: [string, 'null']
+                    format: date-time
+                    description: >-
+                      When the dual-signature grace window closes — the
+                      moment the previous secret stops signing deliveries.
+                      Null when the rotation was immediate (no window). The
+                      previous secret value itself is never returned.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
