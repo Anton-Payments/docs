@@ -2646,6 +2646,49 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/corridors/{country}/delivery-stats:
+    get:
+      tags: [Corridors]
+      summary: Corridor delivery-time statistics
+      operationId: getCorridorDeliveryStats
+      description: |
+        Return typical delivery-time percentiles for a destination country,
+        broken out by payout method. Timings are computed from completed
+        payouts across the Anton network over the trailing 30 days — they
+        describe how a corridor *usually* performs, not a guarantee for any
+        specific payout.
+
+        Only corridors with a sufficient completed-payout sample in the window
+        are returned; thinly-used corridors are omitted and the `data` array
+        may be empty. All timings are whole minutes; `sample_size` is the
+        number of completed payouts the percentiles were computed from.
+      parameters:
+        - name: country
+          in: path
+          required: true
+          description: ISO 3166-1 alpha-2 destination country code.
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+      responses:
+        '200':
+          description: Delivery-time statistics for the corridor (one row per method).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CorridorDeliveryStat'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/webhooks:
     post:
       tags: [Webhooks]
@@ -4460,6 +4503,13 @@ components:
           $ref: '#/components/schemas/Timestamp'
         cancelled_at:
           $ref: '#/components/schemas/Timestamp'
+        delivery:
+          allOf:
+            - $ref: '#/components/schemas/PayoutDelivery'
+          description: |
+            Delivery-time context for this payout based on its destination
+            corridor's recent performance. Present only when the corridor has
+            a sufficient completed-payout sample. See `PayoutDelivery`.
       example:
         id: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
         merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
@@ -5085,6 +5135,72 @@ components:
         required_confirms:
           type: integer
           description: Block confirmations required for crypto corridors.
+
+    CorridorDeliveryStat:
+      type: object
+      description: |
+        Typical delivery-time percentiles for one destination corridor
+        (country × method), computed from completed payouts across the Anton
+        network over the trailing 30 days. Describes how the corridor usually
+        performs — not a guarantee for any specific payout. Only corridors
+        with a sufficient completed-payout sample are returned. Timings are
+        whole minutes; there is no money and no PII in this object.
+      required: [corridor, method, p50_minutes, p90_minutes, sample_size]
+      properties:
+        corridor:
+          $ref: '#/components/schemas/CountryCode'
+          description: ISO 3166-1 alpha-2 destination country.
+        method:
+          type: string
+          description: Delivery method (bank_transfer, faster_payment, stablecoin, etc.).
+        p50_minutes:
+          type: integer
+          description: Median (50th percentile) send-to-complete time, in minutes.
+        p90_minutes:
+          type: integer
+          description: 90th-percentile send-to-complete time, in minutes.
+        sample_size:
+          type: integer
+          description: Number of completed payouts the percentiles were computed from.
+
+    PayoutDelivery:
+      type: object
+      description: |
+        Delivery-time context for an individual payout, based on how its
+        destination corridor (country × method) has performed over the
+        trailing 30 days. Present only when the corridor has a sufficient
+        completed-payout sample. `estimated_completion_at` and a `delayed`
+        value of `true` are meaningful only while the payout is in flight
+        (`processing` or `sent`, with a `processed_at` timestamp); for every
+        other state `estimated_completion_at` is omitted and `delayed` is
+        `false`.
+      required: [corridor, method, p50_minutes, p90_minutes, sample_size, delayed]
+      properties:
+        corridor:
+          $ref: '#/components/schemas/CountryCode'
+          description: ISO 3166-1 alpha-2 destination country for this payout.
+        method:
+          type: string
+        p50_minutes:
+          type: integer
+          description: Median send-to-complete time for the corridor, in minutes.
+        p90_minutes:
+          type: integer
+          description: 90th-percentile send-to-complete time for the corridor, in minutes.
+        sample_size:
+          type: integer
+          description: Number of completed payouts the percentiles were computed from.
+        estimated_completion_at:
+          type: string
+          format: date-time
+          description: |
+            Projected completion time (`processed_at` + p50 minutes), RFC 3339
+            UTC. Present only while the payout is in flight.
+        delayed:
+          type: boolean
+          description: |
+            True when an in-flight payout has already exceeded the corridor's
+            p90 delivery time (running slower than 90% of comparable payouts).
 
     InstrumentMethodSchema:
       type: object
