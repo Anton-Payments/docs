@@ -2658,10 +2658,13 @@ paths:
         describe how a corridor *usually* performs, not a guarantee for any
         specific payout.
 
-        Only corridors with a sufficient completed-payout sample in the window
-        are returned; thinly-used corridors are omitted and the `data` array
-        may be empty. All timings are whole minutes; `sample_size` is the
-        number of completed payouts the percentiles were computed from.
+        Only corridors with a sufficient completed-payout sample **and enough
+        distinct merchants** contributing in the window are returned; thinly-used
+        or single-merchant-dominated corridors are omitted and the `data` array
+        may be empty. This protects the privacy of individual senders — pooled
+        stats never surface for a corridor that isn't a genuine cross-merchant
+        blend. All timings are whole minutes; `sample_size` is the number of
+        completed payouts the percentiles were computed from.
       parameters:
         - name: country
           in: path
@@ -4509,7 +4512,10 @@ components:
           description: |
             Delivery-time context for this payout based on its destination
             corridor's recent performance. Present only when the corridor has
-            a sufficient completed-payout sample. See `PayoutDelivery`.
+            a sufficient completed-payout sample across enough distinct
+            merchants. Omitted once the payout reaches a terminal state
+            (completed, failed, returned, cancelled) — the ETA is only
+            meaningful before delivery. See `PayoutDelivery`.
       example:
         id: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
         merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
@@ -5143,8 +5149,9 @@ components:
         (country × method), computed from completed payouts across the Anton
         network over the trailing 30 days. Describes how the corridor usually
         performs — not a guarantee for any specific payout. Only corridors
-        with a sufficient completed-payout sample are returned. Timings are
-        whole minutes; there is no money and no PII in this object.
+        with a sufficient completed-payout sample across enough distinct
+        merchants are returned. Timings are whole minutes; there is no money
+        and no PII in this object.
       required: [corridor, method, p50_minutes, p90_minutes, sample_size]
       properties:
         corridor:
@@ -5169,11 +5176,14 @@ components:
         Delivery-time context for an individual payout, based on how its
         destination corridor (country × method) has performed over the
         trailing 30 days. Present only when the corridor has a sufficient
-        completed-payout sample. `estimated_completion_at` and a `delayed`
-        value of `true` are meaningful only while the payout is in flight
-        (`processing` or `sent`, with a `processed_at` timestamp); for every
-        other state `estimated_completion_at` is omitted and `delayed` is
-        `false`.
+        completed-payout sample across enough distinct merchants, and only
+        while the payout is non-terminal — it is omitted once the payout
+        reaches a terminal state (`completed`, `failed`, `returned`,
+        `cancelled`), where an ETA carries no meaning.
+        `estimated_completion_at` and a `delayed` value of `true` are
+        meaningful only while the payout is in flight (`processing` or `sent`,
+        with a `processed_at` timestamp); for every other non-terminal state
+        `estimated_completion_at` is omitted and `delayed` is `false`.
       required: [corridor, method, p50_minutes, p90_minutes, sample_size, delayed]
       properties:
         corridor:
