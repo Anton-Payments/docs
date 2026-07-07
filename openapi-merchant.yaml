@@ -4460,6 +4460,16 @@ components:
           $ref: '#/components/schemas/Timestamp'
         cancelled_at:
           $ref: '#/components/schemas/Timestamp'
+        delivery:
+          allOf:
+            - $ref: '#/components/schemas/PayoutDelivery'
+          description: |
+            Delivery-time context for this payout based on its destination
+            corridor's recent performance. Present only when the corridor has
+            a sufficient completed-payout sample across enough distinct
+            merchants. Omitted once the payout reaches a terminal state
+            (completed, failed, returned, cancelled) — the ETA is only
+            meaningful before delivery. See `PayoutDelivery`.
       example:
         id: pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB
         merchant_id: mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ
@@ -5085,6 +5095,48 @@ components:
         required_confirms:
           type: integer
           description: Block confirmations required for crypto corridors.
+
+    PayoutDelivery:
+      type: object
+      description: |
+        Delivery-time context for an individual payout, based on how its
+        destination corridor (country × method) has performed over the
+        trailing 30 days. Present only when the corridor has a sufficient
+        completed-payout sample across enough distinct merchants, and only
+        while the payout is non-terminal — it is omitted once the payout
+        reaches a terminal state (`completed`, `failed`, `returned`,
+        `cancelled`), where an ETA carries no meaning.
+        `estimated_completion_at` and a `delayed` value of `true` are
+        meaningful only while the payout is in flight (`processing` or `sent`,
+        with a `processed_at` timestamp); for every other non-terminal state
+        `estimated_completion_at` is omitted and `delayed` is `false`.
+      required: [corridor, method, p50_minutes, p90_minutes, sample_size, delayed]
+      properties:
+        corridor:
+          $ref: '#/components/schemas/CountryCode'
+          description: ISO 3166-1 alpha-2 destination country for this payout.
+        method:
+          type: string
+        p50_minutes:
+          type: integer
+          description: Median send-to-complete time for the corridor, in minutes.
+        p90_minutes:
+          type: integer
+          description: 90th-percentile send-to-complete time for the corridor, in minutes.
+        sample_size:
+          type: integer
+          description: Number of completed payouts the percentiles were computed from.
+        estimated_completion_at:
+          type: string
+          format: date-time
+          description: |
+            Projected completion time (`processed_at` + p50 minutes), RFC 3339
+            UTC. Present only while the payout is in flight.
+        delayed:
+          type: boolean
+          description: |
+            True when an in-flight payout has already exceeded the corridor's
+            p90 delivery time (running slower than 90% of comparable payouts).
 
     InstrumentMethodSchema:
       type: object
