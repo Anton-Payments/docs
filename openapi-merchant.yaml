@@ -2646,52 +2646,6 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
-  /v1/corridors/{country}/delivery-stats:
-    get:
-      tags: [Corridors]
-      summary: Corridor delivery-time statistics
-      operationId: getCorridorDeliveryStats
-      description: |
-        Return typical delivery-time percentiles for a destination country,
-        broken out by payout method. Timings are computed from completed
-        payouts across the Anton network over the trailing 30 days — they
-        describe how a corridor *usually* performs, not a guarantee for any
-        specific payout.
-
-        Only corridors with a sufficient completed-payout sample **and enough
-        distinct merchants** contributing in the window are returned; thinly-used
-        or single-merchant-dominated corridors are omitted and the `data` array
-        may be empty. This protects the privacy of individual senders — pooled
-        stats never surface for a corridor that isn't a genuine cross-merchant
-        blend. All timings are whole minutes; `sample_size` is the number of
-        completed payouts the percentiles were computed from.
-      parameters:
-        - name: country
-          in: path
-          required: true
-          description: ISO 3166-1 alpha-2 destination country code.
-          schema:
-            $ref: '#/components/schemas/CountryCode'
-      responses:
-        '200':
-          description: Delivery-time statistics for the corridor (one row per method).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/CorridorDeliveryStat'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-
   /v1/webhooks:
     post:
       tags: [Webhooks]
@@ -5141,34 +5095,6 @@ components:
         required_confirms:
           type: integer
           description: Block confirmations required for crypto corridors.
-
-    CorridorDeliveryStat:
-      type: object
-      description: |
-        Typical delivery-time percentiles for one destination corridor
-        (country × method), computed from completed payouts across the Anton
-        network over the trailing 30 days. Describes how the corridor usually
-        performs — not a guarantee for any specific payout. Only corridors
-        with a sufficient completed-payout sample across enough distinct
-        merchants are returned. Timings are whole minutes; there is no money
-        and no PII in this object.
-      required: [corridor, method, p50_minutes, p90_minutes, sample_size]
-      properties:
-        corridor:
-          $ref: '#/components/schemas/CountryCode'
-          description: ISO 3166-1 alpha-2 destination country.
-        method:
-          type: string
-          description: Delivery method (bank_transfer, faster_payment, stablecoin, etc.).
-        p50_minutes:
-          type: integer
-          description: Median (50th percentile) send-to-complete time, in minutes.
-        p90_minutes:
-          type: integer
-          description: 90th-percentile send-to-complete time, in minutes.
-        sample_size:
-          type: integer
-          description: Number of completed payouts the percentiles were computed from.
 
     PayoutDelivery:
       type: object
