@@ -1,0 +1,38 @@
+---
+title: "Merchant Onboarding"
+description: "Screen business onboarding data using the same Intelligence contract."
+---
+
+Use `merchant_onboarding` when evaluating a business during onboarding.
+
+Required:
+
+| Field | Requirement |
+|---|---|
+| `use_case` | Must be `merchant_onboarding` |
+| `entity.type` | Must be `business` |
+| `entity.name` or `entity.vault_token_id` | One is required |
+
+```bash
+curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-merchant-example-001" \
+  -d '{
+    "use_case": "merchant_onboarding",
+    "client_reference_id": "merchant-example-001",
+    "entity": {
+      "type": "business",
+      "reference_id": "merchant-example",
+      "name": "Example Imports LLC",
+      "country": "US",
+      "document": {
+        "type": "business_registration",
+        "country": "US",
+        "number": "TEST-REG-123"
+      }
+    }
+  }' | jq
+```
+

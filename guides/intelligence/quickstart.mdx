@@ -1,0 +1,181 @@
+---
+title: "Intelligence Quickstart"
+sidebarTitle: "Quickstart"
+description: "Evaluate a payee end to end with the authenticated Intelligence API — create an evaluation, read the decision, and retrieve evidence."
+---
+
+This walks you from credentials to a completed payee evaluation against the sandbox (`https://api.antonpayments.dev`). It works for every account tier — including [AI-compliance-only accounts](/capabilities), whose credentials carry the `intelligence` scope by default.
+
+## Before you start
+
+- **Sandbox OAuth credentials** with the `intelligence` scope (every default credential has it) — see [Authentication](/authentication) for minting a DPoP-bound access token.
+- The examples show `Authorization: DPoP $ANTON_ACCESS_TOKEN`; the per-request `DPoP: <proof>` header is implied throughout.
+
+<Info>
+  All names, dates, and account numbers below are fabricated test data. In sandbox, evaluations run against the same strict contract and scoring pipeline as production.
+</Info>
+
+## Step 1: Validate your request shape (optional)
+
+`POST /v1/intelligence/evaluations/validate` checks the strict contract without creating or persisting anything — useful in CI:
+
+```bash
+curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations/validate" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "use_case": "payee_registration",
+    "entity": {
+      "type": "person",
+      "name": "Maria Testperson",
+      "country": "DE",
+      "birth_date": "1988-03-14"
+    }
+  }'
+```
+
+```json
+{
+  "valid": true,
+  "contract_version": "intelligence-public-v1",
+  "event_type": "payee.create",
+  "use_case": "payee_registration"
+}
+```
+
+## Step 2: Create the evaluation
+
+The `Idempotency-Key` header is **required** on the authenticated surface — a retry with the same key returns the original result instead of re-running the evaluation.
+
+```bash
+curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-payee-crm-84012-v1" \
+  -d '{
+    "use_case": "payee_registration",
+    "client_reference_id": "crm-payee-84012",
+    "entity": {
+      "type": "person",
+      "reference_id": "crm-payee-84012",
+      "name": "Maria Testperson",
+      "country": "DE",
+      "birth_date": "1988-03-14"
+    }
+  }'
+```
+
+The response is the full evaluation, persisted under **your** merchant account:
+
+```json
+{
+  "data": {
+    "contract_version": "intelligence-public-v1",
+    "evaluation_id": "ieval_9f2c1a7e0b8d4e21",
+    "event_id": "ievt_5d11c0aa94f74c02",
+    "event_type": "payee.create",
+    "status": "complete",
+    "decision": "approve",
+    "risk_level": "low",
+    "rationale": "no meaningful adverse evidence across configured peers",
+    "next_action": "none",
+    "summary": {
+      "screened": ["entity"],
+      "use_case": "payee_registration",
+      "findings_count": 0,
+      "identity_confidence": "none",
+      "missing_fields": []
+    },
+    "scoring": {
+      "model": "anton-scoring-v1",
+      "scale": { "min": 0, "max": 1000 },
+      "overall_score": 112,
+      "risk_level": "low",
+      "dimensions": [
+        { "code": "TRS", "name": "Transaction Risk", "score": 90, "risk_level": "low", "status": "complete" },
+        { "code": "ORS", "name": "Onboarding Risk", "score": 140, "risk_level": "low", "status": "complete" },
+        { "code": "TM",  "name": "Transaction Monitoring", "score": 0, "risk_level": "low", "status": "not_applicable" },
+        { "code": "AD",  "name": "Anomaly Detection", "score": 105, "risk_level": "low", "status": "complete" },
+        { "code": "GI",  "name": "Graph Intelligence", "score": 120, "risk_level": "low", "status": "complete" }
+      ]
+    },
+    "peer_statuses": [
+      { "peer": "sentinel", "status": "complete", "found": false },
+      { "peer": "engine", "status": "complete", "found": false },
+      { "peer": "brain", "status": "skipped", "found": false }
+    ],
+    "policy": {
+      "version": "triad-policy-v2",
+      "rule_fired": "no_peer_findings",
+      "reasons": []
+    },
+    "audit": {
+      "hash": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+      "persisted": true
+    },
+    "evaluated_at": "2026-06-10T14:30:02Z",
+    "latency_ms": 412
+  }
+}
+```
+
+Branch on `decision` (`approve`, `review_auto`, `review_manual`, `decline`) and `next_action` — see [Decisions and Next Actions](/guides/intelligence/decisions). The exact scores, peers, and identifiers you receive will differ; treat IDs as opaque.
+
+## Step 3: Read it back
+
+Evaluations are strictly scoped to your merchant account. A foreign or unknown `evaluation_id` returns `404` — indistinguishable from a nonexistent one.
+
+```bash
+# One evaluation
+curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/ieval_9f2c1a7e0b8d4e21" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF"
+
+# Newest-first, cursor-paginated list of your evaluations
+curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations?limit=25" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF"
+```
+
+The list endpoint returns the standard `{ data, has_more, next_cursor }` page shape — see [Pagination](/api-reference/pagination).
+
+## Step 4: Retrieve evidence
+
+For decisions you need to justify — to a reviewer, an auditor, or your own case management — fetch the expanded, PII-free evidence. Each evidence view is recorded as an audit event.
+
+```bash
+curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/ieval_9f2c1a7e0b8d4e21/evidence" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF"
+```
+
+Evidence is provider-neutral and redacted — no raw provider payloads, no raw request bodies, no raw PII. See [Evidence Retrieval](/guides/intelligence/evidence).
+
+## Errors you may hit
+
+| HTTP | Code | Meaning |
+|---|---|---|
+| `400` | `unknown_field` / `type_mismatch` | Request violates the strict contract. Fix the body — see [Rate Limits and Errors](/guides/intelligence/rate-limits-errors). |
+| `400` | `missing_idempotency_key` | Authenticated creates require the `Idempotency-Key` header. |
+| `403` | `capability_required` / `insufficient_scope` | Your account or credential lacks `intelligence`. See [Capabilities & Scopes](/capabilities). |
+| `422` | `validation_error` | Field-level failures listed in `error.details[]`. |
+| `429` | `rate_limit_exceeded` | Dedicated per-merchant Intelligence limit. Honor `Retry-After`. |
+
+## Going further
+
+<CardGroup cols={2}>
+  <Card title="Payee registration" href="/guides/intelligence/payee-registration">
+    Field rules for person and business payees.
+  </Card>
+  <Card title="Instrument screening" href="/guides/intelligence/instrument-screening">
+    Bank accounts, IBANs, cards, and crypto wallets.
+  </Card>
+  <Card title="PII and vault tokens" href="/guides/intelligence/pii-and-vault">
+    Send direct PII or enrich from your Basis Theory vault tokens.
+  </Card>
+  <Card title="Idempotency and retries" href="/guides/intelligence/idempotency-retries">
+    Retry semantics on the create endpoint.
+  </Card>
+</CardGroup>
