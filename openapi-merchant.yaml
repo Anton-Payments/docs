@@ -121,6 +121,14 @@ paths:
         has it, including AI-compliance-only merchants. Vault-token enrichment only accepts tokens owned by the
         calling merchant. Without credentials, the request runs on the anonymous public TEST surface (where
         enabled) under a synthetic shared merchant — public evaluations are not tied to your account.
+
+        **Asynchronous money-movement evaluations.** On the authenticated (OAuth+DPoP) surface, a
+        `payout_screening` evaluation runs the full AI panel and can take up to ~20 seconds, so it is accepted
+        asynchronously: the response is `202 Accepted` with `{evaluation_id, status: "pending"}` and a
+        `Location` header. Poll `GET /v1/intelligence/evaluations/{id}` (which returns the pending state until
+        the evaluation settles), or subscribe to the `intelligence.evaluation.completed` /
+        `intelligence.evaluation.failed` webhook events for push notification. All other use cases — and every
+        call on the anonymous test surface — respond synchronously with `200` and the full evaluation.
       security:
         - {}
         - oauthDPoP: []
@@ -186,7 +194,7 @@ paths:
                       account_type: checking
       responses:
         '200':
-          description: Evaluation created.
+          description: Evaluation created (synchronous use cases).
           content:
             application/json:
               schema:
@@ -195,6 +203,23 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/IntelligenceEvaluation'
+        '202':
+          description: |
+            Evaluation accepted for asynchronous processing (`payout_screening` on the authenticated
+            surface). Poll the `Location` URL or subscribe to `intelligence.evaluation.completed`.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Polling URL for the accepted evaluation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PendingIntelligenceEvaluation'
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
@@ -4892,6 +4917,8 @@ components:
         - fx.exchange.failed
         - funding.credit
         - screening.hit
+        - intelligence.evaluation.completed
+        - intelligence.evaluation.failed
         - balance.low
         - test
 
@@ -5713,6 +5740,30 @@ components:
         metadata:
           type: object
           additionalProperties: true
+
+    PendingIntelligenceEvaluation:
+      type: object
+      description: |
+        The pending state of a 202-accepted asynchronous evaluation. `GET
+        /v1/intelligence/evaluations/{id}` returns this shape until the
+        evaluation settles, then the full IntelligenceEvaluation.
+      required: [contract_version, evaluation_id, status, use_case, created_at]
+      properties:
+        contract_version:
+          type: string
+        evaluation_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        use_case:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        failure_reason:
+          type: string
+          description: Present only when status is failed.
 
     IntelligenceEvaluation:
       type: object
