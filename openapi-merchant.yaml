@@ -5691,7 +5691,7 @@ components:
     IntelligencePayout:
       type: object
       additionalProperties: false
-      required: [amount, destination_country]
+      required: [amount, source_country, destination_country]
       properties:
         reference_id:
           type: string
