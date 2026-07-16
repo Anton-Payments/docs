@@ -9,6 +9,8 @@ Deliveries are **at-least-once**. You may occasionally receive the same event tw
 
 Every delivery is HMAC-signed — see [Webhook Signing](/api-reference/webhook-signing) for verification. Respond with any 2xx status within 30 seconds to acknowledge receipt.
 
+Webhook subscriptions are available on every account tier, including [AI-compliance-only accounts](/capabilities) — events for surfaces an account cannot reach (for example payout events on a compliance-only account) simply never fire.
+
 ## Delivery envelope
 
 Every delivery has the same outer shape. `data` holds the resource-specific payload documented below.
@@ -40,7 +42,7 @@ Each delivery also carries these HTTP headers:
 
 <CardGroup cols={2}>
   <Card title="Payout events" icon="money-bill-transfer" href="#payout-events">
-    10 events covering the full payout lifecycle.
+    11 events covering the full payout lifecycle.
   </Card>
   <Card title="Beneficiary events" icon="user" href="#beneficiary-events">
     Beneficiary create, update, delete, and block.
@@ -79,8 +81,9 @@ Each delivery also carries these HTTP headers:
 | `payout.returned` | The rail reported the funds were returned after sending. |
 | `payout.screening_failed` | Compliance screening blocked the payout. |
 | `payout.velocity_blocked` | A risk/velocity rule blocked the payout at create time. |
+| `payout.engine_blocked` | A blocked payout where the Anton engine layer was the primary decider. Fires alongside `payout.velocity_blocked`. |
 
-The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.screening_failed` and `payout.velocity_blocked` use a compact shape with just `id`, `status`, and `reason`.
+The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.screening_failed`, `payout.velocity_blocked`, and `payout.engine_blocked` use a compact shape with just `id`, `status`, and `reason`.
 
 <Note>
   When a real-time risk score is available on the payout (available via the Anton risk engine), the lifecycle event payloads include a `risk` object summarising the score and contributing factors.
@@ -112,6 +115,10 @@ The payload for payout lifecycle events is the payout object. The exact shape de
 ### `payout.processing`, `payout.sent`, `payout.completed`, `payout.failed`, `payout.returned`
 
 These share the same lifecycle payload shape. `rail_provider`, `rail_reference`, `completed_at`, and `failed_at` are populated when the rail reports them.
+
+<Note>
+  The `payout.failed` payload carries the payout resource, not the failure detail. To branch on **why** a payout failed, fetch `GET /v1/payouts/{id}/events` — the terminal event's metadata carries a stable `failure_code` (`provider_rejected`, `vault_unavailable`, `insufficient_funds`, …), a `failure_category`, and a sanitized `reason`. See [Errors → Stable failure codes on payout events](/api-reference/errors#stable-failure-codes-on-payout-events).
+</Note>
 
 ```json
 {
@@ -160,6 +167,23 @@ These share the same lifecycle payload shape. `rail_provider`, `rail_reference`,
 {
   "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9Y",
   "type": "payout.velocity_blocked",
+  "created_at": "2026-04-15T14:30:01Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "status": "velocity_blocked",
+    "reason": "payout blocked by risk policy"
+  }
+}
+```
+
+### `payout.engine_blocked`
+
+Fires **alongside** `payout.velocity_blocked` when a payout is blocked and the Anton engine layer was the primary decider. `payout.velocity_blocked` is a legacy catch-all — it fires on every block regardless of which layer made the decision — while `payout.engine_blocked` carries the layer-precise signal for engine-driven blocks only. Both events are emitted during a transition window (target cutover: 2026-Q3); subscribe to `payout.engine_blocked` for engine-specific handling and treat `payout.velocity_blocked` as a back-compat catch-all until you are ready to drop it. The payload matches `payout.velocity_blocked`.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8U9Z",
+  "type": "payout.engine_blocked",
   "created_at": "2026-04-15T14:30:01Z",
   "data": {
     "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",

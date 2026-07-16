@@ -1,0 +1,16 @@
+---
+title: "PII and Vault Tokens"
+description: "How Anton handles direct PII and vault-token enrichment."
+---
+
+Anton Intelligence supports two sensitive-data paths:
+
+| Path | Use when |
+|---|---|
+| Direct PII | The client sends data over TLS for immediate evaluation |
+| Vault token | The client sends a token reference and Anton detokenizes in memory |
+
+In both paths, raw PII is discarded after evaluation. Anton persists only redacted field presence, confidence, severity, matched or contradicted field names, provider-neutral evidence summaries, and audit hashes.
+
+Vault detokenization is audited. On the authenticated surface, vault-token enrichment only accepts tokens owned by the calling merchant — one merchant can never reference another merchant's vault tokens. On the public test endpoint, vault tokens must be scoped to the public test merchant or an explicit non-production allowlist.
+

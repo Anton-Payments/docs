@@ -1,0 +1,36 @@
+---
+title: "Payee Registration"
+description: "Screen a new person or business payee with direct PII or a vault token."
+---
+
+Use `payee_registration` when a payee is created or registered.
+
+Required:
+
+| Field | Requirement |
+|---|---|
+| `use_case` | Must be `payee_registration` |
+| `entity.type` | `person` or `business` |
+| `entity.name` or `entity.vault_token_id` | One is required |
+
+Optional but recommended: `entity.country`, `entity.birth_date`, `entity.address`, `entity.phone`, `entity.email`, and `entity.document`.
+
+```bash
+curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intel-payee-john-doe-001" \
+  -d '{
+    "use_case": "payee_registration",
+    "client_reference_id": "payee-john-doe-001",
+    "entity": {
+      "type": "person",
+      "reference_id": "payee-john-doe",
+      "name": "John Doe",
+      "country": "US",
+      "birth_date": "1979-12-30"
+    }
+  }' | jq
+```
+

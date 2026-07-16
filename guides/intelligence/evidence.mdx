@@ -1,0 +1,16 @@
+---
+title: "Evidence Retrieval"
+description: "Retrieve obscured, provider-neutral evidence after an evaluation."
+---
+
+`GET /v1/intelligence/evaluations/{id}` returns the concise result. `GET /v1/intelligence/evaluations/{id}/evidence` returns the expanded, PII-free evidence.
+
+Evidence is provider-neutral and does not include raw provider payloads, raw request bodies, or raw PII. Viewing evidence writes an audit event.
+
+Reads are strictly scoped to the calling surface: with credentials you can only retrieve evaluations created under your own merchant account; anonymous public-test callers can only retrieve public-test evaluations. A foreign evaluation ID returns `404` — indistinguishable from a nonexistent one.
+
+```bash
+curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/eval_example/evidence" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" | jq
+```

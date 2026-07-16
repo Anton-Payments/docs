@@ -1,0 +1,96 @@
+---
+title: "Capabilities & Scopes"
+description: "Account capabilities and credential scopes control which parts of the Anton API an integration can reach — including AI-compliance-only accounts with no payout surface at all."
+---
+
+Anton enforces least-privilege access at two independent layers:
+
+1. **Account capabilities** — what your merchant account as a whole is allowed to do. Set by Anton as a commercial/risk decision.
+2. **Credential scopes** — what an individual OAuth client (or API key) is allowed to do within your account. Set by you when the credential is created.
+
+A request succeeds only when both layers allow it:
+
+```
+effective access = credential scopes ∩ account capabilities
+```
+
+## The capability vocabulary
+
+| Value | Covers |
+|---|---|
+| `payouts` | All money movement — payouts, batches, beneficiaries, instruments, balances, funding accounts, FX, pricing, corridors, and the sandbox payout/beneficiary seeders. |
+| `intelligence` | Anton Intelligence — risk evaluations and evidence retrieval. See the [Intelligence overview](/guides/intelligence/overview). |
+
+Every standard merchant account carries both capabilities, and every credential minted before scopes existed behaves as full-scope — **nothing changes for existing integrations**.
+
+## The AI-Compliance tier
+
+Anton offers an **AI-compliance-only tier**: accounts provisioned with `capabilities = ["intelligence"]` and no payout surface at all. These accounts buy Anton Intelligence — payee screening, instrument screening, onboarding risk, transaction-context evaluation — without moving money through Anton.
+
+For a compliance-only account:
+
+- Every payout-surface endpoint returns `403` with code `capability_required`. The account is structurally incapable of creating payouts, beneficiaries, instruments, batches, or FX exchanges.
+- The intelligence surface, dashboard, documents, RFIs, onboarding, team management, API credential management, audit log, and reference data (currencies, countries, payment methods) all work normally.
+- **Webhooks work normally.** Subscriptions and deliveries are available on every tier — payout events simply never fire for an account that cannot create payouts.
+- Credentials created under the account default to the `intelligence` scope only.
+
+A compliance-only integration is exactly the [Intelligence quickstart](/guides/intelligence/quickstart): mint a token, `POST /v1/intelligence/evaluations`, read evaluations and evidence back under your own account.
+
+To move between tiers (for example, adding payouts to a compliance-only account after underwriting), contact Anton via [help.antonpayments.com](https://help.antonpayments.com). Capability changes take effect immediately — no token re-mint or credential rotation is required, because capabilities are evaluated per request against your account, not baked into tokens.
+
+## Credential scopes
+
+Each OAuth client carries a scope set assigned **at creation time**:
+
+- Scopes must be a subset of your account's capabilities at the moment of creation — a request for an out-of-capability scope is rejected.
+- If you don't specify scopes, the credential defaults to **your account's current capabilities** (a compliance-only account's default credential is `intelligence`-only).
+- Scopes are **immutable** after creation. To change a credential's scope, create a new credential and revoke the old one.
+
+Use scoped credentials the way you use least-privilege IAM: give your compliance tooling an `intelligence`-only credential and your payment service a `payouts` credential, so a leaked compliance credential can never move money.
+
+### Scopes in tokens
+
+Granted scopes are embedded in every access token as a space-delimited `scope` claim (RFC 6749 §3.3) and echoed in the token response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIs...",
+  "token_type": "DPoP",
+  "expires_in": 3600,
+  "scope": "intelligence"
+}
+```
+
+There is no `scope` request parameter on `POST /oauth/token` — tokens always carry exactly the scopes the credential was created with.
+
+## Denial semantics
+
+Both layers fail with `403` and a stable code, checked in this order:
+
+| Code | Layer | Meaning |
+|---|---|---|
+| `capability_required` | Account | Your merchant account does not hold the capability this endpoint requires. Typical for an AI-compliance-only account calling a payout endpoint. |
+| `insufficient_scope` | Credential | Your account holds the capability, but the credential making the call was created without the matching scope. Use (or create) a credential with the right scope. |
+
+```json
+{
+  "error": {
+    "code": "capability_required",
+    "message": "this endpoint requires the \"payouts\" account capability"
+  }
+}
+```
+
+The capability gate runs first: a `payouts`-scoped credential on a compliance-only account receives `capability_required`, not `insufficient_scope`. Denials at either layer are recorded in your account's audit trail.
+
+Neither code is retryable — the same request will fail identically until the account capability or credential changes. See [Errors](/api-reference/errors#authorization-and-access).
+
+## What each surface requires
+
+| Surface | Requires |
+|---|---|
+| Payouts, batches, beneficiaries, instruments, balances, accounts & funding, FX, pricing, corridors, sandbox seeders | `payouts` capability + `payouts` scope |
+| Intelligence evaluations and evidence | `intelligence` capability + `intelligence` scope |
+| Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data | Any authenticated credential — available on every tier |
+
+The interactive API reference marks payout-gated endpoints with a `403 capability_required` response.

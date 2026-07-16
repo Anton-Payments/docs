@@ -105,7 +105,7 @@ Every state transition fires a `payout.*` event. Subscribe once via `POST /v1/we
 
 - `payout.completed` — funds delivered
 - `payout.failed`, `payout.returned` — terminal failure paths
-- `payout.screening_failed`, `payout.velocity_blocked` — compliance/risk blocks
+- `payout.screening_failed`, `payout.velocity_blocked`, `payout.engine_blocked` — compliance/risk blocks (`payout.engine_blocked` fires alongside `payout.velocity_blocked` when the Anton engine drove the block)
 - `payout.cancelled` — operator or API cancellation
 
 Polling `GET /v1/payouts/{id}` works in development but wastes rate-limit budget at scale and misses transitions.
