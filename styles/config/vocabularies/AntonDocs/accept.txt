@@ -4,6 +4,29 @@
 
 # API / web concepts
 allowlist
+APIs
+cooldown
+cutover
+decisioned
+exfiltrated
+middleware
+Misconfigured
+misconfigured
+Nullable
+nullable
+OAuth
+readback
+rescored
+resends
+retryable
+Retryable
+runbook
+runbooks
+snake_case
+Unarchive
+unarchive
+watchlist
+watchlists
 backoff
 Bindable
 booleans
