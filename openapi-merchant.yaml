@@ -32,6 +32,12 @@ info:
     `scopes ∩ capabilities`. Access tokens embed the grants as a space-delimited `scope` claim, echoed in the
     token response.
 
+    **What machine credentials can never do.** Approval decisions (payout approve/reject — maker-checker
+    requires a human identity) and detokenized PII readback (beneficiary PII, verification name reveal,
+    captured-document viewing) are dashboard-only: those operations require a signed-in portal user with the
+    right role, and every access is audit-logged. Machine credentials can deposit and replace PII — your
+    system is its source — but can never read it back, so a leaked credential cannot harvest identities.
+
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
     name: Anton Payments Support
@@ -99,6 +105,8 @@ tags:
     description: Glass-box view of Anton's risk intelligence.
   - name: Intelligence
     description: Normalized payee, instrument, payout, and merchant risk intelligence evaluations.
+  - name: Verifications
+    description: KYC/KYB-as-a-service — verify the identity of your customers and their businesses through Anton-hosted flows, with sanctions screening built in.
   - name: Onboarding
     description: Authenticated KYB onboarding draft and submission.
   - name: Public Onboarding
@@ -360,6 +368,445 @@ paths:
                     $ref: '#/components/schemas/IntelligenceEvidence'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/verification-subjects:
+    get:
+      tags: [Verifications]
+      summary: List verification subjects
+      operationId: listVerificationSubjects
+      description: |
+        Pages the merchant's verification subjects, newest first. Each row carries a single
+        synthesized latest attempt with the subject's current status; fetch the detail endpoint
+        for the full attempt history.
+
+        `display_name` is **masked** on every read (`J•••••• D••`). The true name is available only
+        through the dashboard's audited reveal flow — it is never returned on this surface.
+
+        Requires the `intelligence` credential scope and account capability.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Filter by subject type.
+          schema:
+            type: string
+            enum: [person, business]
+        - name: status
+          in: query
+          required: false
+          description: Filter by the subject's current verification status.
+          schema:
+            $ref: '#/components/schemas/VerificationStatus'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of verification subjects.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VerificationSubject'
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor. Empty string on the last page.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Verifications]
+      summary: Create a verification subject
+      operationId: createVerificationSubject
+      description: |
+        Creates a verification subject (a person or a business) and opens its first verification
+        attempt. Anton mints a **hosted verification link** — a one-time Persona flow where the
+        subject submits their government ID and selfie (person) or business details plus a UBO
+        cascade (business). Identity documents live with the verification provider and Anton's
+        vault; they never touch your systems.
+
+        **Link delivery.** With `delivery: "email"`, Anton emails the link to the subject and the
+        attempt is created with status `sent`. If the environment cannot deliver email — or you
+        choose `delivery: "manual"` — the status is `created` and YOU deliver the returned
+        `hosted_link` through your own channel. Only trust `sent` as proof an email went out.
+
+        **`hosted_link` is secret-once.** It appears in this response (and on resend / regenerate /
+        re-verify responses) and is never readable again. Treat it like a credential: it opens a
+        flow that collects your customer's identity documents.
+
+        Track progress via the `verification.*` webhook events or by polling the subject.
+        Requires the `intelligence` credential scope and account capability.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVerificationSubjectRequest'
+            examples:
+              person_email_delivery:
+                summary: Verify a person, Anton delivers the link
+                value:
+                  type: person
+                  display_name: Ada Lovelace
+                  email: ada@example.com
+                  external_ref: customer_8841
+                  country: CA
+                  delivery: email
+                  message: "Hi Ada — please verify your identity so we can activate your account."
+                  link_expires_in_days: 7
+              business_manual_delivery:
+                summary: Verify a business, deliver the link yourself
+                value:
+                  type: business
+                  display_name: Maple Exports Inc.
+                  email: finance@mapleexports.example
+                  country: CA
+                  delivery: manual
+                  link_expires_in_days: 30
+      responses:
+        '201':
+          description: Subject created; first verification attempt opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [subject, verification]
+                    properties:
+                      subject:
+                        $ref: '#/components/schemas/VerificationSubject'
+                      verification:
+                        $ref: '#/components/schemas/VerificationAttempt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/verification-subjects/{id}:
+    get:
+      tags: [Verifications]
+      summary: Get a verification subject
+      operationId: getVerificationSubject
+      description: |
+        Returns the subject with its **full attempt history** — every verification opened for this
+        person or business, newest first, each with its checks, sanctions-screening block, and (for
+        businesses) the UBO cascade. `hosted_link` is never present on reads.
+      parameters:
+        - $ref: '#/components/parameters/VerificationSubjectID'
+      responses:
+        '200':
+          description: The subject.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationSubject'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/verification-subjects/{id}/verifications:
+    post:
+      tags: [Verifications]
+      summary: Re-verify a subject
+      operationId: reverifySubject
+      description: |
+        Opens a **new verification attempt** for an existing subject (periodic KYC refresh, or a
+        material change in the subject's details). The prior attempt history is preserved; the
+        subject's current status now tracks the new attempt. The response carries the new attempt
+        with its secret-once `hosted_link`; when the subject has an email on file, Anton also
+        re-delivers the link (status `sent`).
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationSubjectID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: New attempt opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/verifications/{id}/resend:
+    post:
+      tags: [Verifications]
+      summary: Resend a verification link
+      operationId: resendVerificationLink
+      description: |
+        Mints a fresh one-time hosted link for the **same attempt** and re-delivers it to the
+        subject's email when one is on file. Use when the previous link expired unused or never
+        arrived. Fails with `422` on attempts in a terminal state (approved, declined, expired,
+        revoked) — open a new attempt via re-verify instead.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Fresh link minted (secret-once, in `hosted_link`).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          description: The attempt is in a terminal state and cannot be resent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/verifications/{id}/regenerate:
+    post:
+      tags: [Verifications]
+      summary: Regenerate a verification
+      operationId: regenerateVerification
+      description: |
+        **Invalidates the prior link and inquiry** and opens a fresh attempt for the same subject
+        (reason `regenerated`). Use when a link may have been forwarded or exposed — the old flow
+        is dead the moment this returns. Responds `201` with the new attempt and its secret-once
+        `hosted_link`.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Fresh attempt opened; prior link invalidated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/verifications/{id}/revoke:
+    post:
+      tags: [Verifications]
+      summary: Revoke a verification
+      operationId: revokeVerification
+      description: |
+        Terminally cancels an in-flight attempt and expires its hosted link. The attempt moves to
+        `revoked` and cannot be resumed — open a new attempt via re-verify if the subject should
+        be verified later. Fails with `422` when the attempt is already terminal.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Attempt revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          description: The attempt is already in a terminal state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/verifications/{id}/owners/{uboId}/resend:
+    post:
+      tags: [Verifications]
+      summary: Resend an owner's verification link
+      operationId: resendOwnerVerificationLink
+      description: |
+        Business verifications cascade to each controlling owner (UBO), who completes an individual
+        KYC flow. This mints a fresh one-time link for a single owner and re-delivers it to the
+        owner's email when one is on file. The link is returned secret-once.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationID'
+        - name: uboId
+          in: path
+          required: true
+          description: Owner (UBO) ID within the verification.
+          schema:
+            type: string
+            pattern: '^vubo_[a-zA-Z0-9]+$'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Fresh owner link minted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [hosted_link]
+                    properties:
+                      hosted_link:
+                        type: string
+                        description: Secret-once hosted link for this owner's individual flow.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/verification-stats:
+    get:
+      tags: [Verifications]
+      summary: Verification overview stats
+      operationId: getVerificationStats
+      description: |
+        Aggregates across the merchant's verification subjects: totals by outcome, pass rate,
+        median completion time, and weekly started counts. Powers the dashboard overview; useful
+        for your own monitoring.
+      responses:
+        '200':
+          description: Aggregates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VerificationStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CapabilityForbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -767,28 +1214,6 @@ paths:
         schema:
           type: string
           pattern: '^ben_[a-zA-Z0-9]+$'
-    get:
-      tags: [Beneficiaries]
-      summary: Retrieve beneficiary PII
-      operationId: getBeneficiaryPII
-      description: |
-        Detokenizes and returns the PII stored in Basis Theory for this beneficiary.
-        Every access is recorded in the merchant audit log (PCI DSS 10.2.1).
-
-        Use this to pre-populate edit forms or verify submitted identity data.
-      responses:
-        '200':
-          description: Beneficiary PII, detokenized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BeneficiaryPII'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/RateLimited'
     put:
       tags: [Beneficiaries]
       summary: Replace beneficiary PII
@@ -801,6 +1226,13 @@ paths:
         Supply the detail block matching the beneficiary's `type` (`individual` or
         `business`). The `display_name` on the beneficiary record is automatically
         re-derived from the new PII.
+
+        **PII is write-only for machine credentials.** Your system is the source of
+        the data, so you can deposit and replace it — but there is no companion GET
+        on this surface: detokenized PII readback exists only in the merchant
+        dashboard, restricted to admin users, with every access recorded in the
+        audit log (PCI DSS 10.2.1). A leaked API credential therefore cannot
+        harvest beneficiary identities.
       requestBody:
         required: true
         content:
@@ -3412,6 +3844,22 @@ components:
       schema:
         type: string
         pattern: '^eval_[a-zA-Z0-9]+$'
+    VerificationSubjectID:
+      name: id
+      in: path
+      required: true
+      description: Verification subject ID.
+      schema:
+        type: string
+        pattern: '^vsub_[a-zA-Z0-9]+$'
+    VerificationID:
+      name: id
+      in: path
+      required: true
+      description: Verification attempt ID.
+      schema:
+        type: string
+        pattern: '^vrf_[a-zA-Z0-9]+$'
 
   headers:
     X-Request-ID:
@@ -4039,21 +4487,6 @@ components:
           description: Replaces the existing metadata map in full.
         end_user_ip:
           type: string
-
-    BeneficiaryPII:
-      type: object
-      description: |
-        Detokenized PII for a beneficiary. Returned by `GET /v1/beneficiaries/{id}/pii`.
-        Exactly one of `individual` or `business` is populated matching the
-        beneficiary's `type`.
-      properties:
-        type:
-          type: string
-          enum: [individual, business]
-        individual:
-          $ref: '#/components/schemas/IndividualDetails'
-        business:
-          $ref: '#/components/schemas/BusinessDetails'
 
     BeneficiaryPIIUpdateRequest:
       type: object
@@ -6022,3 +6455,235 @@ components:
           type: string
         last_seen:
           type: string
+
+    VerificationStatus:
+      type: string
+      description: |
+        Verification attempt lifecycle status.
+
+        - `created` — attempt exists, link minted, nothing delivered yet (manual delivery, or email unavailable)
+        - `sent` — hosted link delivered to the subject by email
+        - `in_progress` — the subject opened the flow
+        - `processing` — submitted; provider checks running
+        - `awaiting_owners` — business only: the business case is done, owner (UBO) flows outstanding
+        - `review` — flagged for manual review
+        - `approved` — verified (terminal)
+        - `declined` — failed verification (terminal)
+        - `expired` — the link or inquiry lapsed unused (terminal)
+        - `revoked` — cancelled by the merchant (terminal)
+      enum:
+        - created
+        - sent
+        - in_progress
+        - processing
+        - awaiting_owners
+        - review
+        - approved
+        - declined
+        - expired
+        - revoked
+
+    VerificationCheck:
+      type: object
+      description: One provider check on an attempt (e.g. government-ID authenticity, selfie match).
+      required: [type, label, status, detail]
+      properties:
+        type:
+          type: string
+          description: Machine-readable check type.
+        label:
+          type: string
+          description: Human-readable check name.
+        status:
+          type: string
+          enum: [passed, failed, review, pending]
+        detail:
+          type: string
+          description: Human-readable outcome detail.
+
+    VerificationScreening:
+      type: object
+      description: |
+        Sanctions/PEP/watchlist screening block. Every completed verification is screened through
+        Anton Intelligence; `evaluation_id` resolves at `GET /v1/intelligence/evaluations/{id}` for
+        the full decision evidence.
+      required: [status, lists_checked, evaluation_id, detail]
+      properties:
+        status:
+          type: string
+          enum: [clear, hit, pending]
+        lists_checked:
+          type: array
+          items:
+            type: string
+          description: Lists screened against (e.g. OFAC SDN, UN Consolidated, EU Consolidated, UK HMT, PEP).
+        evaluation_id:
+          type: string
+          description: Anton Intelligence evaluation backing this screening outcome.
+        detail:
+          type: string
+
+    VerificationUBO:
+      type: object
+      description: |
+        A controlling owner (UBO) on a business verification. Each owner completes an individual
+        KYC flow; the business cannot reach `approved` until every controlling owner has.
+        `display_name` is masked.
+      required: [id, display_name, email, ownership_pct, status]
+      properties:
+        id:
+          type: string
+          description: Owner ID (`vubo_...`).
+        display_name:
+          type: string
+          description: Masked owner name.
+        email:
+          type: string
+        ownership_pct:
+          type: integer
+          description: Declared ownership percentage.
+        status:
+          $ref: '#/components/schemas/VerificationStatus'
+        completed_at:
+          type: string
+          format: date-time
+          description: Present once the owner's flow reached a terminal outcome.
+
+    VerificationAttempt:
+      type: object
+      description: |
+        One verification attempt. `hosted_link` is **secret-once**: present only on the response
+        that minted it (create / resend / regenerate / re-verify) and never on a read.
+      required: [id, status, reason, created_at, checks]
+      properties:
+        id:
+          type: string
+          description: Attempt ID (`vrf_...`).
+        status:
+          $ref: '#/components/schemas/VerificationStatus'
+        reason:
+          type: string
+          enum: [initial, reverification, regenerated]
+          description: Why this attempt was opened.
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          description: Present once the attempt reached a terminal outcome.
+        link_expires_at:
+          type: string
+          format: date-time
+          description: When the current hosted link lapses.
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationCheck'
+        screening:
+          $ref: '#/components/schemas/VerificationScreening'
+        ubos:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationUBO'
+          description: Business verifications only — the owner cascade.
+        hosted_link:
+          type: string
+          description: Secret-once hosted verification link. Only on minting responses.
+
+    VerificationSubject:
+      type: object
+      description: |
+        A person or business you verify. `display_name` is **masked on every read**
+        (`A•• L••••••••`) — Anton stores the true name only as a vault token reference, and it is
+        revealable solely through the dashboard's audited, admin-only reveal flow.
+      required: [id, type, display_name, email, country, created_at, attempts]
+      properties:
+        id:
+          type: string
+          description: Subject ID (`vsub_...`).
+        type:
+          type: string
+          enum: [person, business]
+        display_name:
+          type: string
+          description: Masked display name.
+        email:
+          type: string
+        external_ref:
+          type: string
+          description: Your identifier for this subject, echoed back verbatim.
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2.
+        created_at:
+          type: string
+          format: date-time
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationAttempt'
+          description: List responses carry a single synthesized latest attempt; the detail endpoint carries the full history, newest first.
+
+    CreateVerificationSubjectRequest:
+      type: object
+      required: [type, display_name]
+      properties:
+        type:
+          type: string
+          enum: [person, business]
+        display_name:
+          type: string
+          description: The subject's legal name. Vault-tokenized at rest; masked on every read.
+        email:
+          type: string
+          description: 'Where the hosted link is delivered (with `delivery: "email"`), and the address shown in the flow. Without an email on file, delivery cannot happen — the attempt stays `created` and you deliver the link yourself.'
+        external_ref:
+          type: string
+          description: Optional identifier from your systems, echoed back on reads.
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2. Recommended — it feeds sanctions screening disambiguation.
+        delivery:
+          type: string
+          enum: [email, manual]
+          default: manual
+          description: '`email` — Anton emails the hosted link to the subject. `manual` (the default when omitted) — you deliver the returned `hosted_link` yourself.'
+        message:
+          type: string
+          maxLength: 500
+          description: |
+            Optional text shown in the delivery email, attributed to your business. Used for that
+            one send and **never persisted** (it may carry incidental PII) — it cannot be read back.
+        link_expires_in_days:
+          type: integer
+          enum: [7, 14, 30]
+          default: 7
+          description: Hosted-link lifetime.
+
+    VerificationStats:
+      type: object
+      required: [totals, pass_rate, median_completion_minutes, weekly]
+      properties:
+        totals:
+          type: object
+          required: [started, approved, declined, review, in_flight]
+          properties:
+            started: { type: integer }
+            approved: { type: integer }
+            declined: { type: integer }
+            review: { type: integer }
+            in_flight: { type: integer }
+        pass_rate:
+          type: number
+          description: Approved ÷ decided, 0–1.
+        median_completion_minutes:
+          type: integer
+        weekly:
+          type: array
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label: { type: string }
+              count: { type: integer }

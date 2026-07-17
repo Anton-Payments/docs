@@ -1,0 +1,163 @@
+---
+title: "Verifications"
+sidebarTitle: "Verify your customers"
+description: "KYC/KYB-as-a-service — verify people and businesses through Anton-hosted flows, with sanctions screening built in."
+---
+
+Verifications let you run identity verification on **your** customers — the people and businesses in your ecosystem — without building a KYC stack. You create a verification subject, Anton mints a **hosted verification link**, your customer completes the flow (government ID + selfie for a person; business details plus an owner cascade for a business), and Anton screens the verified identity against sanctions and PEP lists before returning a decision.
+
+Identity documents and legal names never touch your systems. Anton stores names only as vault token references and streams captured documents from the identity provider on demand — nothing is persisted outside the vault path. Every read you make returns a **masked** display name (`A•• L••••••••`).
+
+<Note>
+  Verifications require the `intelligence` account capability and a credential
+  carrying the `intelligence` scope. Every Anton account has the capability —
+  including AI-compliance-only accounts — but check your credential's scopes if
+  you get `403 insufficient_scope`.
+</Note>
+
+## Verify a person
+
+Create a subject with `type: "person"`. With `delivery: "email"`, Anton emails the hosted link to the subject, attributed to your business name:
+
+```bash
+curl https://api.antonpayments.dev/v1/verification-subjects \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: verify-customer-8841" \
+  -d '{
+    "type": "person",
+    "display_name": "Ada Lovelace",
+    "email": "ada@example.com",
+    "external_ref": "customer_8841",
+    "country": "CA",
+    "delivery": "email",
+    "message": "Hi Ada — please verify your identity so we can activate your account.",
+    "link_expires_in_days": 7
+  }'
+```
+
+The response carries the new subject and its first verification attempt:
+
+```json
+{
+  "data": {
+    "subject": {
+      "id": "vsub_01HX8Z9K0M2N3P4Q5R6S7T8UG3",
+      "type": "person",
+      "display_name": "A•• L••••••••",
+      "email": "ada@example.com",
+      "external_ref": "customer_8841",
+      "country": "CA",
+      "created_at": "2026-07-16T14:30:00Z",
+      "attempts": [{ "...": "the attempt below" }]
+    },
+    "verification": {
+      "id": "vrf_01HX8Z9K0M2N3P4Q5R6S7T8UG2",
+      "status": "sent",
+      "reason": "initial",
+      "created_at": "2026-07-16T14:30:00Z",
+      "link_expires_at": "2026-07-23T14:30:00Z",
+      "checks": [],
+      "hosted_link": "https://inquiry.withpersona.com/verify?..."
+    }
+  }
+}
+```
+
+Three things to internalize from this response:
+
+- **`hosted_link` is secret-once.** It appears here (and on resend / regenerate / re-verify responses) and is never readable again. It opens a flow that collects your customer's identity documents — treat it like a credential.
+- **`status` tells you whether the email actually went out.** `sent` means Anton delivered it. `created` means it didn't (you chose `delivery: "manual"`, or the environment has no email path) — deliver the link through your own channel and never tell your customer "check your inbox" on a `created` response.
+- **`display_name` comes back masked, immediately.** The true name went into the vault; it does not exist in Anton's core database and is not retrievable on this surface.
+
+`message` is shown in the delivery email, quoted and attributed to your business. It is used for that one send and **never persisted** — it may carry incidental PII, so it cannot be read back later.
+
+## Verify a business
+
+`type: "business"` runs a KYB flow: business details first, then a cascade to each **controlling owner** (25%+), who each complete an individual KYC flow at their own hosted link. The business attempt sits in `awaiting_owners` until every controlling owner is approved.
+
+The attempt's `ubos` array tracks each owner's status. To re-deliver one owner's link:
+
+```bash
+curl https://api.antonpayments.dev/v1/verifications/$VRF_ID/owners/$VUBO_ID/resend \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Idempotency-Key: resend-owner-$VUBO_ID-1"
+```
+
+## Lifecycle
+
+```
+created → sent → in_progress → processing → approved | declined | review
+                                    ↘ awaiting_owners (business)
+any non-terminal → expired | revoked
+```
+
+| Status            | Meaning                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `created`         | Attempt exists, link minted, nothing delivered by Anton.               |
+| `sent`            | Link delivered to the subject by email.                                |
+| `in_progress`     | The subject opened the flow.                                           |
+| `processing`      | Submitted; provider checks running.                                    |
+| `awaiting_owners` | Business only: business case done, owner flows outstanding.            |
+| `review`          | Flagged for manual review — by the provider or by sanctions screening. |
+| `approved`        | Verified. Terminal.                                                    |
+| `declined`        | Failed verification. Terminal.                                         |
+| `expired`         | Link or inquiry lapsed unused. Terminal.                               |
+| `revoked`         | You cancelled it. Terminal.                                            |
+
+Track transitions by subscribing to the [`verification.*` webhook events](/api-reference/webhook-events#verification-events) — `link_sent`, `started`, `approved`, `declined`, `review`, `expired` — or by polling `GET /v1/verification-subjects/{id}`.
+
+## Sanctions screening
+
+Every completed verification is screened against sanctions, PEP, and watchlists (OFAC SDN, UN Consolidated, EU Consolidated, UK HMT, PEP) through Anton Intelligence. The attempt's `screening` block carries the outcome:
+
+```json
+{
+  "status": "clear",
+  "lists_checked": [
+    "OFAC SDN",
+    "UN Consolidated",
+    "EU Consolidated",
+    "UK HMT",
+    "PEP"
+  ],
+  "evaluation_id": "eval_01HX8Z9K0M2N3P4Q5R6S7T8UH1",
+  "detail": "No matches across 5 lists."
+}
+```
+
+`evaluation_id` resolves at [`GET /v1/intelligence/evaluations/{id}`](/api-reference/intelligence/get-evaluation) for the full decision evidence. A screening `hit` moves the attempt to `review` — it does not auto-decline.
+
+## Managing links
+
+Three operations cover every link situation; pick by what happened:
+
+- **[Resend](/api-reference/verifications/resend-verification-link)** — the link expired unused or never arrived. Mints a fresh one-time link for the _same attempt_ and re-delivers it. Fails with `422` on terminal attempts.
+- **[Regenerate](/api-reference/verifications/regenerate-verification)** — the link may have been forwarded or exposed. **Kills the old link and inquiry immediately** and opens a fresh attempt (`reason: "regenerated"`).
+- **[Revoke](/api-reference/verifications/revoke-verification)** — you no longer want this verification to happen. Terminally cancels the attempt and expires its link.
+
+To verify someone **again** — periodic KYC refresh, or their details materially changed — use [re-verify](/api-reference/verifications/reverify-subject), which opens a new attempt on the same subject and preserves the full history.
+
+## What this API will never return
+
+The machine surface is deliberately PII-free:
+
+- `display_name` is masked on every read, for subjects and owners alike.
+- The audited **reveal** flow (true legal names) and **captured-document viewing** exist only in the merchant dashboard, restricted to admin users, with every access written to the audit trail.
+- Webhook payloads carry IDs and statuses — never names, links, or document content.
+
+You supplied the subject's name at creation, so your systems already hold what you need; the masking means an exfiltrated API credential cannot harvest verified identities.
+
+<Note>
+  All mutating verification endpoints require an `Idempotency-Key` header — see
+  [Idempotency](/api-reference/idempotency). Reads are cursor-paginated — see
+  [Pagination](/api-reference/pagination).
+</Note>
+
+## Monitoring
+
+`GET /v1/verification-stats` returns your funnel at a glance — totals by outcome, pass rate, median completion minutes, and weekly volume — the same aggregates that power the dashboard overview. See the [API reference](/api-reference/verifications/get-verification-stats).
