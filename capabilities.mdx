@@ -19,7 +19,7 @@ effective access = credential scopes ∩ account capabilities
 | Value | Covers |
 |---|---|
 | `payouts` | All money movement — payouts, batches, beneficiaries, instruments, balances, funding accounts, FX, pricing, corridors, and the sandbox payout/beneficiary seeders. |
-| `intelligence` | Anton Intelligence — risk evaluations and evidence retrieval. See the [Intelligence overview](/guides/intelligence/overview). |
+| `intelligence` | Anton Intelligence — risk evaluations and evidence retrieval, plus customer [Verifications](/guides/verifications) (KYC/KYB over hosted flows). See the [Intelligence overview](/guides/intelligence/overview). |
 
 Every standard merchant account carries both capabilities, and every credential minted before scopes existed behaves as full-scope — **nothing changes for existing integrations**.
 
@@ -91,6 +91,7 @@ Neither code is retryable — the same request will fail identically until the a
 |---|---|
 | Payouts, batches, beneficiaries, instruments, balances, accounts & funding, FX, pricing, corridors, sandbox seeders | `payouts` capability + `payouts` scope |
 | Intelligence evaluations and evidence | `intelligence` capability + `intelligence` scope |
+| Verifications (KYC/KYB) | `intelligence` capability + `intelligence` scope. Name reveal and captured-document viewing are dashboard-only (admin). |
 | Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data | Any authenticated credential — available on every tier |
 
 The interactive API reference marks payout-gated endpoints with a `403 capability_required` response.

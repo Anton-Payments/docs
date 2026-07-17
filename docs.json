@@ -78,6 +78,7 @@
               "guides/crypto-payouts",
               "guides/manage-beneficiaries",
               "guides/handle-webhooks",
+              "guides/verifications",
               "guides/batch-payouts",
               "guides/fx-exchange",
               "guides/going-live"
@@ -179,6 +180,20 @@
               "api-reference/intelligence/list-evaluations",
               "api-reference/intelligence/get-evaluation",
               "api-reference/intelligence/get-evidence"
+            ]
+          },
+          {
+            "group": "Verifications",
+            "pages": [
+              "api-reference/verifications/create-verification-subject",
+              "api-reference/verifications/list-verification-subjects",
+              "api-reference/verifications/get-verification-subject",
+              "api-reference/verifications/reverify-subject",
+              "api-reference/verifications/resend-verification-link",
+              "api-reference/verifications/regenerate-verification",
+              "api-reference/verifications/revoke-verification",
+              "api-reference/verifications/resend-owner-link",
+              "api-reference/verifications/get-verification-stats"
             ]
           },
           {

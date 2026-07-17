@@ -62,6 +62,9 @@ Each delivery also carries these HTTP headers:
   <Card title="Compliance events" icon="shield-halved" href="#compliance-events">
     Screening hits that require manual review.
   </Card>
+  <Card title="Verification events" icon="id-card" href="#verification-events">
+    KYC/KYB verification lifecycle, from link delivery to decision.
+  </Card>
   <Card title="Test events" icon="flask" href="#test-events">
     Fired by the test-delivery endpoint.
   </Card>
@@ -552,6 +555,58 @@ Fires when compliance screening returns a possible match that requires manual re
   }
 }
 ```
+
+## Verification events
+
+Emitted by the [Verifications](/guides/verifications) module as a subject moves through a hosted KYC/KYB flow. All six events share one compact payload — the verification attempt ID, its subject, and the status after the transition. Payloads never carry the hosted link, the subject's name, or document content; fetch `GET /v1/verification-subjects/{id}` for the full state.
+
+| Event type | Fires when |
+|---|---|
+| `verification.link_sent` | Anton delivered the hosted verification link by email — the delivery receipt for `delivery: "email"` flows (also fires on successful resends, including per-owner resends). |
+| `verification.started` | The subject opened the hosted flow. |
+| `verification.approved` | The verification decisioned as approved (for businesses: including every controlling owner). |
+| `verification.declined` | The verification decisioned as declined. |
+| `verification.review` | The verification was flagged for manual review — either by the identity provider or by Anton's sanctions screening. |
+| `verification.expired` | The link or inquiry lapsed before completion. |
+
+### `verification.approved`
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UG1",
+  "type": "verification.approved",
+  "created_at": "2026-07-16T14:30:00Z",
+  "data": {
+    "verification_id": "vrf_01HX8Z9K0M2N3P4Q5R6S7T8UG2",
+    "subject_id": "vsub_01HX8Z9K0M2N3P4Q5R6S7T8UG3",
+    "status": "approved"
+  }
+}
+```
+
+`verification.started`, `verification.declined`, `verification.review`, and `verification.expired` share this exact payload shape with their respective `status` values.
+
+### `verification.link_sent`
+
+Same shape; on a per-owner (UBO) resend the payload additionally carries the `owner_id`:
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UG4",
+  "type": "verification.link_sent",
+  "created_at": "2026-07-16T14:30:00Z",
+  "data": {
+    "verification_id": "vrf_01HX8Z9K0M2N3P4Q5R6S7T8UG2",
+    "subject_id": "vsub_01HX8Z9K0M2N3P4Q5R6S7T8UG3",
+    "status": "sent",
+    "owner_id": "vubo_01HX8Z9K0M2N3P4Q5R6S7T8UG5"
+  }
+}
+```
+
+<Note>
+  `verification.link_sent` fires only when Anton actually delivered the email. Manual-delivery flows (`delivery: "manual"`) and environments without an email path never emit it — the attempt stays `created` and you deliver the returned `hosted_link` yourself.
+</Note>
 
 ## Balance events
 
