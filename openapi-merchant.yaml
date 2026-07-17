@@ -578,6 +578,12 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/verifications/{id}/resend:
     post:
@@ -622,6 +628,12 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/verifications/{id}/regenerate:
     post:
@@ -660,6 +672,12 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/verifications/{id}/revoke:
     post:
@@ -752,6 +770,12 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          description: The verification provider is not configured on this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/verification-stats:
     get:
@@ -6627,7 +6651,7 @@ components:
 
     CreateVerificationSubjectRequest:
       type: object
-      required: [type, display_name, email, country, delivery]
+      required: [type, display_name]
       properties:
         type:
           type: string
@@ -6637,17 +6661,18 @@ components:
           description: The subject's legal name. Vault-tokenized at rest; masked on every read.
         email:
           type: string
-          description: 'Where the hosted link is delivered (with `delivery: "email"`), and the address shown in the flow.'
+          description: 'Where the hosted link is delivered (with `delivery: "email"`), and the address shown in the flow. Without an email on file, delivery cannot happen — the attempt stays `created` and you deliver the link yourself.'
         external_ref:
           type: string
           description: Optional identifier from your systems, echoed back on reads.
         country:
           type: string
-          description: ISO 3166-1 alpha-2.
+          description: ISO 3166-1 alpha-2. Recommended — it feeds sanctions screening disambiguation.
         delivery:
           type: string
           enum: [email, manual]
-          description: '`email` — Anton emails the hosted link to the subject. `manual` — you deliver the returned `hosted_link` yourself.'
+          default: manual
+          description: '`email` — Anton emails the hosted link to the subject. `manual` (the default when omitted) — you deliver the returned `hosted_link` yourself.'
         message:
           type: string
           maxLength: 500

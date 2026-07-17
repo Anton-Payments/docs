@@ -588,7 +588,7 @@ Emitted by the [Verifications](/guides/verifications) module as a subject moves 
 
 ### `verification.link_sent`
 
-Same shape; on a per-owner (UBO) resend the payload additionally carries the `owner_id`:
+Same shape. The event **type** is the delivery receipt; `status` carries the attempt's current status after the operation — `sent` on first delivery, but e.g. `awaiting_owners` when re-delivering an owner's link on a business verification (which also adds `owner_id`), or `in_progress` when re-delivering to a subject who already opened the flow. Key your delivery-receipt handling on the event type, not on `status`:
 
 ```json
 {
@@ -598,7 +598,7 @@ Same shape; on a per-owner (UBO) resend the payload additionally carries the `ow
   "data": {
     "verification_id": "vrf_01HX8Z9K0M2N3P4Q5R6S7T8UG2",
     "subject_id": "vsub_01HX8Z9K0M2N3P4Q5R6S7T8UG3",
-    "status": "sent",
+    "status": "awaiting_owners",
     "owner_id": "vubo_01HX8Z9K0M2N3P4Q5R6S7T8UG5"
   }
 }
