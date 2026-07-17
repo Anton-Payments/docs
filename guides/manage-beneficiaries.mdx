@@ -81,11 +81,11 @@ Common reasons to update PII:
 - Business changes registered address
 - Beneficiary provides a corrected DOB or ID number
 
-## Retrieving PII
+## Reading PII back
 
-`GET /v1/beneficiaries/{id}/pii` detokenizes and returns the full PII blob. This is an audited, security-sensitive operation — every access generates a PCI DSS 10.2.1 audit entry.
+**PII is write-only on this surface.** Your system is the source of beneficiary PII, so you can deposit and replace it — but detokenized readback is not available to API credentials. Retrieving a beneficiary's stored PII happens only in the merchant dashboard, restricted to admin users, with every access recorded in the audit log (PCI DSS 10.2.1).
 
-Use this to pre-populate edit forms or verify what you submitted.
+This is deliberate: a leaked API credential can be revoked and its payouts cancelled, but harvested identities cannot be un-leaked. Keep your own copy of what you submit; `GET /v1/beneficiaries/{id}` returns the masked record (display name, country, status, token reference) for reconciliation.
 
 ## Archive vs delete
 
@@ -104,7 +104,8 @@ curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/restore \
 ```
 
 <Warning>
-  Beneficiaries `blocked` by compliance (status: `blocked`) cannot be restored via the API. Contact support if you believe a block was applied in error.
+  Beneficiaries `blocked` by compliance (status: `blocked`) cannot be restored
+  via the API. Contact support if you believe a block was applied in error.
 </Warning>
 
 ## Searching and filtering
@@ -135,13 +136,13 @@ See [Webhook Events](/api-reference/webhook-events) for payload schemas.
 
 ## Common errors
 
-| Code | HTTP | Meaning | Action |
-|---|---|---|---|
-| `duplicate_beneficiary` | 422 | Exact PII match already exists under your merchant. | Search by `external_ref` or PII; reuse the existing ID. |
-| `missing_beneficiary_details` | 400 | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`. |
-| `invalid_display_name` | 422 | Name fields empty or invalid characters. | Fix name; a minimum of first + last is required for individuals. |
-| `beneficiary_not_found` | 404 | ID doesn't exist or belongs to a different merchant. | Check the ID and prefix. |
-| `beneficiary_pii_update_failed` | 422 | PII update hit a validation or tokenization error. | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |
+| Code                            | HTTP | Meaning                                                            | Action                                                              |
+| ------------------------------- | ---- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `duplicate_beneficiary`         | 422  | Exact PII match already exists under your merchant.                | Search by `external_ref` or PII; reuse the existing ID.             |
+| `missing_beneficiary_details`   | 400  | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`.                              |
+| `invalid_display_name`          | 422  | Name fields empty or invalid characters.                           | Fix name; a minimum of first + last is required for individuals.    |
+| `beneficiary_not_found`         | 404  | ID doesn't exist or belongs to a different merchant.               | Check the ID and prefix.                                            |
+| `beneficiary_pii_update_failed` | 422  | PII update hit a validation or tokenization error.                 | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |
 
 ## Next steps
 

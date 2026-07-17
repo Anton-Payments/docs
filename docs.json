@@ -37,19 +37,12 @@
     }
   },
   "api": {
-    "openapi": [
-      "/openapi-merchant.yaml"
-    ],
+    "openapi": ["/openapi-merchant.yaml"],
     "playground": {
       "display": "interactive"
     },
     "examples": {
-      "languages": [
-        "bash",
-        "javascript",
-        "php",
-        "go"
-      ]
+      "languages": ["bash", "javascript", "php", "go"]
     }
   },
   "search": {
@@ -78,6 +71,7 @@
               "guides/crypto-payouts",
               "guides/manage-beneficiaries",
               "guides/handle-webhooks",
+              "guides/verifications",
               "guides/batch-payouts",
               "guides/fx-exchange",
               "guides/going-live"
@@ -101,16 +95,11 @@
           },
           {
             "group": "Sandbox",
-            "pages": [
-              "sandbox/overview",
-              "sandbox/test-data"
-            ]
+            "pages": ["sandbox/overview", "sandbox/test-data"]
           },
           {
             "group": "Changelog",
-            "pages": [
-              "changelog"
-            ]
+            "pages": ["changelog"]
           }
         ]
       },
@@ -119,9 +108,7 @@
         "groups": [
           {
             "group": "Overview",
-            "pages": [
-              "api-reference/introduction"
-            ]
+            "pages": ["api-reference/introduction"]
           },
           {
             "group": "Cross-Cutting",
@@ -151,7 +138,6 @@
               "api-reference/beneficiaries/get-beneficiary",
               "api-reference/beneficiaries/update-beneficiary",
               "api-reference/beneficiaries/delete-beneficiary",
-              "api-reference/beneficiaries/get-beneficiary-pii",
               "api-reference/beneficiaries/update-beneficiary-pii",
               "api-reference/beneficiaries/archive-beneficiary",
               "api-reference/beneficiaries/restore-beneficiary",
@@ -179,6 +165,20 @@
               "api-reference/intelligence/list-evaluations",
               "api-reference/intelligence/get-evaluation",
               "api-reference/intelligence/get-evidence"
+            ]
+          },
+          {
+            "group": "Verifications",
+            "pages": [
+              "api-reference/verifications/create-verification-subject",
+              "api-reference/verifications/list-verification-subjects",
+              "api-reference/verifications/get-verification-subject",
+              "api-reference/verifications/reverify-subject",
+              "api-reference/verifications/resend-verification-link",
+              "api-reference/verifications/regenerate-verification",
+              "api-reference/verifications/revoke-verification",
+              "api-reference/verifications/resend-owner-link",
+              "api-reference/verifications/get-verification-stats"
             ]
           },
           {
@@ -258,9 +258,7 @@
           },
           {
             "group": "Corridors",
-            "pages": [
-              "api-reference/corridors/list-corridors"
-            ]
+            "pages": ["api-reference/corridors/list-corridors"]
           },
           {
             "group": "Sandbox",
@@ -312,14 +310,7 @@
     }
   },
   "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "cursor",
-      "vscode"
-    ]
+    "options": ["copy", "view", "chatgpt", "claude", "cursor", "vscode"]
   },
   "seo": {
     "indexing": "navigable"

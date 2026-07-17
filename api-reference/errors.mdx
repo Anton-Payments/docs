@@ -17,11 +17,11 @@ Every non-2xx response returned by `/v1/*` carries the same JSON error envelope 
 }
 ```
 
-| Field | Type | Always present | Description |
-|---|---|---|---|
-| `error.message` | string | Yes | Human-readable description. Safe to log; never contains PII. For 5xx errors, this is always the string `internal server error` — the detailed error is recorded server-side and can be correlated via `X-Request-ID`. |
-| `error.code` | string | Yes | Machine-readable snake_case identifier. Safe to branch on. Every merchant-facing error returned by the API carries a code; the codes listed in the catalog below are the complete public surface. |
-| `error.details` | array or object | No | Additional context. Present on validation errors (see below). May be omitted from other error types. |
+| Field           | Type            | Always present | Description                                                                                                                                                                                                           |
+| --------------- | --------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error.message` | string          | Yes            | Human-readable description. Safe to log; never contains PII. For 5xx errors, this is always the string `internal server error` — the detailed error is recorded server-side and can be correlated via `X-Request-ID`. |
+| `error.code`    | string          | Yes            | Machine-readable snake_case identifier. Safe to branch on. Every merchant-facing error returned by the API carries a code; the codes listed in the catalog below are the complete public surface.                     |
+| `error.details` | array or object | No             | Additional context. Present on validation errors (see below). May be omitted from other error types.                                                                                                                  |
 
 ## Validation error envelope
 
@@ -54,21 +54,21 @@ The `field` is dotted-path notation for nested objects (for example `individual.
 
 ## HTTP status reference
 
-| Status | Meaning in the Anton API |
-|---|---|
-| `400 Bad Request` | Request body could not be parsed, contained unknown fields, or a URL parameter/path was malformed. |
-| `401 Unauthorized` | Missing, malformed, expired, or revoked credential. Re-authenticate before retrying. |
-| `403 Forbidden` | Authenticated but not permitted. Caused by insufficient role permissions, suspended/terminated merchant status, test-key-in-production, MFA enforcement, or a velocity block. |
-| `404 Not Found` | Resource does not exist under the calling merchant's scope. May also mean the resource exists but belongs to a different merchant — the API never distinguishes the two, to prevent tenant enumeration. |
-| `409 Conflict` | The resource's current state disallows the requested transition (for example, cancelling a completed payout), or an idempotency key was replayed with a different payload. |
-| `410 Gone` | The endpoint has been deprecated and removed. Follow the migration note in the response message. |
-| `413 Payload Too Large` | Request body exceeds the endpoint's limit (1 MB on most routes, 26 MB on document upload routes). |
-| `422 Unprocessable Entity` | Request was syntactically valid but semantically rejected — validation failure, insufficient balance, or a business-rule refusal. |
-| `429 Too Many Requests` | Per-merchant rate limit exceeded. Respect `Retry-After`. See [Rate limits](./rate-limits). |
-| `500 Internal Server Error` | An unexpected server error. Safe to retry with exponential backoff. The detailed error is never exposed to clients — correlate via `X-Request-ID`. |
-| `501 Not Implemented` | The endpoint exists but is not enabled in this environment due to missing configuration (for example, the engine admin token is not set on this API instance). Not a caller mistake. |
-| `503 Service Unavailable` | A downstream dependency (rail provider, FX provider, Basis Theory, WorkOS) is degraded or circuit-broken. Retry with backoff. |
-| `504 Gateway Timeout` | The request exceeded the 25-second handler timeout. Retry; consider whether your payload can be split. |
+| Status                      | Meaning in the Anton API                                                                                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400 Bad Request`           | Request body could not be parsed, contained unknown fields, or a URL parameter/path was malformed.                                                                                                      |
+| `401 Unauthorized`          | Missing, malformed, expired, or revoked credential. Re-authenticate before retrying.                                                                                                                    |
+| `403 Forbidden`             | Authenticated but not permitted. Caused by insufficient role permissions, suspended/terminated merchant status, test-key-in-production, MFA enforcement, or a velocity block.                           |
+| `404 Not Found`             | Resource does not exist under the calling merchant's scope. May also mean the resource exists but belongs to a different merchant — the API never distinguishes the two, to prevent tenant enumeration. |
+| `409 Conflict`              | The resource's current state disallows the requested transition (for example, cancelling a completed payout), or an idempotency key was replayed with a different payload.                              |
+| `410 Gone`                  | The endpoint has been deprecated and removed. Follow the migration note in the response message.                                                                                                        |
+| `413 Payload Too Large`     | Request body exceeds the endpoint's limit (1 MB on most routes, 26 MB on document upload routes).                                                                                                       |
+| `422 Unprocessable Entity`  | Request was syntactically valid but semantically rejected — validation failure, insufficient balance, or a business-rule refusal.                                                                       |
+| `429 Too Many Requests`     | Per-merchant rate limit exceeded. Respect `Retry-After`. See [Rate limits](./rate-limits).                                                                                                              |
+| `500 Internal Server Error` | An unexpected server error. Safe to retry with exponential backoff. The detailed error is never exposed to clients — correlate via `X-Request-ID`.                                                      |
+| `501 Not Implemented`       | The endpoint exists but is not enabled in this environment due to missing configuration (for example, the engine admin token is not set on this API instance). Not a caller mistake.                    |
+| `503 Service Unavailable`   | A downstream dependency (rail provider, FX provider, Basis Theory, WorkOS) is degraded or circuit-broken. Retry with backoff.                                                                           |
+| `504 Gateway Timeout`       | The request exceeded the 25-second handler timeout. Retry; consider whether your payload can be split.                                                                                                  |
 
 ## The `X-Request-ID` header
 
@@ -88,98 +88,98 @@ The following codes are returned via the `code` field of the error envelope. Cod
 
 ### Authentication
 
-| HTTP | `code` | Typical `error.message` | Cause | Remediation |
-|---|---|---|---|---|
-| `401` | `unauthorized` | `missing Authorization header` | No `Authorization` header sent. | Add `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. See [Authentication](/authentication). |
-| `401` | `unauthorized` | `invalid Authorization header format` | Header scheme is neither `DPoP` nor `Bearer`. | Use `Authorization: DPoP <token>` for OAuth, `Bearer <jwt>` for portal JWT. |
-| `401` | `invalid_token` | `invalid or expired token` | OAuth access token signature, expiry, or audience is invalid. | Mint a new token via `POST /oauth/token`. |
-| `401` | `invalid_dpop_proof` | `invalid DPoP proof` | The `DPoP` header proof failed signature, `htm`, `htu`, `iat`, `jti`, `ath`, or `jkt` verification. | See the troubleshooting matrix on the [Authentication](/authentication) page. |
-| `401` | `static_api_keys_disabled` | `static API keys are no longer accepted` | An `Authorization: Bearer ak_*` header was sent. | Migrate to OAuth 2.0 + DPoP. See [Authentication](/authentication). |
-| `401` | `not_authenticated` | `not authenticated` | A handler ran without a resolved merchant or user context. Defense-in-depth check after the auth middleware. | Re-authenticate. The portal should redirect to the login flow. |
-| `401` | `merchant_context_required` | `merchant context required` | Token validated, but Anton could not resolve a merchant from it. | Re-authenticate; confirm the merchant binding on your portal user. |
-| `403` | `key_environment_mismatch` | `test tokens are not allowed in production` | A test-environment OAuth token was used against the production or staging API. | Use the right environment: production credentials issue tokens for `api.antonpayments.com`; sandbox credentials for `api.antonpayments.dev`. |
-| `503` | `oauth_unavailable` | `OAuth authentication is not configured on this instance` | Misconfigured deploy: OAuth signing key not set. Production refuses to start in this state, so this only surfaces in misconfigured non-prod environments. | Contact support. |
+| HTTP  | `code`                      | Typical `error.message`                                   | Cause                                                                                                                                                     | Remediation                                                                                                                                  |
+| ----- | --------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401` | `unauthorized`              | `missing Authorization header`                            | No `Authorization` header sent.                                                                                                                           | Add `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. See [Authentication](/authentication).                   |
+| `401` | `unauthorized`              | `invalid Authorization header format`                     | Header scheme is neither `DPoP` nor `Bearer`.                                                                                                             | Use `Authorization: DPoP <token>` for OAuth, `Bearer <jwt>` for portal JWT.                                                                  |
+| `401` | `invalid_token`             | `invalid or expired token`                                | OAuth access token signature, expiry, or audience is invalid.                                                                                             | Mint a new token via `POST /oauth/token`.                                                                                                    |
+| `401` | `invalid_dpop_proof`        | `invalid DPoP proof`                                      | The `DPoP` header proof failed signature, `htm`, `htu`, `iat`, `jti`, `ath`, or `jkt` verification.                                                       | See the troubleshooting matrix on the [Authentication](/authentication) page.                                                                |
+| `401` | `static_api_keys_disabled`  | `static API keys are no longer accepted`                  | An `Authorization: Bearer ak_*` header was sent.                                                                                                          | Migrate to OAuth 2.0 + DPoP. See [Authentication](/authentication).                                                                          |
+| `401` | `not_authenticated`         | `not authenticated`                                       | A handler ran without a resolved merchant or user context. Defense-in-depth check after the auth middleware.                                              | Re-authenticate. The portal should redirect to the login flow.                                                                               |
+| `401` | `merchant_context_required` | `merchant context required`                               | Token validated, but Anton could not resolve a merchant from it.                                                                                          | Re-authenticate; confirm the merchant binding on your portal user.                                                                           |
+| `403` | `key_environment_mismatch`  | `test tokens are not allowed in production`               | A test-environment OAuth token was used against the production or staging API.                                                                            | Use the right environment: production credentials issue tokens for `api.antonpayments.com`; sandbox credentials for `api.antonpayments.dev`. |
+| `503` | `oauth_unavailable`         | `OAuth authentication is not configured on this instance` | Misconfigured deploy: OAuth signing key not set. Production refuses to start in this state, so this only surfaces in misconfigured non-prod environments. | Contact support.                                                                                                                             |
 
 ### Authorization and access
 
-| HTTP | `code` | `error.message` | Cause | Remediation |
-|---|---|---|---|---|
-| `403` | `capability_required` | `this endpoint requires the "payouts" account capability` | The merchant account does not hold the capability this endpoint requires — typical for an [AI-compliance-only account](/capabilities) calling a payout-surface endpoint. Effective access is always `scopes ∩ capabilities`, and the capability gate is checked first. | Not retryable. Contact Anton to change the account's capability tier. |
-| `403` | `insufficient_scope` | `this endpoint requires a credential with the "payouts" scope` | The account holds the capability, but the calling credential was created without the matching scope. | Not retryable with this credential. Use or create a credential carrying the required scope, then retry. See [Capabilities & Scopes](/capabilities). |
-| `403` | `insufficient_permissions` | `insufficient permissions` | The caller's role does not grant the required permission on this endpoint. | Have a user with the right role perform the action, or adjust team role assignments. |
-| `403` | `role_forbidden` | various role-specific phrases (e.g. `only admin users can…`, `access denied`) | A handler-level role gate refused the action — admin-only fields, owner-only resources, technical/admin-only branding writes, etc. Distinct from `insufficient_permissions` (which is the middleware-level RBAC gate). | Have a user with the required role take the action. The UI should hide the affected control. |
-| `403` | `sandbox_only` | `sandbox … is not available in this environment` | A `/v1/merchant/sandbox/*` endpoint was called against production. | Only call sandbox endpoints in the sandbox environment. |
-| `403` | `merchant_suspended` | `merchant account is suspended` | Merchant account is in the `suspended` state. | Contact Anton support. |
-| `403` | `merchant_terminated` | `merchant account is terminated` | Merchant account is in the `terminated` state. | Contact Anton support. |
-| `403` | `merchant_not_active` | `merchant account is not yet active` | Merchant provisioning is still in progress. | Complete onboarding from the merchant dashboard. Contact Anton support if this persists. |
-| `403` | `merchant_not_found` | `merchant not found` | The authenticated merchant ID could not be resolved. | Re-authenticate; confirm the merchant exists. |
-
+| HTTP  | `code`                      | `error.message`                                                               | Cause                                                                                                                                                                                                                                                                  | Remediation                                                                                                                                                             |
+| ----- | --------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `403` | `capability_required`       | `this endpoint requires the "payouts" account capability`                     | The merchant account does not hold the capability this endpoint requires — typical for an [AI-compliance-only account](/capabilities) calling a payout-surface endpoint. Effective access is always `scopes ∩ capabilities`, and the capability gate is checked first. | Not retryable. Contact Anton to change the account's capability tier.                                                                                                   |
+| `403` | `insufficient_scope`        | `this endpoint requires a credential with the "payouts" scope`                | The account holds the capability, but the calling credential was created without the matching scope.                                                                                                                                                                   | Not retryable with this credential. Use or create a credential carrying the required scope, then retry. See [Capabilities & Scopes](/capabilities).                     |
+| `403` | `insufficient_permissions`  | `insufficient permissions`                                                    | For portal users: the caller's role does not grant the required permission. For API credentials: the credential's scopes do not map to the permission this endpoint requires (e.g. PII readback is never machine-grantable).                                           | Portal: have a user with the right role act, or adjust team roles. API: check your credential's scopes; if the operation is dashboard-only by design, perform it there. |
+| `403` | `oauth_client_not_accepted` | `this endpoint is only available through the merchant dashboard`              | An OAuth+DPoP credential called a dashboard-only endpoint — approval decisions, PII reveal, credential/team management, and similar human-only surfaces reject machine callers outright.                                                                               | Not retryable with any API credential. Perform the action in the merchant dashboard.                                                                                    |
+| `403` | `api_key_not_accepted`      | `this endpoint is only available through the merchant dashboard`              | A legacy static API key called a dashboard-only endpoint. (Static keys are no longer accepted on v1 at all — see `401 static_api_keys_disabled`.)                                                                                                                      | Migrate to OAuth 2.0 + DPoP; dashboard-only operations remain dashboard-only.                                                                                           |
+| `403` | `role_forbidden`            | various role-specific phrases (e.g. `only admin users can…`, `access denied`) | A handler-level role gate refused the action — admin-only fields, owner-only resources, technical/admin-only branding writes, etc. Distinct from `insufficient_permissions` (which is the middleware-level RBAC gate).                                                 | Have a user with the required role take the action. The UI should hide the affected control.                                                                            |
+| `403` | `sandbox_only`              | `sandbox … is not available in this environment`                              | A `/v1/merchant/sandbox/*` endpoint was called against production.                                                                                                                                                                                                     | Only call sandbox endpoints in the sandbox environment.                                                                                                                 |
+| `403` | `merchant_suspended`        | `merchant account is suspended`                                               | Merchant account is in the `suspended` state.                                                                                                                                                                                                                          | Contact Anton support.                                                                                                                                                  |
+| `403` | `merchant_terminated`       | `merchant account is terminated`                                              | Merchant account is in the `terminated` state.                                                                                                                                                                                                                         | Contact Anton support.                                                                                                                                                  |
+| `403` | `merchant_not_active`       | `merchant account is not yet active`                                          | Merchant provisioning is still in progress.                                                                                                                                                                                                                            | Complete onboarding from the merchant dashboard. Contact Anton support if this persists.                                                                                |
+| `403` | `merchant_not_found`        | `merchant not found`                                                          | The authenticated merchant ID could not be resolved.                                                                                                                                                                                                                   | Re-authenticate; confirm the merchant exists.                                                                                                                           |
 
 ### Validation
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `422` | `validation_error` | One or more fields failed validation. The `details` array carries per-field errors. | Inspect `error.details[]` and fix each entry. |
-| `400` | `bad_request` | Returned by the idempotency middleware when the request body could not be read. | Retry the request; verify the body is well-formed JSON and under 1 MB. |
-| `400` | `invalid_request_body` | The request body could not be JSON-decoded — malformed JSON, unknown fields (the decoder rejects them), or wrong content type. | Confirm the body matches the documented schema. |
-| `400` | `missing_required_field` | An ad-hoc required field was missing — for example, `currency`, `id`, `domain`, or `email`. | Add the missing field. |
-| `400` | `invalid_email` | Email field is not a valid RFC 5322 address. | Fix the email value. |
-| `400` | `invalid_country_code` | Country value is not a 2-letter ISO 3166-1 alpha-2 code. | Use a valid country code (e.g. `US`, `GB`). |
-| `400` | `invalid_file` | Multipart upload was missing the `file` field. | Include a file under the `file` form field. |
-| `400` | `invalid_file_format` | Batch upload file is not `.csv` or `.xlsx`. | Resave the file in a supported format. |
-| `400` | `invalid_file_type` | Document or batch upload had an unsupported `Content-Type`. | Re-export the asset in a supported format. |
-| `400` | `invalid_multipart_form` | The multipart form could not be parsed. | Confirm the request is a properly-encoded `multipart/form-data` body. |
-| `400` | `invalid_template_format` | `GET /v1/batches/template?format=` was called with anything other than `xlsx` or `csv`. | Use one of the supported template formats. |
-| `400` | `invalid_url` | `support_url`, `terms_url`, or `privacy_url` is not a valid HTTPS URL. | Use an HTTPS URL. |
-| `400` | `invalid_display_name` | `display_name` exceeds 100 characters. | Use a shorter / valid display name. |
-| `400` | `invalid_scope` | `scope` query param on sandbox reset was not one of the allowed values. | Use `balances`, `all`, `delete-all`, or `full-reset`. |
-| `400` | `file_hash_mismatch` | Client-supplied `file_hash` does not match the server-computed SHA-256. | Recompute the hash on the file as it is being sent and resubmit. |
+| HTTP  | `code`                    | Meaning                                                                                                                        | Remediation                                                            |
+| ----- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `422` | `validation_error`        | One or more fields failed validation. The `details` array carries per-field errors.                                            | Inspect `error.details[]` and fix each entry.                          |
+| `400` | `bad_request`             | Returned by the idempotency middleware when the request body could not be read.                                                | Retry the request; verify the body is well-formed JSON and under 1 MB. |
+| `400` | `invalid_request_body`    | The request body could not be JSON-decoded — malformed JSON, unknown fields (the decoder rejects them), or wrong content type. | Confirm the body matches the documented schema.                        |
+| `400` | `missing_required_field`  | An ad-hoc required field was missing — for example, `currency`, `id`, `domain`, or `email`.                                    | Add the missing field.                                                 |
+| `400` | `invalid_email`           | Email field is not a valid RFC 5322 address.                                                                                   | Fix the email value.                                                   |
+| `400` | `invalid_country_code`    | Country value is not a 2-letter ISO 3166-1 alpha-2 code.                                                                       | Use a valid country code (e.g. `US`, `GB`).                            |
+| `400` | `invalid_file`            | Multipart upload was missing the `file` field.                                                                                 | Include a file under the `file` form field.                            |
+| `400` | `invalid_file_format`     | Batch upload file is not `.csv` or `.xlsx`.                                                                                    | Resave the file in a supported format.                                 |
+| `400` | `invalid_file_type`       | Document or batch upload had an unsupported `Content-Type`.                                                                    | Re-export the asset in a supported format.                             |
+| `400` | `invalid_multipart_form`  | The multipart form could not be parsed.                                                                                        | Confirm the request is a properly-encoded `multipart/form-data` body.  |
+| `400` | `invalid_template_format` | `GET /v1/batches/template?format=` was called with anything other than `xlsx` or `csv`.                                        | Use one of the supported template formats.                             |
+| `400` | `invalid_url`             | `support_url`, `terms_url`, or `privacy_url` is not a valid HTTPS URL.                                                         | Use an HTTPS URL.                                                      |
+| `400` | `invalid_display_name`    | `display_name` exceeds 100 characters.                                                                                         | Use a shorter / valid display name.                                    |
+| `400` | `invalid_scope`           | `scope` query param on sandbox reset was not one of the allowed values.                                                        | Use `balances`, `all`, `delete-all`, or `full-reset`.                  |
+| `400` | `file_hash_mismatch`      | Client-supplied `file_hash` does not match the server-computed SHA-256.                                                        | Recompute the hash on the file as it is being sent and resubmit.       |
 
 ### Resource not found
 
 `404 Not Found` responses always carry a code identifying the missing resource. Anton never distinguishes "does not exist" from "exists but belongs to another merchant" — both return the same `*_not_found` envelope to prevent tenant enumeration.
 
-| HTTP | `code` | Returned by |
-|---|---|---|
-| `404` | `payout_not_found` | `GET /v1/payouts/{id}`, `GET /v1/payouts/{id}/events` |
-| `404` | `beneficiary_not_found` | All `/v1/beneficiaries/{id}*` reads/writes; instrument creation under a beneficiary |
-| `404` | `engine_beneficiary_not_found` | `POST /v1/beneficiaries/{id}/rescore` when the engine has no profile for this beneficiary yet (typically a brand-new beneficiary that has not yet been scored by the engine's background consumer) |
-| `404` | `instrument_not_found` | `GET/PUT/DELETE /v1/instruments/{id}` |
-| `404` | `batch_not_found` | All `/v1/batches/{id}*` endpoints |
-| `404` | `template_not_found` | `GET /v1/batches/template` when the template file is missing on the server |
-| `404` | `webhook_subscription_not_found` | `/v1/webhooks/{id}*` reads, secret rotation, test, deactivate |
-| `404` | `webhook_event_not_found` | `GET /v1/webhooks/events/{id}` |
-| `404` | `merchant_not_found` | Internal resolution of the authenticated merchant (rare — implies a token/session drift). |
-| `404` | `pricing_plan_not_found` | `POST /v1/pricing/quote` when no plan applies |
-| `404` | `account_not_found` | `/v1/accounts/{currency}*` |
-| `404` | `balance_not_found` | `GET /v1/balances/{currency}` |
-| `404` | `country_not_supported` | `GET /v1/instruments/methods?country=<CC>` for unsupported countries |
-| `404` | `quote_not_found` | `POST /v1/fx/exchange` with a `quote_id` that does not exist or is not owned by the merchant |
+| HTTP  | `code`                           | Returned by                                                                                                                                                                                        |
+| ----- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `404` | `payout_not_found`               | `GET /v1/payouts/{id}`, `GET /v1/payouts/{id}/events`                                                                                                                                              |
+| `404` | `beneficiary_not_found`          | All `/v1/beneficiaries/{id}*` reads/writes; instrument creation under a beneficiary                                                                                                                |
+| `404` | `engine_beneficiary_not_found`   | `POST /v1/beneficiaries/{id}/rescore` when the engine has no profile for this beneficiary yet (typically a brand-new beneficiary that has not yet been scored by the engine's background consumer) |
+| `404` | `instrument_not_found`           | `GET/PUT/DELETE /v1/instruments/{id}`                                                                                                                                                              |
+| `404` | `batch_not_found`                | All `/v1/batches/{id}*` endpoints                                                                                                                                                                  |
+| `404` | `template_not_found`             | `GET /v1/batches/template` when the template file is missing on the server                                                                                                                         |
+| `404` | `webhook_subscription_not_found` | `/v1/webhooks/{id}*` reads, secret rotation, test, deactivate                                                                                                                                      |
+| `404` | `webhook_event_not_found`        | `GET /v1/webhooks/events/{id}`                                                                                                                                                                     |
+| `404` | `merchant_not_found`             | Internal resolution of the authenticated merchant (rare — implies a token/session drift).                                                                                                          |
+| `404` | `pricing_plan_not_found`         | `POST /v1/pricing/quote` when no plan applies                                                                                                                                                      |
+| `404` | `account_not_found`              | `/v1/accounts/{currency}*`                                                                                                                                                                         |
+| `404` | `balance_not_found`              | `GET /v1/balances/{currency}`                                                                                                                                                                      |
+| `404` | `country_not_supported`          | `GET /v1/instruments/methods?country=<CC>` for unsupported countries                                                                                                                               |
+| `404` | `quote_not_found`                | `POST /v1/fx/exchange` with a `quote_id` that does not exist or is not owned by the merchant                                                                                                       |
 
 ### Idempotency
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `400` | `missing_idempotency_key` | The endpoint requires an `Idempotency-Key` header and none was supplied. | Add a unique `Idempotency-Key` header. See [Idempotency](./idempotency). |
-| `409` | `idempotency_conflict` | An `Idempotency-Key` was reused with a different request payload. | Either retry the original payload with the same key, or use a new key for the new payload. Never mix. |
-| `409` | `idempotency_in_flight` | A prior request with the same `Idempotency-Key` is still being processed. | Wait briefly and retry with the **same** key — once the first attempt settles, the retry replays its response. |
-| `503` | `idempotency_unavailable` | The idempotency subsystem is temporarily unavailable. Anton fails closed rather than risk double-processing. | Retry with backoff, same key. |
+| HTTP  | `code`                    | Meaning                                                                                                      | Remediation                                                                                                    |
+| ----- | ------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `400` | `missing_idempotency_key` | The endpoint requires an `Idempotency-Key` header and none was supplied.                                     | Add a unique `Idempotency-Key` header. See [Idempotency](./idempotency).                                       |
+| `409` | `idempotency_conflict`    | An `Idempotency-Key` was reused with a different request payload.                                            | Either retry the original payload with the same key, or use a new key for the new payload. Never mix.          |
+| `409` | `idempotency_in_flight`   | A prior request with the same `Idempotency-Key` is still being processed.                                    | Wait briefly and retry with the **same** key — once the first attempt settles, the retry replays its response. |
+| `503` | `idempotency_unavailable` | The idempotency subsystem is temporarily unavailable. Anton fails closed rather than risk double-processing. | Retry with backoff, same key.                                                                                  |
 
 ### Rate limiting
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
+| HTTP  | `code`                | Meaning                                                                                                                                                           | Remediation                                                                             |
+| ----- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `429` | `rate_limit_exceeded` | Per-merchant rate limit has been exceeded (1,000 requests/minute on `/v1/*`; tighter limits apply to `/v1/fx/quote`, `/v1/fx/exchange`, and sensitive endpoints). | Honor the `Retry-After` header. Back off with jitter. See [Rate limits](./rate-limits). |
-
 
 ### Payouts
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `422` | `insufficient_balance` | The source balance cannot cover the payout amount plus fees. (Also returned by `POST /v1/fx/exchange` when the sell-side balance is too low.) | Top up the relevant currency balance, or reduce the amount. |
-| `403` | `velocity_blocked` | The payout was rejected by Anton's real-time risk policy (velocity/thresholds/geo). | Inspect `GET /v1/payouts/{id}/velocity-results` for the triggered rules. A `payout.velocity_blocked` webhook is also dispatched with the reason. |
-| `422` | `payout_rejected` | Catch-all for payout creation failures that are not validation, balance, or velocity related. | Inspect the message; correct the input or retry. See the `payout_rejected` sub-causes table below for the specific conditions this code covers. |
-| `422` | `payout_not_cancellable` | The payout's current state does not allow cancellation (already submitted to a rail, completed, etc.). | Re-fetch the payout; cancellation is only valid before submission. |
+| HTTP  | `code`                   | Meaning                                                                                                                                       | Remediation                                                                                                                                      |
+| ----- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `422` | `insufficient_balance`   | The source balance cannot cover the payout amount plus fees. (Also returned by `POST /v1/fx/exchange` when the sell-side balance is too low.) | Top up the relevant currency balance, or reduce the amount.                                                                                      |
+| `403` | `velocity_blocked`       | The payout was rejected by Anton's real-time risk policy (velocity/thresholds/geo).                                                           | Inspect `GET /v1/payouts/{id}/velocity-results` for the triggered rules. A `payout.velocity_blocked` webhook is also dispatched with the reason. |
+| `422` | `payout_rejected`        | Catch-all for payout creation failures that are not validation, balance, or velocity related.                                                 | Inspect the message; correct the input or retry. See the `payout_rejected` sub-causes table below for the specific conditions this code covers.  |
+| `422` | `payout_not_cancellable` | The payout's current state does not allow cancellation (already submitted to a rail, completed, etc.).                                        | Re-fetch the payout; cancellation is only valid before submission.                                                                               |
 
 #### `payout_rejected` sub-causes
 
@@ -191,36 +191,36 @@ the full mapping. Future API revisions may split any of these into a dedicated
 code; when that happens it will be announced as a breaking change with a
 minimum 90-day deprecation window on the catch-all.
 
-| Sub-cause | When it fires | Remediation |
-|---|---|---|
-| Archived or inactive beneficiary | The `beneficiary_id` exists but is `archived` or `inactive`. | Unarchive or activate the beneficiary via the merchant portal, or pick a different beneficiary. |
-| Archived or inactive instrument | The `instrument_id` is not in `active` status. | Activate or replace the instrument. |
-| Wrong-currency instrument | The instrument's currency doesn't match the payout's `dest_currency`. | Select an instrument whose currency matches the destination. |
-| Merchant not active / approved | The merchant is not in `active` status (still onboarding, suspended, etc.). | Complete onboarding or contact support. State-changes to `active` arrive via webhook. |
-| Invalid corridor | The source / destination currency pair is not enabled on your account. | Call `GET /v1/corridors` to enumerate enabled corridors. Contact support to request a new corridor. |
-| Pricing service unavailable | Transient backend failure computing the quote for this payout. | Retry with back-off. The same `Idempotency-Key` is safe to reuse once the service recovers. |
+| Sub-cause                        | When it fires                                                               | Remediation                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Archived or inactive beneficiary | The `beneficiary_id` exists but is `archived` or `inactive`.                | Unarchive or activate the beneficiary via the merchant portal, or pick a different beneficiary.     |
+| Archived or inactive instrument  | The `instrument_id` is not in `active` status.                              | Activate or replace the instrument.                                                                 |
+| Wrong-currency instrument        | The instrument's currency doesn't match the payout's `dest_currency`.       | Select an instrument whose currency matches the destination.                                        |
+| Merchant not active / approved   | The merchant is not in `active` status (still onboarding, suspended, etc.). | Complete onboarding or contact support. State-changes to `active` arrive via webhook.               |
+| Invalid corridor                 | The source / destination currency pair is not enabled on your account.      | Call `GET /v1/corridors` to enumerate enabled corridors. Contact support to request a new corridor. |
+| Pricing service unavailable      | Transient backend failure computing the quote for this payout.              | Retry with back-off. The same `Idempotency-Key` is safe to reuse once the service recovers.         |
 
 #### Stable failure codes on payout events
 
 A payout that fails **after** creation (during asynchronous rail submission) transitions to `failed` and records a sanitized failure on its event timeline. Read it from `GET /v1/payouts/{id}/events` — the terminal event's `metadata` carries:
 
-| Metadata key | Contents |
-|---|---|
-| `failure_code` | Stable machine-readable code (table below). Branch on this, not on `reason`. |
-| `failure_category` | `validation`, `vault`, or `provider` — coarse grouping for dashboards and triage. |
-| `reason` | Short human-readable message. Safe to log and display; never contains internal error chains. |
-| `rail_error_code` | Present on provider-originated failures: the canonical rail classification, e.g. `rail_provider_rejected`, `rail_insufficient_funds`, `rail_timeout`. |
-| `rail_provider`, `rail_provider_code` | Present on provider-originated failures: which provider refused and its native code, where available. |
+| Metadata key                          | Contents                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `failure_code`                        | Stable machine-readable code (table below). Branch on this, not on `reason`.                                                                          |
+| `failure_category`                    | `validation`, `vault`, or `provider` — coarse grouping for dashboards and triage.                                                                     |
+| `reason`                              | Short human-readable message. Safe to log and display; never contains internal error chains.                                                          |
+| `rail_error_code`                     | Present on provider-originated failures: the canonical rail classification, e.g. `rail_provider_rejected`, `rail_insufficient_funds`, `rail_timeout`. |
+| `rail_provider`, `rail_provider_code` | Present on provider-originated failures: which provider refused and its native code, where available.                                                 |
 
-| `failure_code` | Category | Meaning | Remediation |
-|---|---|---|---|
-| `beneficiary_not_found` | `validation` | The beneficiary record could not be loaded at submission time. | Verify the beneficiary exists and is active, then create a new payout. |
-| `vault_unavailable` | `vault` | The credential vault was temporarily unavailable; reserved funds were released. | Transient — create a new payout (fresh `Idempotency-Key`) after a short backoff. |
-| `detokenization_failed` | `vault` | Payment credentials or beneficiary details could not be retrieved from the vault; reserved funds were released. | Retry later; if persistent, re-create the instrument or contact support with the payout ID. |
-| `provider_registration_failed` | `provider` | The beneficiary could not be registered with the payment provider. | Check the beneficiary/instrument details for the destination corridor; contact support if they look correct. |
-| `provider_unavailable` | `provider` | The provider was unreachable, rate-limited, or timed out. | Transient — create a new payout after a backoff. |
-| `provider_rejected` | `provider` | The provider refused the payment instruction. Terminal for this payout. | Inspect `reason` and `rail_provider_code`; fix the beneficiary/instrument data before re-submitting. |
-| `insufficient_funds` | `provider` | The provider reported insufficient funds for the instruction. | Reserved funds are released back to your balance. Retry later or contact support. |
+| `failure_code`                 | Category     | Meaning                                                                                                         | Remediation                                                                                                  |
+| ------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `beneficiary_not_found`        | `validation` | The beneficiary record could not be loaded at submission time.                                                  | Verify the beneficiary exists and is active, then create a new payout.                                       |
+| `vault_unavailable`            | `vault`      | The credential vault was temporarily unavailable; reserved funds were released.                                 | Transient — create a new payout (fresh `Idempotency-Key`) after a short backoff.                             |
+| `detokenization_failed`        | `vault`      | Payment credentials or beneficiary details could not be retrieved from the vault; reserved funds were released. | Retry later; if persistent, re-create the instrument or contact support with the payout ID.                  |
+| `provider_registration_failed` | `provider`   | The beneficiary could not be registered with the payment provider.                                              | Check the beneficiary/instrument details for the destination corridor; contact support if they look correct. |
+| `provider_unavailable`         | `provider`   | The provider was unreachable, rate-limited, or timed out.                                                       | Transient — create a new payout after a backoff.                                                             |
+| `provider_rejected`            | `provider`   | The provider refused the payment instruction. Terminal for this payout.                                         | Inspect `reason` and `rail_provider_code`; fix the beneficiary/instrument data before re-submitting.         |
+| `insufficient_funds`           | `provider`   | The provider reported insufficient funds for the instruction.                                                   | Reserved funds are released back to your balance. Retry later or contact support.                            |
 
 On every terminal failure the full reserved amount (source + fees) is released back to your available balance, and a `payout.failed` webhook fires. The webhook payload carries the payout resource; fetch the events endpoint for the `failure_code`.
 
@@ -228,149 +228,153 @@ On every terminal failure the full reserved amount (source + fees) is released b
 
 The strict Intelligence request contract returns two codes beyond the standard set. See [Intelligence — Rate Limits and Errors](/guides/intelligence/rate-limits-errors).
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
+| HTTP  | `code`          | Meaning                                                                                              | Remediation                                                          |
+| ----- | --------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `400` | `unknown_field` | The request contains a field outside the strict contract (unknown fields are rejected, not ignored). | Remove the field; pin to `contract_version: intelligence-public-v1`. |
-| `400` | `type_mismatch` | A field has the wrong JSON type. | Fix the type. |
+| `400` | `type_mismatch` | A field has the wrong JSON type.                                                                     | Fix the type.                                                        |
 
 ### Batches
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `400` | `invalid_cursor` | `GET /v1/batches`, `GET /v1/batches/{id}/payouts`, or `GET /v1/ops/batches` was called with a `cursor` that is malformed or has been tampered with. | Drop the cursor and start from the first page, or use the `next_cursor` returned on the previous page verbatim. |
-| `400` | `file_hash_mismatch` | Client-supplied `file_hash` multipart field does not match the server-computed SHA-256 of the uploaded file. | Recompute the SHA-256 on the exact bytes being uploaded. |
-| `409` | `duplicate_file` | A batch file with the same SHA-256 hash is already `uploaded`, `validating`, `validated`, `confirmed`, or `processing` for this merchant. | Wait for the pending batch to finish, or cancel it. Use the `pending_batches` array on a non-error upload response to correlate. |
-| `409` | `batch_not_validated` | `POST /v1/batches/{id}/confirm` was called before the batch finished validating. | Poll for `validated` status before confirming. |
-| `409` | `batch_confirmation_expired` | The batch validation result expired before confirm was called. | Re-upload the file and retry. |
-| `409` | `batch_not_cancellable` | The batch is not in a cancellable state. | Re-fetch the batch; cancellation is only valid in early states. |
-| `422` | `batch_upload_failed` | Generic upload failure not covered by `duplicate_file` or `invalid_file_format`. | Retry; if persistent, file a support ticket with the `X-Request-ID`. |
-| `422` | `batch_confirm_failed` | Generic confirmation failure. | Inspect the message and retry. |
-| `422` | `batch_cancel_failed` | Generic cancellation failure. | Inspect the message and retry. |
-| `501` | `not_configured` | `GET /v1/batches/{id}/beneficiaries` was called on an API instance where the beneficiary service is not wired into the batch handler. Not a caller mistake. | Environment-level misconfiguration; contact support. Sandbox and production have this enabled. |
+| HTTP  | `code`                       | Meaning                                                                                                                                                     | Remediation                                                                                                                      |
+| ----- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | `invalid_cursor`             | `GET /v1/batches`, `GET /v1/batches/{id}/payouts`, or `GET /v1/ops/batches` was called with a `cursor` that is malformed or has been tampered with.         | Drop the cursor and start from the first page, or use the `next_cursor` returned on the previous page verbatim.                  |
+| `400` | `file_hash_mismatch`         | Client-supplied `file_hash` multipart field does not match the server-computed SHA-256 of the uploaded file.                                                | Recompute the SHA-256 on the exact bytes being uploaded.                                                                         |
+| `409` | `duplicate_file`             | A batch file with the same SHA-256 hash is already `uploaded`, `validating`, `validated`, `confirmed`, or `processing` for this merchant.                   | Wait for the pending batch to finish, or cancel it. Use the `pending_batches` array on a non-error upload response to correlate. |
+| `409` | `batch_not_validated`        | `POST /v1/batches/{id}/confirm` was called before the batch finished validating.                                                                            | Poll for `validated` status before confirming.                                                                                   |
+| `409` | `batch_confirmation_expired` | The batch validation result expired before confirm was called.                                                                                              | Re-upload the file and retry.                                                                                                    |
+| `409` | `batch_not_cancellable`      | The batch is not in a cancellable state.                                                                                                                    | Re-fetch the batch; cancellation is only valid in early states.                                                                  |
+| `422` | `batch_upload_failed`        | Generic upload failure not covered by `duplicate_file` or `invalid_file_format`.                                                                            | Retry; if persistent, file a support ticket with the `X-Request-ID`.                                                             |
+| `422` | `batch_confirm_failed`       | Generic confirmation failure.                                                                                                                               | Inspect the message and retry.                                                                                                   |
+| `422` | `batch_cancel_failed`        | Generic cancellation failure.                                                                                                                               | Inspect the message and retry.                                                                                                   |
+| `501` | `not_configured`             | `GET /v1/batches/{id}/beneficiaries` was called on an API instance where the beneficiary service is not wired into the batch handler. Not a caller mistake. | Environment-level misconfiguration; contact support. Sandbox and production have this enabled.                                   |
 
 <Note>
-  Uploads larger than the 32 MB limit currently surface as `400 file_too_large` (the BodySizeLimit middleware rejects oversize requests before the handler runs). The catalog entry in the [Payload size](#payload-size) section reflects the intended long-term shape (`413 file_too_large`); an internal fix is tracked to align the status.
+  Uploads larger than the 32 MB limit currently surface as `400 file_too_large`
+  (the BodySizeLimit middleware rejects oversize requests before the handler
+  runs). The catalog entry in the [Payload size](#payload-size) section reflects
+  the intended long-term shape (`413 file_too_large`); an internal fix is
+  tracked to align the status.
 </Note>
 
 ### Beneficiaries
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `422` | `duplicate_beneficiary` | A beneficiary with the same fingerprint already exists for the merchant. | Reuse the existing beneficiary. |
-| `422` | `invalid_display_name` | The supplied display name is missing or invalid. | Provide a valid display name. |
-| `422` | `missing_beneficiary_details` | Neither `individual` nor `business` details were provided. | Include the appropriate detail block for the beneficiary type. |
-| `422` | `beneficiary_create_failed` | Catch-all for creation failures (Basis Theory tokenization, database). The detailed cause is logged server-side. | Retry; share the `X-Request-ID` if persistent. |
-| `422` | `beneficiary_update_failed` | Generic update failure. | Inspect the message; retry. |
-| `422` | `beneficiary_pii_update_failed` | PII update via Basis Theory failed. | Retry; if persistent, share the `X-Request-ID`. |
-| `422` | `beneficiary_archive_failed` | Generic archive failure. | Inspect the message; retry. |
-| `422` | `beneficiary_restore_failed` | Generic restore failure. | Inspect the message; retry. |
-| `422` | `beneficiary_delete_failed` | Generic delete failure. | Inspect the message; retry. |
+| HTTP  | `code`                          | Meaning                                                                                                          | Remediation                                                    |
+| ----- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `422` | `duplicate_beneficiary`         | A beneficiary with the same fingerprint already exists for the merchant.                                         | Reuse the existing beneficiary.                                |
+| `422` | `invalid_display_name`          | The supplied display name is missing or invalid.                                                                 | Provide a valid display name.                                  |
+| `422` | `missing_beneficiary_details`   | Neither `individual` nor `business` details were provided.                                                       | Include the appropriate detail block for the beneficiary type. |
+| `422` | `beneficiary_create_failed`     | Catch-all for creation failures (Basis Theory tokenization, database). The detailed cause is logged server-side. | Retry; share the `X-Request-ID` if persistent.                 |
+| `422` | `beneficiary_update_failed`     | Generic update failure.                                                                                          | Inspect the message; retry.                                    |
+| `422` | `beneficiary_pii_update_failed` | PII update via Basis Theory failed.                                                                              | Retry; if persistent, share the `X-Request-ID`.                |
+| `422` | `beneficiary_archive_failed`    | Generic archive failure.                                                                                         | Inspect the message; retry.                                    |
+| `422` | `beneficiary_restore_failed`    | Generic restore failure.                                                                                         | Inspect the message; retry.                                    |
+| `422` | `beneficiary_delete_failed`     | Generic delete failure.                                                                                          | Inspect the message; retry.                                    |
 
 ### Beneficiary rescore
 
 Codes returned only by `POST /v1/beneficiaries/{id}/rescore`.
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `404` | `engine_beneficiary_not_found` | The beneficiary exists under this merchant, but the Anton Engine has not yet seeded a profile for it. Typically seen on brand-new beneficiaries before the first payout. | Wait for the engine's beneficiary-events consumer to write the profile (usually seconds; definitely after the next payout), then retry. |
-| `409` | `beneficiary_scoring_locked` | The beneficiary is in a terminal scoring state (permanently locked by the engine) and cannot be rescored. | Do not retry. Contact support if a rescore is required. |
-| `429` | `rescore_rate_limited` | A rescore for this beneficiary completed recently — the engine applies a cooldown to prevent churn. Distinct from `rate_limit_exceeded`, which is the per-merchant request quota. | Honor the `Retry-After` header before retrying. |
-| `501` | `rescore_not_configured` | Manual rescore is not enabled on this API instance (the engine admin token is not configured). Environment-level configuration issue, not a caller mistake. | Contact support — the environment needs the engine admin token provisioned. |
+| HTTP  | `code`                         | Meaning                                                                                                                                                                           | Remediation                                                                                                                             |
+| ----- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `404` | `engine_beneficiary_not_found` | The beneficiary exists under this merchant, but the Anton Engine has not yet seeded a profile for it. Typically seen on brand-new beneficiaries before the first payout.          | Wait for the engine's beneficiary-events consumer to write the profile (usually seconds; definitely after the next payout), then retry. |
+| `409` | `beneficiary_scoring_locked`   | The beneficiary is in a terminal scoring state (permanently locked by the engine) and cannot be rescored.                                                                         | Do not retry. Contact support if a rescore is required.                                                                                 |
+| `429` | `rescore_rate_limited`         | A rescore for this beneficiary completed recently — the engine applies a cooldown to prevent churn. Distinct from `rate_limit_exceeded`, which is the per-merchant request quota. | Honor the `Retry-After` header before retrying.                                                                                         |
+| `501` | `rescore_not_configured`       | Manual rescore is not enabled on this API instance (the engine admin token is not configured). Environment-level configuration issue, not a caller mistake.                       | Contact support — the environment needs the engine admin token provisioned.                                                             |
 
 ### Instruments
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `410` | `deprecated_endpoint` | The flat `POST /v1/instruments` route is deprecated. | Use `POST /v1/beneficiaries/{id}/instruments`. |
-| `422` | `duplicate_instrument` | An instrument with the same fingerprint already exists for the beneficiary. | Reuse the existing instrument. |
-| `422` | `invalid_credentials` | The instrument credentials (IBAN check digit, account number, routing number) failed validation. | Fix the input. |
-| `422` | `method_not_supported` | The requested payment method is not supported for the country. | Use a method valid for the destination country. |
-| `422` | `instrument_create_failed` | Catch-all creation failure (Basis Theory, database). | Retry; share the `X-Request-ID` if persistent. |
-| `422` | `instrument_update_failed` | Generic update failure. | Inspect the message; retry. |
-| `422` | `instrument_delete_failed` | Generic delete failure. | Inspect the message; retry. |
+| HTTP  | `code`                     | Meaning                                                                                          | Remediation                                     |
+| ----- | -------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `410` | `deprecated_endpoint`      | The flat `POST /v1/instruments` route is deprecated.                                             | Use `POST /v1/beneficiaries/{id}/instruments`.  |
+| `422` | `duplicate_instrument`     | An instrument with the same fingerprint already exists for the beneficiary.                      | Reuse the existing instrument.                  |
+| `422` | `invalid_credentials`      | The instrument credentials (IBAN check digit, account number, routing number) failed validation. | Fix the input.                                  |
+| `422` | `method_not_supported`     | The requested payment method is not supported for the country.                                   | Use a method valid for the destination country. |
+| `422` | `instrument_create_failed` | Catch-all creation failure (Basis Theory, database).                                             | Retry; share the `X-Request-ID` if persistent.  |
+| `422` | `instrument_update_failed` | Generic update failure.                                                                          | Inspect the message; retry.                     |
+| `422` | `instrument_delete_failed` | Generic delete failure.                                                                          | Inspect the message; retry.                     |
 
 ### FX
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `400` | `currency_not_supported` | One or both currencies in the quote/exchange request are not supported. | Use a supported corridor. |
-| `410` | `quote_expired` | The locked quote referenced by `quote_id` has expired. | Generate a new quote and retry. |
-| `400` | `quote_not_locked` | `POST /v1/fx/exchange` was called with a `quote_id` that points to an indicative (non-lockable) quote. | Use a locked quote — call `POST /v1/fx/quote` first. |
-| `422` | `no_funding_account` | The merchant has no funding account in the sell currency. | Fund the account first via `/v1/accounts/...`. |
-| `422` | `no_buy_account` | `POST /v1/fx/exchange` — the merchant has no funding account in the `buy_currency`, so the exchange cannot be credited. Previously surfaced as `500`; now deterministic per ANT-55. | Provision the buy-side account (contact ops) and retry. |
-| `502` | `fx_rates_unavailable` | The upstream FX rate provider is degraded or unavailable. | Retry with backoff. |
-| `503` | `locked_rate_unavailable` | The provider returned an indicative rate when a locked rate was requested. | Retry shortly. |
-| `500` | `fx_execution_failed` | Exchange execution failed in a way that does not map to insufficient balance or a quote issue. The message is sanitized; the real cause is logged with the `X-Request-ID`. | Retry with backoff; share the `X-Request-ID` if persistent. |
+| HTTP  | `code`                    | Meaning                                                                                                                                                                             | Remediation                                                 |
+| ----- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `400` | `currency_not_supported`  | One or both currencies in the quote/exchange request are not supported.                                                                                                             | Use a supported corridor.                                   |
+| `410` | `quote_expired`           | The locked quote referenced by `quote_id` has expired.                                                                                                                              | Generate a new quote and retry.                             |
+| `400` | `quote_not_locked`        | `POST /v1/fx/exchange` was called with a `quote_id` that points to an indicative (non-lockable) quote.                                                                              | Use a locked quote — call `POST /v1/fx/quote` first.        |
+| `422` | `no_funding_account`      | The merchant has no funding account in the sell currency.                                                                                                                           | Fund the account first via `/v1/accounts/...`.              |
+| `422` | `no_buy_account`          | `POST /v1/fx/exchange` — the merchant has no funding account in the `buy_currency`, so the exchange cannot be credited. Previously surfaced as `500`; now deterministic per ANT-55. | Provision the buy-side account (contact ops) and retry.     |
+| `502` | `fx_rates_unavailable`    | The upstream FX rate provider is degraded or unavailable.                                                                                                                           | Retry with backoff.                                         |
+| `503` | `locked_rate_unavailable` | The provider returned an indicative rate when a locked rate was requested.                                                                                                          | Retry shortly.                                              |
+| `500` | `fx_execution_failed`     | Exchange execution failed in a way that does not map to insufficient balance or a quote issue. The message is sanitized; the real cause is logged with the `X-Request-ID`.          | Retry with backoff; share the `X-Request-ID` if persistent. |
 
 ### Webhook subscriptions
 
 Structured codes returned by `POST /v1/webhooks`:
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `400` | `webhook_url_required` | `url` field was missing or empty. | Send a non-empty `url`. |
-| `400` | `webhook_url_invalid` | `url` field could not be parsed as a URL. | Send a syntactically valid URL. |
-| `400` | `webhook_url_not_https` | The `url` field used a non-`https://` scheme. HTTP is rejected in production, staging, and sandbox — it is only permitted against local development APIs. | Use `https://` and a valid TLS certificate. |
+| HTTP  | `code`                        | Meaning                                                                                                                                                                                                                                                           | Remediation                                           |
+| ----- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `400` | `webhook_url_required`        | `url` field was missing or empty.                                                                                                                                                                                                                                 | Send a non-empty `url`.                               |
+| `400` | `webhook_url_invalid`         | `url` field could not be parsed as a URL.                                                                                                                                                                                                                         | Send a syntactically valid URL.                       |
+| `400` | `webhook_url_not_https`       | The `url` field used a non-`https://` scheme. HTTP is rejected in production, staging, and sandbox — it is only permitted against local development APIs.                                                                                                         | Use `https://` and a valid TLS certificate.           |
 | `400` | `webhook_url_private_address` | The `url` host is a loopback, RFC1918/ULA private address, link-local address, `.local` / `.internal` hostname, or a cloud metadata endpoint (for example `169.254.169.254`). Anton refuses to register these targets (SSRF and credential-exfiltration defense). | Use a publicly reachable, internet-routable endpoint. |
-
-
-
 
 ### Payload size
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
+| HTTP  | `code`           | Meaning                                                                                                                        | Remediation                                                      |
+| ----- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | `413` | `file_too_large` | Upload exceeds the per-endpoint cap (2 MB for branding assets, 5 MB for user avatars, 25 MB for documents, 32 MB for batches). | Reduce the file size. The message includes the applicable limit. |
 
 ### Sandbox-only
 
 These codes are returned only by the `/v1/merchant/sandbox/*` routes, which are registered only in sandbox-class environments. Production merchants will never see them.
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
-| `422` | `no_beneficiaries` | `POST /v1/merchant/sandbox/seed-payouts` was called before any beneficiaries existed for the merchant. | Call `/v1/merchant/sandbox/seed-beneficiaries` first. |
-| `429` | `rate_limited_sandbox_reset` | Sandbox reset is capped at 10 invocations per merchant per hour. | Wait for the counter to reset. |
-| `429` | `rate_limited_sandbox_seed` | Sandbox seeding is capped at 10 invocations per merchant per hour. | Wait for the counter to reset. |
-| `503` | `sandbox_seeder_unavailable` | Sandbox account seeder is not configured. | Surface a support ticket; this is an environment misconfiguration. |
-| `503` | `beneficiary_seeder_unavailable` | Beneficiary seeder is not configured. | Same as above. |
-| `503` | `payout_seeder_unavailable` | Payout seeder is not configured. | Same as above. |
-| `500` | `sandbox_reset_failed` | Sandbox reset failed during wipe or reseed. | Retry; share the `X-Request-ID` if persistent. |
-| `500` | `seed_beneficiaries_failed` | Sample beneficiary seeder failed — unexpected error during tokenization or persistence. Distinct from `duplicate_beneficiary` / `duplicate_instrument` (422), which indicate the seeder already ran. | Retry; share the `X-Request-ID` if persistent. |
-| `500` | `seed_payouts_failed` | Sample payout seeder failed. | Retry; share the `X-Request-ID` if persistent. |
+| HTTP  | `code`                           | Meaning                                                                                                                                                                                              | Remediation                                                        |
+| ----- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `422` | `no_beneficiaries`               | `POST /v1/merchant/sandbox/seed-payouts` was called before any beneficiaries existed for the merchant.                                                                                               | Call `/v1/merchant/sandbox/seed-beneficiaries` first.              |
+| `429` | `rate_limited_sandbox_reset`     | Sandbox reset is capped at 10 invocations per merchant per hour.                                                                                                                                     | Wait for the counter to reset.                                     |
+| `429` | `rate_limited_sandbox_seed`      | Sandbox seeding is capped at 10 invocations per merchant per hour.                                                                                                                                   | Wait for the counter to reset.                                     |
+| `503` | `sandbox_seeder_unavailable`     | Sandbox account seeder is not configured.                                                                                                                                                            | Surface a support ticket; this is an environment misconfiguration. |
+| `503` | `beneficiary_seeder_unavailable` | Beneficiary seeder is not configured.                                                                                                                                                                | Same as above.                                                     |
+| `503` | `payout_seeder_unavailable`      | Payout seeder is not configured.                                                                                                                                                                     | Same as above.                                                     |
+| `500` | `sandbox_reset_failed`           | Sandbox reset failed during wipe or reseed.                                                                                                                                                          | Retry; share the `X-Request-ID` if persistent.                     |
+| `500` | `seed_beneficiaries_failed`      | Sample beneficiary seeder failed — unexpected error during tokenization or persistence. Distinct from `duplicate_beneficiary` / `duplicate_instrument` (422), which indicate the seeder already ran. | Retry; share the `X-Request-ID` if persistent.                     |
+| `500` | `seed_payouts_failed`            | Sample payout seeder failed.                                                                                                                                                                         | Retry; share the `X-Request-ID` if persistent.                     |
 
 ### Server and infrastructure
 
-| HTTP | `code` | Meaning | Remediation |
-|---|---|---|---|
+| HTTP  | `code`           | Meaning                                                                                                                  | Remediation                                                                                     |
+| ----- | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
 | `500` | `internal_error` | Unexpected server error. `message` is always `internal server error` — the real cause is logged with the `X-Request-ID`. | Retry with exponential backoff. If the failure persists, share the `X-Request-ID` with support. |
-| `504` | `timeout` | Handler exceeded the 25-second request timeout. | Retry. For large batches or reports, prefer asynchronous endpoints. |
+| `504` | `timeout`        | Handler exceeded the 25-second request timeout.                                                                          | Retry. For large batches or reports, prefer asynchronous endpoints.                             |
 
 ## Retry semantics
 
 Not every error is safe to retry. The table below is a safe default — apply stricter rules where your integration's correctness depends on it.
 
-| Category | Safe to retry? | Notes |
-|---|---|---|
-| `500`, `502`, `503`, `504` | Yes | Use exponential backoff with jitter. Always include the same `Idempotency-Key` on mutating retries so a partially-processed request is not duplicated. |
-| `429 rate_limit_exceeded` | Yes | Wait at least the `Retry-After` value before the first retry. |
-| `429 rescore_rate_limited` | Yes | Beneficiary-specific rescore cooldown. Honor `Retry-After`. |
-| `501 rescore_not_configured` | No | Environment is missing the engine admin token. Contact support. |
-| `409 beneficiary_scoring_locked` | No | Beneficiary is permanently locked. Retrying will fail identically. |
-| `404 engine_beneficiary_not_found` | Conditional | Retry only after the engine has seeded a profile (typically after the next payout). |
-| Transient network errors (connection reset, DNS failure, TLS reset) | Yes | Treat the same as a 5xx. Retry with the same `Idempotency-Key`. |
-| `400`, `404`, `410`, `413`, `422 validation_error` | No | Fix the request. Retrying will fail identically. |
-| `401` | No | Re-authenticate first. Do not loop on 401. |
-| `403 insufficient_permissions`, `403 mfa_enrollment_required`, `403 velocity_blocked` | No | Policy or permission issue. Resolve upstream before retrying. |
-| `403 capability_required`, `403 insufficient_scope` | No | Account-tier or credential-scope gate. Fails identically until the account capability or credential changes. See [Capabilities & Scopes](/capabilities). |
-| `409 idempotency_conflict` | No | You sent a new payload under a used key. Generate a new key. |
-| `409 idempotency_in_flight` | Yes (same key) | The original attempt is still processing. Wait briefly, retry with the same key to replay its response. |
-| `409` state conflicts (batch, payout, approval) | Conditional | Re-fetch the resource; retry only if the current state actually permits the action. |
-| `422 insufficient_balance` | No | Top up first. |
-| `422` beneficiary/instrument service errors (`duplicate_beneficiary`, `invalid_display_name`, `missing_beneficiary_details`, `duplicate_instrument`, `invalid_credentials`, `method_not_supported`, etc.) | No | Fix input, then retry with a fresh idempotency key. |
-| `422 quote_expired`, `422 fx_rates_unavailable`, `503 locked_rate_unavailable` | Yes (re-quote) | Generate a fresh quote and retry the exchange. |
+| Category                                                                                                                                                                                                  | Safe to retry? | Notes                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `500`, `502`, `503`, `504`                                                                                                                                                                                | Yes            | Use exponential backoff with jitter. Always include the same `Idempotency-Key` on mutating retries so a partially-processed request is not duplicated.   |
+| `429 rate_limit_exceeded`                                                                                                                                                                                 | Yes            | Wait at least the `Retry-After` value before the first retry.                                                                                            |
+| `429 rescore_rate_limited`                                                                                                                                                                                | Yes            | Beneficiary-specific rescore cooldown. Honor `Retry-After`.                                                                                              |
+| `501 rescore_not_configured`                                                                                                                                                                              | No             | Environment is missing the engine admin token. Contact support.                                                                                          |
+| `409 beneficiary_scoring_locked`                                                                                                                                                                          | No             | Beneficiary is permanently locked. Retrying will fail identically.                                                                                       |
+| `404 engine_beneficiary_not_found`                                                                                                                                                                        | Conditional    | Retry only after the engine has seeded a profile (typically after the next payout).                                                                      |
+| Transient network errors (connection reset, DNS failure, TLS reset)                                                                                                                                       | Yes            | Treat the same as a 5xx. Retry with the same `Idempotency-Key`.                                                                                          |
+| `400`, `404`, `410`, `413`, `422 validation_error`                                                                                                                                                        | No             | Fix the request. Retrying will fail identically.                                                                                                         |
+| `401`                                                                                                                                                                                                     | No             | Re-authenticate first. Do not loop on 401.                                                                                                               |
+| `403 insufficient_permissions`, `403 mfa_enrollment_required`, `403 velocity_blocked`                                                                                                                     | No             | Policy or permission issue. Resolve upstream before retrying.                                                                                            |
+| `403 capability_required`, `403 insufficient_scope`                                                                                                                                                       | No             | Account-tier or credential-scope gate. Fails identically until the account capability or credential changes. See [Capabilities & Scopes](/capabilities). |
+| `409 idempotency_conflict`                                                                                                                                                                                | No             | You sent a new payload under a used key. Generate a new key.                                                                                             |
+| `409 idempotency_in_flight`                                                                                                                                                                               | Yes (same key) | The original attempt is still processing. Wait briefly, retry with the same key to replay its response.                                                  |
+| `409` state conflicts (batch, payout, approval)                                                                                                                                                           | Conditional    | Re-fetch the resource; retry only if the current state actually permits the action.                                                                      |
+| `422 insufficient_balance`                                                                                                                                                                                | No             | Top up first.                                                                                                                                            |
+| `422` beneficiary/instrument service errors (`duplicate_beneficiary`, `invalid_display_name`, `missing_beneficiary_details`, `duplicate_instrument`, `invalid_credentials`, `method_not_supported`, etc.) | No             | Fix input, then retry with a fresh idempotency key.                                                                                                      |
+| `422 quote_expired`, `422 fx_rates_unavailable`, `503 locked_rate_unavailable`                                                                                                                            | Yes (re-quote) | Generate a fresh quote and retry the exchange.                                                                                                           |
 
 <Warning>
-  When retrying a mutating request (`POST`, `PUT`, `PATCH`), always send the same `Idempotency-Key` you used on the original attempt. Without it, the server cannot distinguish a retry from a new request, and you risk double-processing. See [Idempotency](./idempotency).
+  When retrying a mutating request (`POST`, `PUT`, `PATCH`), always send the
+  same `Idempotency-Key` you used on the original attempt. Without it, the
+  server cannot distinguish a retry from a new request, and you risk
+  double-processing. See [Idempotency](./idempotency).
 </Warning>
 
 ## Handling errors in code
@@ -389,34 +393,35 @@ const res = await fetch("https://api.antonpayments.dev/v1/payouts", {
 });
 
 if (!res.ok) {
-  const { error } = await res.json();
-  const requestId = res.headers.get("X-Request-ID");
+const { error } = await res.json();
+const requestId = res.headers.get("X-Request-ID");
 
-  switch (error.code) {
-    case "validation_error":
-      // error.details is an array of { field, message }
-      break;
-    case "insufficient_balance":
-      // prompt user to top up
-      break;
-    case "velocity_blocked":
-      // inspect /velocity-results
-      break;
-    case "rate_limit_exceeded": {
-      const retryAfter = Number(res.headers.get("Retry-After") ?? 1);
-      await new Promise((r) => setTimeout(r, retryAfter * 1000));
-      break;
-    }
-    case "idempotency_conflict":
-      // generate a new key; do not reuse the old one
-      break;
-    default:
-      if (res.status >= 500) {
-        // retry with backoff; include requestId in logs
-      }
-  }
+switch (error.code) {
+case "validation_error":
+// error.details is an array of { field, message }
+break;
+case "insufficient_balance":
+// prompt user to top up
+break;
+case "velocity_blocked":
+// inspect /velocity-results
+break;
+case "rate_limit_exceeded": {
+const retryAfter = Number(res.headers.get("Retry-After") ?? 1);
+await new Promise((r) => setTimeout(r, retryAfter \* 1000));
+break;
 }
-```
+case "idempotency_conflict":
+// generate a new key; do not reuse the old one
+break;
+default:
+if (res.status >= 500) {
+// retry with backoff; include requestId in logs
+}
+}
+}
+
+````
 
 ```python Python
 import time, requests
@@ -446,9 +451,13 @@ if not res.ok:
     elif res.status_code >= 500:
         # exponential backoff; log request_id
         pass
-```
+````
+
 </CodeGroup>
 
 <Note>
-  When contacting Anton support about a failed request, include the `X-Request-ID` header value from the response. Anton retains a full server-side trace keyed by that ID and can diagnose without asking you to reproduce.
+  When contacting Anton support about a failed request, include the
+  `X-Request-ID` header value from the response. Anton retains a full
+  server-side trace keyed by that ID and can diagnose without asking you to
+  reproduce.
 </Note>

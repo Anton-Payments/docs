@@ -3,6 +3,38 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-07-17 — Machine credentials across the payout surface
+
+OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-movement mutation surface. Previously, machine callers could read but not mutate on several payout-surface endpoints; credential scopes now map directly to the permissions each endpoint requires, so a `payouts`-scoped credential creates and cancels payouts, manages beneficiaries and instruments, uploads and confirms batches, executes FX, and manages webhook subscriptions — end to end.
+
+### Added
+
+- **Scope-mapped permissions for machine credentials.** Each credential scope carries a fixed permission set enforced per endpoint (least privilege — SOC 2 CC6.1/CC6.3). `payouts` covers the money-movement surface; `intelligence` covers evaluations and Verifications; both cover webhook subscription management.
+- **New error code `403 oauth_client_not_accepted`** on dashboard-only endpoints reached with an API credential. See [Errors](/api-reference/errors).
+
+### Changed
+
+- **Beneficiary PII is write-only for machine credentials.** `PUT /v1/beneficiaries/{id}/pii` remains available (your system is the source of the data); `GET /v1/beneficiaries/{id}/pii` has been removed from the public API surface. Detokenized PII readback — beneficiary PII, verification name reveal, captured documents — exists only in the merchant dashboard, admin-gated and audit-logged per access. A leaked API credential cannot harvest identities.
+- **Approval decisions stay human.** Payout approve/reject (maker-checker) rejects machine credentials — an approver must be a signed-in portal user distinct from the creator.
+- **Access tokens without a `scope` claim now grant nothing.** The transitional full-scope default for pre-scope-era tokens has been removed; every legitimately minted token has carried the claim since it shipped, and a claim-less token now fails closed.
+
+---
+
+## 2026-07-16 — Verifications API
+
+Additive, non-breaking. The verification module — previously reachable only through the merchant dashboard — is now part of the public API for OAuth+DPoP credentials carrying the `intelligence` scope.
+
+### Added
+
+- **Verifications API.** KYC/KYB-as-a-service over hosted flows: create verification subjects (`POST /v1/verification-subjects`), list and read them, re-verify, resend / regenerate / revoke links, resend per-owner (UBO) links, and read funnel stats (`GET /v1/verification-stats`). Every completed verification is sanctions-screened through Anton Intelligence, with the backing `evaluation_id` on the attempt's `screening` block. See the [Verifications guide](/guides/verifications).
+- **`verification.*` webhook events.** `verification.link_sent`, `verification.started`, `verification.approved`, `verification.declined`, `verification.review`, and `verification.expired` are documented in the [event catalog](/api-reference/webhook-events#verification-events). `link_sent` fires as the delivery receipt for Anton-delivered hosted links.
+
+### Security
+
+- **PII-free machine surface.** Subject and owner names are masked on every API read; the audited name-reveal and captured-document viewing remain dashboard-only (admin, per-access audit trail). Hosted links are secret-once: returned only by the response that minted them.
+
+---
+
 ## 2026-06-10 — Capabilities, AI-Compliance tier, authenticated Intelligence
 
 Additive, non-breaking changes to the v1 contract. Existing integrations are unaffected: every existing account keeps both capabilities, and every existing credential behaves as full-scope.
