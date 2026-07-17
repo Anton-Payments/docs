@@ -16,9 +16,9 @@ effective access = credential scopes ∩ account capabilities
 
 ## The capability vocabulary
 
-| Value | Covers |
-|---|---|
-| `payouts` | All money movement — payouts, batches, beneficiaries, instruments, balances, funding accounts, FX, pricing, corridors, and the sandbox payout/beneficiary seeders. |
+| Value          | Covers                                                                                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `payouts`      | All money movement — payouts, batches, beneficiaries, instruments, balances, funding accounts, FX, pricing, corridors, and the sandbox payout/beneficiary seeders.                                              |
 | `intelligence` | Anton Intelligence — risk evaluations and evidence retrieval, plus customer [Verifications](/guides/verifications) (KYC/KYB over hosted flows). See the [Intelligence overview](/guides/intelligence/overview). |
 
 Every standard merchant account carries both capabilities, and every credential minted before scopes existed behaves as full-scope — **nothing changes for existing integrations**.
@@ -67,10 +67,10 @@ There is no `scope` request parameter on `POST /oauth/token` — tokens always c
 
 Both layers fail with `403` and a stable code, checked in this order:
 
-| Code | Layer | Meaning |
-|---|---|---|
-| `capability_required` | Account | Your merchant account does not hold the capability this endpoint requires. Typical for an AI-compliance-only account calling a payout endpoint. |
-| `insufficient_scope` | Credential | Your account holds the capability, but the credential making the call was created without the matching scope. Use (or create) a credential with the right scope. |
+| Code                  | Layer      | Meaning                                                                                                                                                          |
+| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capability_required` | Account    | Your merchant account does not hold the capability this endpoint requires. Typical for an AI-compliance-only account calling a payout endpoint.                  |
+| `insufficient_scope`  | Credential | Your account holds the capability, but the credential making the call was created without the matching scope. Use (or create) a credential with the right scope. |
 
 ```json
 {
@@ -87,11 +87,16 @@ Neither code is retryable — the same request will fail identically until the a
 
 ## What each surface requires
 
-| Surface | Requires |
-|---|---|
-| Payouts, batches, beneficiaries, instruments, balances, accounts & funding, FX, pricing, corridors, sandbox seeders | `payouts` capability + `payouts` scope |
-| Intelligence evaluations and evidence | `intelligence` capability + `intelligence` scope |
-| Verifications (KYC/KYB) | `intelligence` capability + `intelligence` scope. Name reveal and captured-document viewing are dashboard-only (admin). |
-| Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data | Any authenticated credential — available on every tier |
+| Surface                                                                                                             | Requires                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Payouts, batches, beneficiaries, instruments, balances, accounts & funding, FX, pricing, corridors, sandbox seeders | `payouts` capability + `payouts` scope                                                                                  |
+| Intelligence evaluations and evidence                                                                               | `intelligence` capability + `intelligence` scope                                                                        |
+| Verifications (KYC/KYB)                                                                                             | `intelligence` capability + `intelligence` scope. Name reveal and captured-document viewing are dashboard-only (admin). |
+| Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data       | Any authenticated credential — available on every tier                                                                  |
+
+Two classes of operation are **dashboard-only** regardless of scope, and reject machine credentials with `403 oauth_client_not_accepted` or `403 insufficient_permissions`:
+
+- **Approval decisions** — payout approve/reject in the maker-checker flow requires a signed-in human, because the approver ≠ creator guard is meaningless for a credential.
+- **Detokenized PII readback** — beneficiary PII retrieval, verification name reveal, and captured-document viewing happen only in the dashboard, admin-role-gated and audit-logged per access. Machine credentials can _write_ PII (`PUT /v1/beneficiaries/{id}/pii` — your system is its source) but never read it back, so a leaked credential cannot harvest identities.
 
 The interactive API reference marks payout-gated endpoints with a `403 capability_required` response.

@@ -32,6 +32,12 @@ info:
     `scopes ∩ capabilities`. Access tokens embed the grants as a space-delimited `scope` claim, echoed in the
     token response.
 
+    **What machine credentials can never do.** Approval decisions (payout approve/reject — maker-checker
+    requires a human identity) and detokenized PII readback (beneficiary PII, verification name reveal,
+    captured-document viewing) are dashboard-only: those operations require a signed-in portal user with the
+    right role, and every access is audit-logged. Machine credentials can deposit and replace PII — your
+    system is its source — but can never read it back, so a leaked credential cannot harvest identities.
+
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
     name: Anton Payments Support
@@ -1208,28 +1214,6 @@ paths:
         schema:
           type: string
           pattern: '^ben_[a-zA-Z0-9]+$'
-    get:
-      tags: [Beneficiaries]
-      summary: Retrieve beneficiary PII
-      operationId: getBeneficiaryPII
-      description: |
-        Detokenizes and returns the PII stored in Basis Theory for this beneficiary.
-        Every access is recorded in the merchant audit log (PCI DSS 10.2.1).
-
-        Use this to pre-populate edit forms or verify submitted identity data.
-      responses:
-        '200':
-          description: Beneficiary PII, detokenized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BeneficiaryPII'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/RateLimited'
     put:
       tags: [Beneficiaries]
       summary: Replace beneficiary PII
@@ -1242,6 +1226,13 @@ paths:
         Supply the detail block matching the beneficiary's `type` (`individual` or
         `business`). The `display_name` on the beneficiary record is automatically
         re-derived from the new PII.
+
+        **PII is write-only for machine credentials.** Your system is the source of
+        the data, so you can deposit and replace it — but there is no companion GET
+        on this surface: detokenized PII readback exists only in the merchant
+        dashboard, restricted to admin users, with every access recorded in the
+        audit log (PCI DSS 10.2.1). A leaked API credential therefore cannot
+        harvest beneficiary identities.
       requestBody:
         required: true
         content:
@@ -4496,21 +4487,6 @@ components:
           description: Replaces the existing metadata map in full.
         end_user_ip:
           type: string
-
-    BeneficiaryPII:
-      type: object
-      description: |
-        Detokenized PII for a beneficiary. Returned by `GET /v1/beneficiaries/{id}/pii`.
-        Exactly one of `individual` or `business` is populated matching the
-        beneficiary's `type`.
-      properties:
-        type:
-          type: string
-          enum: [individual, business]
-        individual:
-          $ref: '#/components/schemas/IndividualDetails'
-        business:
-          $ref: '#/components/schemas/BusinessDetails'
 
     BeneficiaryPIIUpdateRequest:
       type: object

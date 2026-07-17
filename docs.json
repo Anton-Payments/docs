@@ -37,19 +37,12 @@
     }
   },
   "api": {
-    "openapi": [
-      "/openapi-merchant.yaml"
-    ],
+    "openapi": ["/openapi-merchant.yaml"],
     "playground": {
       "display": "interactive"
     },
     "examples": {
-      "languages": [
-        "bash",
-        "javascript",
-        "php",
-        "go"
-      ]
+      "languages": ["bash", "javascript", "php", "go"]
     }
   },
   "search": {
@@ -102,16 +95,11 @@
           },
           {
             "group": "Sandbox",
-            "pages": [
-              "sandbox/overview",
-              "sandbox/test-data"
-            ]
+            "pages": ["sandbox/overview", "sandbox/test-data"]
           },
           {
             "group": "Changelog",
-            "pages": [
-              "changelog"
-            ]
+            "pages": ["changelog"]
           }
         ]
       },
@@ -120,9 +108,7 @@
         "groups": [
           {
             "group": "Overview",
-            "pages": [
-              "api-reference/introduction"
-            ]
+            "pages": ["api-reference/introduction"]
           },
           {
             "group": "Cross-Cutting",
@@ -152,7 +138,6 @@
               "api-reference/beneficiaries/get-beneficiary",
               "api-reference/beneficiaries/update-beneficiary",
               "api-reference/beneficiaries/delete-beneficiary",
-              "api-reference/beneficiaries/get-beneficiary-pii",
               "api-reference/beneficiaries/update-beneficiary-pii",
               "api-reference/beneficiaries/archive-beneficiary",
               "api-reference/beneficiaries/restore-beneficiary",
@@ -273,9 +258,7 @@
           },
           {
             "group": "Corridors",
-            "pages": [
-              "api-reference/corridors/list-corridors"
-            ]
+            "pages": ["api-reference/corridors/list-corridors"]
           },
           {
             "group": "Sandbox",
@@ -327,14 +310,7 @@
     }
   },
   "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "cursor",
-      "vscode"
-    ]
+    "options": ["copy", "view", "chatgpt", "claude", "cursor", "vscode"]
   },
   "seo": {
     "indexing": "navigable"
