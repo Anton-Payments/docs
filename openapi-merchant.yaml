@@ -123,6 +123,16 @@ paths:
         The request contract is strict and uses fixed enums so enterprise clients can generate SDKs safely.
         Direct PII may be supplied over TLS or recovered from a vault token; Anton uses it in memory for the evaluation and persists only redacted decision evidence.
 
+        **Per-use-case required fields.** Beyond the always-required `use_case` and `entity.type`, each
+        use case imposes additional requirements (a `422 validation_error` otherwise):
+        - `payee_registration` — `entity.name` OR `entity.vault_token_id`.
+        - `merchant_onboarding` — `entity.type` must be `business`, plus `entity.name` OR `entity.vault_token_id`.
+        - `instrument_screening` — an `instrument` block.
+        - `payout_screening` — a `payout` block, plus searchable `entity` or `instrument` data.
+        - `monitoring` — searchable `entity` or `instrument` data.
+        These conditional requirements can't be expressed in the static `required` arrays below, so they are
+        enumerated here.
+
         **Dual surface.** With OAuth+DPoP credentials, the evaluation is persisted under YOUR merchant account
         (retrievable via the scoped reads below) and the `Idempotency-Key` header is REQUIRED. The credential
         must carry the `intelligence` scope and the account the `intelligence` capability — every Anton account
@@ -853,7 +863,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [access_token, token_type, expires_in]
+                required: [access_token, token_type, expires_in, scope]
                 properties:
                   access_token:
                     type: string
@@ -864,6 +874,12 @@ paths:
                   expires_in:
                     type: integer
                     description: Token lifetime in seconds.
+                  scope:
+                    type: string
+                    description: |
+                      Space-delimited granted scopes (RFC 6749 §3.3), echoing the
+                      credential's grants — the same values embedded in the access
+                      token's `scope` claim. e.g. `payouts intelligence`.
         '400':
           description: Invalid request, unsupported_grant_type, or invalid DPoP proof.
           content:
@@ -1107,6 +1123,27 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/CountryCode'
+        - name: search
+          in: query
+          description: Substring match on the beneficiary's display name / external reference.
+          required: false
+          schema:
+            type: string
+        - name: created_via
+          in: query
+          description: Filter by how the beneficiary was created.
+          required: false
+          schema:
+            type: string
+            enum: [api, batch, portal]
+        - name: source_batch_id
+          in: query
+          description: |
+            Filter to beneficiaries a specific batch created or first referenced
+            (ANT-105 provenance). Prefixed `bat_`.
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Paginated list of beneficiaries.
@@ -1469,6 +1506,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: >-
+            The risk engine is temporarily unreachable (`engine_unavailable`) —
+            a transport failure or an engine 5xx. Transient; retry after the
+            `Retry-After` interval.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/beneficiaries/{id}/rescreen:
     parameters:
@@ -1644,8 +1695,12 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
           description: |
-            Unprocessable — validation failed, insufficient balance, or beneficiary/
-            instrument not eligible (e.g. archived, disabled, wrong currency).
+            Unprocessable. Codes: `validation_error` (bad/missing fields),
+            `insufficient_balance` (funding currency can't cover the debit),
+            `payout_rejected` (rejected during screening/velocity/routing — e.g.
+            no fundable corridor for the resolved source currency), or the
+            beneficiary/instrument is not eligible (archived, disabled, wrong
+            currency).
           content:
             application/json:
               schema:
@@ -2421,7 +2476,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`batch_confirm_failed` — the batch could not be confirmed due to an unexpected internal condition; safe to retry with the same idempotency key after the in-flight attempt settles.'
+          description: >-
+            Unprocessable. `insufficient_balance` — your available balance can't
+            cover the batch's estimated debit in one or more funding currencies
+            (checked against live balances at confirm time; add funds and
+            re-upload, or confirm a smaller batch). `batch_confirm_failed` — the
+            batch could not be confirmed due to an unexpected internal condition;
+            safe to retry with the same idempotency key after the in-flight
+            attempt settles.
           content:
             application/json:
               schema:
@@ -2698,6 +2760,12 @@ paths:
           schema:
             type: string
             enum: [active, disabled]
+        - name: search
+          in: query
+          description: Substring match on the instrument's display fields (label, masked account, bank).
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Paginated list of instruments.
@@ -3225,6 +3293,9 @@ paths:
       parameters:
         - name: rail_type
           in: query
+          description: |
+            Filter to one rail family. An unrecognised value returns
+            `400` — it is validated against the enum, not silently ignored.
           schema:
             $ref: '#/components/schemas/RailType'
         - name: currency
@@ -3248,6 +3319,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Corridor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -3741,6 +3814,10 @@ paths:
         short expiry window; use the returned `id` on
         `POST /v1/fx/exchange` to lock the rate before expiry.
 
+        You must supply **at least one** of `sell_amount` or `buy_amount` —
+        omitting both returns `400 missing_required_field`. (The two are
+        individually optional but not both.)
+
         Rate-limited to 30 per minute per IP.
       requestBody:
         required: true
@@ -3764,7 +3841,10 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
-          description: '`currency_not_supported` or other pricing error.'
+          description: >-
+            `currency_not_supported`, `no_funding_account` (no balance account
+            for the sell currency on a cross-currency quote), or another
+            pricing error.
           content:
             application/json:
               schema:
