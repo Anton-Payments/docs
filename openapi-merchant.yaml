@@ -3006,6 +3006,82 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /v1/sandbox/deposits:
+    post:
+      tags: [Sandbox]
+      summary: Fund a sandbox balance
+      operationId: createSandboxDeposit
+      description: |
+        **Sandbox only.** Credit your sandbox balance for a currency so you can
+        exercise the payout flow end to end from the API — no dashboard step and
+        no real money. The credit is additive: repeated calls stack. If you do
+        not yet hold an account in the requested currency, one is provisioned
+        holding the deposit.
+
+        This is the API-first equivalent of the portal's **Developers → Sandbox
+        → Reset balances** control, so a purely-headless integration (for
+        example a CI suite) can fund itself before creating payouts.
+
+        The endpoint exists **only** in sandbox-class environments
+        (`https://api.antonpayments.dev`); in production it returns `404`.
+        Requires an `Idempotency-Key` header. Rate limited per merchant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency, amount]
+              properties:
+                currency:
+                  $ref: '#/components/schemas/CurrencyCode'
+                amount:
+                  type: string
+                  description: Decimal amount to credit, as a string. Must be positive.
+                  example: "100000"
+      responses:
+        '201':
+          description: Balance credited.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      deposited:
+                        type: string
+                        description: The amount credited.
+                        example: "100000"
+                      available:
+                        type: string
+                        description: The resulting available balance in this currency.
+                        example: "100000"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Not a sandbox environment — this endpoint does not exist in production.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            Validation failed, or `unsupported_sandbox_currency` — the currency
+            has no sandbox account template to provision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/accounts:
     get:
       tags: [Accounts]
