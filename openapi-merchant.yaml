@@ -1058,7 +1058,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/IdempotencyConflict'
         '401':
@@ -1146,7 +1150,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1163,6 +1171,8 @@ paths:
         `PUT /v1/beneficiaries/{id}/pii` instead, since PII is tokenized.
 
         Fields not present in the request body are left unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1175,7 +1185,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1196,6 +1210,8 @@ paths:
         Archiving is typically preferred over deletion — see
         `POST /v1/beneficiaries/{id}/archive`. Archiving preserves the beneficiary
         in a disabled state that can be restored later.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Beneficiary deleted.
@@ -1233,6 +1249,8 @@ paths:
         dashboard, restricted to admin users, with every access recorded in the
         audit log (PCI DSS 10.2.1). A leaked API credential therefore cannot
         harvest beneficiary identities.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1245,7 +1263,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1291,7 +1313,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1337,7 +1363,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1379,19 +1409,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BeneficiaryRescoreResult'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BeneficiaryRescoreResult'
         '202':
           description: A rescore for this beneficiary is already running; no retry needed.
           content:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  status:
-                    type: string
-                    enum: [in_flight]
-                  message:
-                    type: string
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [in_flight]
+                      message:
+                        type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1465,14 +1503,18 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [beneficiary_id, status]
+                required: [data]
                 properties:
-                  beneficiary_id:
-                    type: string
-                    pattern: '^ben_[a-zA-Z0-9]+$'
-                  status:
-                    type: string
-                    enum: [queued]
+                  data:
+                    type: object
+                    required: [beneficiary_id, status]
+                    properties:
+                      beneficiary_id:
+                        type: string
+                        pattern: '^ben_[a-zA-Z0-9]+$'
+                      status:
+                        type: string
+                        enum: [queued]
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1579,7 +1621,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payout'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1718,7 +1764,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payout'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1808,7 +1858,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payout'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2076,7 +2130,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2151,6 +2209,8 @@ paths:
 
         Maximum file size: 32 MB. Maximum rows per batch: check current limits
         with support.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -2169,7 +2229,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '400':
           description: |
             Malformed upload. One of:
@@ -2271,7 +2335,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2323,7 +2391,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '400':
           description: '`missing_idempotency_key` — the `Idempotency-Key` header is required for this endpoint.'
           content:
@@ -2379,13 +2451,19 @@ paths:
         Cancel a batch before processing begins. Valid from `uploaded`,
         `validating`, `validated`, `validation_failed`, or `confirmed`. Once
         `processing` begins, use per-payout cancellation instead.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Batch cancelled.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2453,6 +2531,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/batches/{id}/beneficiaries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List beneficiaries created or referenced by a batch
+      operationId: listBatchBeneficiaries
+      description: |
+        Cursor-paginated list of the beneficiaries this batch auto-created or
+        first referenced (matched by source batch). Merchant-scoped — a batch
+        belonging to another merchant returns 404.
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Beneficiaries associated with this batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/CursorList'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`batch_not_found` — the batch does not exist, or belongs to a different merchant.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/batches/{id}/errors:
     parameters:
@@ -2677,7 +2799,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2692,6 +2818,8 @@ paths:
         Update the mutable fields on an instrument — `label`, `is_default`, and
         `status`. Credentials cannot be updated; create a new instrument and
         delete the old one to replace them.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -2715,7 +2843,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2732,6 +2864,8 @@ paths:
         Soft-delete an instrument. The instrument is removed from active listings
         and cannot be used on new payouts. Historical payouts referencing it
         remain accessible and unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Instrument deleted.
@@ -2788,7 +2922,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Balance'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Balance'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2843,7 +2981,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MerchantAccount'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MerchantAccount'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2874,7 +3016,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccountDetails'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AccountDetails'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3036,24 +3182,28 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                required: [data]
                 properties:
-                  fee:
-                    $ref: '#/components/schemas/Money'
-                  fee_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  fee_type:
-                    type: string
-                    enum: [fixed, percentage, hybrid, tiered]
-                  plan_id:
-                    type: string
-                    pattern: '^prc_[a-zA-Z0-9]+$'
-                  quote_id:
-                    type: string
-                    pattern: '^pq_[a-zA-Z0-9]+$'
-                    description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
-                  expires_at:
-                    $ref: '#/components/schemas/Timestamp'
+                  data:
+                    type: object
+                    required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                    properties:
+                      fee:
+                        $ref: '#/components/schemas/Money'
+                      fee_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      fee_type:
+                        type: string
+                        enum: [fixed, percentage, hybrid, tiered]
+                      plan_id:
+                        type: string
+                        pattern: '^prc_[a-zA-Z0-9]+$'
+                      quote_id:
+                        type: string
+                        pattern: '^pq_[a-zA-Z0-9]+$'
+                        description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                      expires_at:
+                        $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -3125,6 +3275,8 @@ paths:
 
         See [Webhook Events](/api-reference/webhook-events) for the event catalog
         and [Webhook Signing](/api-reference/webhook-signing) for verification.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -3206,7 +3358,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3247,7 +3403,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '400':
           description: >-
             No patchable field present (`missing_required_field`), an unknown
@@ -3306,11 +3466,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: '`whsec_` + 64 hex.'
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: '`whsec_` + 64 hex.'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3343,6 +3507,7 @@ paths:
         The new secret is shown **once** in the response. Store it now.
       parameters:
         - name: immediate
+        - $ref: '#/components/parameters/IdempotencyKey'
           in: query
           required: false
           schema:
@@ -3359,18 +3524,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret, previous_secret_expires_at]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                  previous_secret_expires_at:
-                    type: [string, 'null']
-                    format: date-time
-                    description: >-
-                      When the dual-signature grace window closes — the
-                      moment the previous secret stops signing deliveries.
-                      Null when the rotation was immediate (no window). The
-                      previous secret value itself is never returned.
+                  data:
+                    type: object
+                    required: [secret, previous_secret_expires_at]
+                    properties:
+                      secret:
+                        type: string
+                      previous_secret_expires_at:
+                        type: [string, 'null']
+                        format: date-time
+                        description: >-
+                          When the dual-signature grace window closes — the
+                          moment the previous secret stops signing deliveries.
+                          Null when the rotation was immediate (no window). The
+                          previous secret value itself is never returned.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3396,6 +3565,8 @@ paths:
         pipelines without waiting for a real event.
 
         Rate-limited.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '202':
           description: Test event queued for delivery.
@@ -3403,10 +3574,14 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  event_id:
-                    type: string
-                    pattern: '^evt_[a-zA-Z0-9]+$'
+                  data:
+                    type: object
+                    properties:
+                      event_id:
+                        type: string
+                        pattern: '^evt_[a-zA-Z0-9]+$'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3430,13 +3605,19 @@ paths:
         Stop delivering events to this subscription without deleting it. The
         subscription moves to `inactive` and can be reactivated by updating its
         status (contact support or wait for a re-activation endpoint).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Subscription deactivated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3501,7 +3682,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookEvent'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookEvent'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3569,7 +3754,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FXQuote'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FXQuote'
         '400':
           $ref: '#/components/responses/ValidationFailed'
         '401':
@@ -3630,26 +3819,30 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [sell_currency, buy_currency, mid_market_rate, customer_rate, fx_markup_bps]
+                required: [data]
                 properties:
-                  sell_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  buy_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  mid_market_rate:
-                    $ref: '#/components/schemas/Money'
-                  customer_rate:
-                    $ref: '#/components/schemas/Money'
-                    description: Mid-market adjusted by your pricing plan's FX markup.
-                  fx_markup_bps:
-                    type: integer
-                    description: Markup applied to mid-market, in basis points.
-                  sell_amount:
-                    $ref: '#/components/schemas/Money'
-                  buy_amount:
-                    $ref: '#/components/schemas/Money'
-                  rate_timestamp:
-                    $ref: '#/components/schemas/Timestamp'
+                  data:
+                    type: object
+                    required: [sell_currency, buy_currency, mid_market_rate, customer_rate, fx_markup_bps]
+                    properties:
+                      sell_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      buy_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      mid_market_rate:
+                        $ref: '#/components/schemas/Money'
+                      customer_rate:
+                        $ref: '#/components/schemas/Money'
+                        description: Mid-market adjusted by your pricing plan's FX markup.
+                      fx_markup_bps:
+                        type: integer
+                        description: Markup applied to mid-market, in basis points.
+                      sell_amount:
+                        $ref: '#/components/schemas/Money'
+                      buy_amount:
+                        $ref: '#/components/schemas/Money'
+                      rate_timestamp:
+                        $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -3692,7 +3885,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FXExchange'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FXExchange'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
