@@ -1676,7 +1676,20 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Payout'
+                    allOf:
+                      - $ref: '#/components/schemas/Payout'
+                      - type: object
+                        properties:
+                          session_quality:
+                            type: array
+                            items:
+                              type: string
+                              enum: [non_public_ip, invalid_started_at, future_started_at, unknown_timezone]
+                            description: |
+                              Present only when the request's `session` object
+                              carried degraded data. Non-blocking — the payout
+                              was created; fix the flagged fields in your
+                              integration to improve risk-signal quality.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5127,7 +5140,12 @@ components:
             type: string
         end_user_ip:
           type: string
-          description: IP of the merchant's end-user who initiated the payout. Used for risk signals.
+          description: |
+            IP of the merchant's end-user who initiated the payout. Used for
+            risk signals. Superseded by `session.ip` — when both are present,
+            `session.ip` wins; prefer sending the `session` object.
+        session:
+          $ref: '#/components/schemas/SessionAssertion'
         quote_id:
           type: string
           pattern: '^pq_[a-zA-Z0-9]+$'
@@ -5137,6 +5155,60 @@ components:
             must be unexpired, unbound, and match the payout's currencies + amount,
             otherwise the create returns `422 quote_expired` / `422 quote_already_used`
             / `422 quote_mismatch`.
+
+    SessionAssertion:
+      type: object
+      description: |
+        End-user session context for the action, as observed by YOUR
+        edge — the person who initiated this payout in your product, not
+        your server. Every field is optional, but richer context makes
+        Anton's risk assessment of the payout materially better (IP
+        geolocation and network type, timezone-vs-location consistency,
+        device continuity).
+
+        Data-quality issues never fail the payout: only a syntactically
+        invalid `ip` is rejected (`422`). Everything else — a private
+        `ip` (usually a misconfigured proxy forwarding your own LB
+        address), an unrecognized `timezone`, a future `started_at` —
+        is accepted and reported back in the response's
+        `session_quality` array so you can fix your integration.
+
+        By sending session data you confirm you collected it lawfully
+        from your end user (under your own privacy notice) and are
+        authorized to share it with Anton for fraud prevention and
+        AML transaction-monitoring purposes.
+      properties:
+        ip:
+          type: string
+          description: |
+            The end user's public IP address (IPv4 or IPv6) as your edge
+            observed it. Must be syntactically valid if present.
+          example: 203.0.113.7
+        user_agent:
+          type: string
+          maxLength: 512
+          description: The end user's browser/client User-Agent, verbatim.
+        accept_language:
+          type: string
+          maxLength: 64
+          description: The end user's Accept-Language header value.
+          example: en-CA
+        timezone:
+          type: string
+          maxLength: 64
+          description: The end user's IANA timezone name.
+          example: America/Toronto
+        device_hash:
+          type: string
+          maxLength: 128
+          description: |
+            An opaque device identifier computed by YOU (hash of whatever
+            device signals you collect). Anton treats it as an opaque
+            continuity token and never sees the underlying attributes.
+        started_at:
+          type: string
+          format: date-time
+          description: When the end user's session began (RFC 3339).
 
     Payout:
       type: object
