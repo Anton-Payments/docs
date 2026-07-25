@@ -123,6 +123,16 @@ paths:
         The request contract is strict and uses fixed enums so enterprise clients can generate SDKs safely.
         Direct PII may be supplied over TLS or recovered from a vault token; Anton uses it in memory for the evaluation and persists only redacted decision evidence.
 
+        **Per-use-case required fields.** Beyond the always-required `use_case` and `entity.type`, each
+        use case imposes additional requirements (a `422 validation_error` otherwise):
+        - `payee_registration` — `entity.name` OR `entity.vault_token_id`.
+        - `merchant_onboarding` — `entity.type` must be `business`, plus `entity.name` OR `entity.vault_token_id`.
+        - `instrument_screening` — an `instrument` block.
+        - `payout_screening` — a `payout` block, plus searchable `entity` or `instrument` data.
+        - `monitoring` — searchable `entity` or `instrument` data.
+        These conditional requirements can't be expressed in the static `required` arrays below, so they are
+        enumerated here.
+
         **Dual surface.** With OAuth+DPoP credentials, the evaluation is persisted under YOUR merchant account
         (retrievable via the scoped reads below) and the `Idempotency-Key` header is REQUIRED. The credential
         must carry the `intelligence` scope and the account the `intelligence` capability — every Anton account
@@ -853,7 +863,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [access_token, token_type, expires_in]
+                required: [access_token, token_type, expires_in, scope]
                 properties:
                   access_token:
                     type: string
@@ -864,6 +874,12 @@ paths:
                   expires_in:
                     type: integer
                     description: Token lifetime in seconds.
+                  scope:
+                    type: string
+                    description: |
+                      Space-delimited granted scopes (RFC 6749 §3.3), echoing the
+                      credential's grants — the same values embedded in the access
+                      token's `scope` claim. e.g. `payouts intelligence`.
         '400':
           description: Invalid request, unsupported_grant_type, or invalid DPoP proof.
           content:
@@ -1058,7 +1074,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/IdempotencyConflict'
         '401':
@@ -1103,6 +1123,27 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/CountryCode'
+        - name: search
+          in: query
+          description: Substring match on the beneficiary's display name / external reference.
+          required: false
+          schema:
+            type: string
+        - name: created_via
+          in: query
+          description: Filter by how the beneficiary was created.
+          required: false
+          schema:
+            type: string
+            enum: [api, batch, portal]
+        - name: source_batch_id
+          in: query
+          description: |
+            Filter to beneficiaries a specific batch created or first referenced
+            (ANT-105 provenance). Prefixed `bat_`.
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Paginated list of beneficiaries.
@@ -1146,7 +1187,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1163,6 +1208,8 @@ paths:
         `PUT /v1/beneficiaries/{id}/pii` instead, since PII is tokenized.
 
         Fields not present in the request body are left unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1175,7 +1222,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1196,6 +1247,8 @@ paths:
         Archiving is typically preferred over deletion — see
         `POST /v1/beneficiaries/{id}/archive`. Archiving preserves the beneficiary
         in a disabled state that can be restored later.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Beneficiary deleted.
@@ -1233,6 +1286,8 @@ paths:
         dashboard, restricted to admin users, with every access recorded in the
         audit log (PCI DSS 10.2.1). A leaked API credential therefore cannot
         harvest beneficiary identities.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1245,7 +1300,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1291,7 +1350,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1337,7 +1400,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beneficiary'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Beneficiary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1379,19 +1446,27 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BeneficiaryRescoreResult'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BeneficiaryRescoreResult'
         '202':
           description: A rescore for this beneficiary is already running; no retry needed.
           content:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  status:
-                    type: string
-                    enum: [in_flight]
-                  message:
-                    type: string
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [in_flight]
+                      message:
+                        type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1431,6 +1506,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: >-
+            The risk engine is temporarily unreachable (`engine_unavailable`) —
+            a transport failure or an engine 5xx. Transient; retry after the
+            `Retry-After` interval.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/beneficiaries/{id}/rescreen:
     parameters:
@@ -1465,14 +1554,18 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [beneficiary_id, status]
+                required: [data]
                 properties:
-                  beneficiary_id:
-                    type: string
-                    pattern: '^ben_[a-zA-Z0-9]+$'
-                  status:
-                    type: string
-                    enum: [queued]
+                  data:
+                    type: object
+                    required: [beneficiary_id, status]
+                    properties:
+                      beneficiary_id:
+                        type: string
+                        pattern: '^ben_[a-zA-Z0-9]+$'
+                      status:
+                        type: string
+                        enum: [queued]
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1579,7 +1672,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Payout'
+                      - type: object
+                        properties:
+                          session_quality:
+                            type: array
+                            items:
+                              type: string
+                              enum: [non_public_ip, invalid_started_at, future_started_at, unknown_timezone]
+                            description: |
+                              Present only when the request's `session` object
+                              carried degraded data. Non-blocking — the payout
+                              was created; fix the flagged fields in your
+                              integration to improve risk-signal quality.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1598,8 +1708,12 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
           description: |
-            Unprocessable — validation failed, insufficient balance, or beneficiary/
-            instrument not eligible (e.g. archived, disabled, wrong currency).
+            Unprocessable. Codes: `validation_error` (bad/missing fields),
+            `insufficient_balance` (funding currency can't cover the debit),
+            `payout_rejected` (rejected during screening/velocity/routing — e.g.
+            no fundable corridor for the resolved source currency), or the
+            beneficiary/instrument is not eligible (archived, disabled, wrong
+            currency).
           content:
             application/json:
               schema:
@@ -1718,7 +1832,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payout'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1808,7 +1926,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payout'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Payout'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2076,7 +2198,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2151,6 +2277,8 @@ paths:
 
         Maximum file size: 32 MB. Maximum rows per batch: check current limits
         with support.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -2169,7 +2297,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '400':
           description: |
             Malformed upload. One of:
@@ -2271,7 +2403,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2323,7 +2459,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '400':
           description: '`missing_idempotency_key` — the `Idempotency-Key` header is required for this endpoint.'
           content:
@@ -2349,7 +2489,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`batch_confirm_failed` — the batch could not be confirmed due to an unexpected internal condition; safe to retry with the same idempotency key after the in-flight attempt settles.'
+          description: >-
+            Unprocessable. `insufficient_balance` — your available balance can't
+            cover the batch's estimated debit in one or more funding currencies
+            (checked against live balances at confirm time; add funds and
+            re-upload, or confirm a smaller batch). `batch_confirm_failed` — the
+            batch could not be confirmed due to an unexpected internal condition;
+            safe to retry with the same idempotency key after the in-flight
+            attempt settles.
           content:
             application/json:
               schema:
@@ -2379,13 +2526,19 @@ paths:
         Cancel a batch before processing begins. Valid from `uploaded`,
         `validating`, `validated`, `validation_failed`, or `confirmed`. Once
         `processing` begins, use per-payout cancellation instead.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Batch cancelled.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Batch'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Batch'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2453,6 +2606,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/batches/{id}/beneficiaries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^bat_[a-zA-Z0-9]+$'
+    get:
+      tags: [Batches]
+      summary: List beneficiaries created or referenced by a batch
+      operationId: listBatchBeneficiaries
+      description: |
+        Cursor-paginated list of the beneficiaries this batch auto-created or
+        first referenced (matched by source batch). Merchant-scoped — a batch
+        belonging to another merchant returns 404.
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Beneficiaries associated with this batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/CursorList'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`batch_not_found` — the batch does not exist, or belongs to a different merchant.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /v1/batches/{id}/errors:
     parameters:
@@ -2576,6 +2773,12 @@ paths:
           schema:
             type: string
             enum: [active, disabled]
+        - name: search
+          in: query
+          description: Substring match on the instrument's display fields (label, masked account, bank).
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Paginated list of instruments.
@@ -2677,7 +2880,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2692,6 +2899,8 @@ paths:
         Update the mutable fields on an instrument — `label`, `is_default`, and
         `status`. Credentials cannot be updated; create a new instrument and
         delete the old one to replace them.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -2715,7 +2924,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Instrument'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Instrument'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2732,6 +2945,8 @@ paths:
         Soft-delete an instrument. The instrument is removed from active listings
         and cannot be used on new payouts. Historical payouts referencing it
         remain accessible and unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
           description: Instrument deleted.
@@ -2788,11 +3003,91 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Balance'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Balance'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           description: No balance exists for this currency on your account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/sandbox/deposits:
+    post:
+      tags: [Sandbox]
+      summary: Fund a sandbox balance
+      operationId: createSandboxDeposit
+      description: |
+        **Sandbox only.** Credit your sandbox balance for a currency so you can
+        exercise the payout flow end to end from the API — no dashboard step and
+        no real money. The credit is additive: repeated calls stack. If you do
+        not yet hold an account in the requested currency, one is provisioned
+        holding the deposit.
+
+        This is the API-first equivalent of the portal's **Developers → Sandbox
+        → Reset balances** control, so a purely-headless integration (for
+        example a CI suite) can fund itself before creating payouts.
+
+        The endpoint exists **only** in sandbox-class environments
+        (`https://api.antonpayments.dev`); in production it returns `404`.
+        Requires an `Idempotency-Key` header. Rate limited per merchant.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency, amount]
+              properties:
+                currency:
+                  $ref: '#/components/schemas/CurrencyCode'
+                amount:
+                  type: string
+                  description: Decimal amount to credit, as a string. Must be positive.
+                  example: "100000"
+      responses:
+        '201':
+          description: Balance credited.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      deposited:
+                        type: string
+                        description: The amount credited.
+                        example: "100000"
+                      available:
+                        type: string
+                        description: The resulting available balance in this currency.
+                        example: "100000"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Not a sandbox environment — this endpoint does not exist in production.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            Validation failed, or `unsupported_sandbox_currency` — the currency
+            has no sandbox account template to provision.
           content:
             application/json:
               schema:
@@ -2843,7 +3138,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MerchantAccount'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MerchantAccount'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2874,7 +3173,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccountDetails'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AccountDetails'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3036,24 +3339,28 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                required: [data]
                 properties:
-                  fee:
-                    $ref: '#/components/schemas/Money'
-                  fee_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  fee_type:
-                    type: string
-                    enum: [fixed, percentage, hybrid, tiered]
-                  plan_id:
-                    type: string
-                    pattern: '^prc_[a-zA-Z0-9]+$'
-                  quote_id:
-                    type: string
-                    pattern: '^pq_[a-zA-Z0-9]+$'
-                    description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
-                  expires_at:
-                    $ref: '#/components/schemas/Timestamp'
+                  data:
+                    type: object
+                    required: [fee, fee_currency, fee_type, plan_id, quote_id, expires_at]
+                    properties:
+                      fee:
+                        $ref: '#/components/schemas/Money'
+                      fee_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      fee_type:
+                        type: string
+                        enum: [fixed, percentage, hybrid, tiered]
+                      plan_id:
+                        type: string
+                        pattern: '^prc_[a-zA-Z0-9]+$'
+                      quote_id:
+                        type: string
+                        pattern: '^pq_[a-zA-Z0-9]+$'
+                        description: Bindable quote identifier. Pass on `POST /v1/payouts` to lock this fee.
+                      expires_at:
+                        $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -3075,6 +3382,9 @@ paths:
       parameters:
         - name: rail_type
           in: query
+          description: |
+            Filter to one rail family. An unrecognised value returns
+            `400` — it is validated against the enum, not silently ignored.
           schema:
             $ref: '#/components/schemas/RailType'
         - name: currency
@@ -3098,6 +3408,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Corridor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -3125,6 +3437,8 @@ paths:
 
         See [Webhook Events](/api-reference/webhook-events) for the event catalog
         and [Webhook Signing](/api-reference/webhook-signing) for verification.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -3206,7 +3520,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3247,7 +3565,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '400':
           description: >-
             No patchable field present (`missing_required_field`), an unknown
@@ -3306,11 +3628,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                    description: '`whsec_` + 64 hex.'
+                  data:
+                    type: object
+                    required: [secret]
+                    properties:
+                      secret:
+                        type: string
+                        description: '`whsec_` + 64 hex.'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3343,6 +3669,7 @@ paths:
         The new secret is shown **once** in the response. Store it now.
       parameters:
         - name: immediate
+        - $ref: '#/components/parameters/IdempotencyKey'
           in: query
           required: false
           schema:
@@ -3359,18 +3686,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret, previous_secret_expires_at]
+                required: [data]
                 properties:
-                  secret:
-                    type: string
-                  previous_secret_expires_at:
-                    type: [string, 'null']
-                    format: date-time
-                    description: >-
-                      When the dual-signature grace window closes — the
-                      moment the previous secret stops signing deliveries.
-                      Null when the rotation was immediate (no window). The
-                      previous secret value itself is never returned.
+                  data:
+                    type: object
+                    required: [secret, previous_secret_expires_at]
+                    properties:
+                      secret:
+                        type: string
+                      previous_secret_expires_at:
+                        type: [string, 'null']
+                        format: date-time
+                        description: >-
+                          When the dual-signature grace window closes — the
+                          moment the previous secret stops signing deliveries.
+                          Null when the rotation was immediate (no window). The
+                          previous secret value itself is never returned.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3396,6 +3727,8 @@ paths:
         pipelines without waiting for a real event.
 
         Rate-limited.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '202':
           description: Test event queued for delivery.
@@ -3403,10 +3736,14 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  event_id:
-                    type: string
-                    pattern: '^evt_[a-zA-Z0-9]+$'
+                  data:
+                    type: object
+                    properties:
+                      event_id:
+                        type: string
+                        pattern: '^evt_[a-zA-Z0-9]+$'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3430,13 +3767,19 @@ paths:
         Stop delivering events to this subscription without deleting it. The
         subscription moves to `inactive` and can be reactivated by updating its
         status (contact support or wait for a re-activation endpoint).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Subscription deactivated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookSubscription'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookSubscription'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3501,7 +3844,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WebhookEvent'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookEvent'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3556,6 +3903,10 @@ paths:
         short expiry window; use the returned `id` on
         `POST /v1/fx/exchange` to lock the rate before expiry.
 
+        You must supply **at least one** of `sell_amount` or `buy_amount` —
+        omitting both returns `400 missing_required_field`. (The two are
+        individually optional but not both.)
+
         Rate-limited to 30 per minute per IP.
       requestBody:
         required: true
@@ -3569,13 +3920,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FXQuote'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FXQuote'
         '400':
           $ref: '#/components/responses/ValidationFailed'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
-          description: '`currency_not_supported` or other pricing error.'
+          description: >-
+            `currency_not_supported`, `no_funding_account` (no balance account
+            for the sell currency on a cross-currency quote), or another
+            pricing error.
           content:
             application/json:
               schema:
@@ -3630,26 +3988,30 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [sell_currency, buy_currency, mid_market_rate, customer_rate, fx_markup_bps]
+                required: [data]
                 properties:
-                  sell_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  buy_currency:
-                    $ref: '#/components/schemas/CurrencyCode'
-                  mid_market_rate:
-                    $ref: '#/components/schemas/Money'
-                  customer_rate:
-                    $ref: '#/components/schemas/Money'
-                    description: Mid-market adjusted by your pricing plan's FX markup.
-                  fx_markup_bps:
-                    type: integer
-                    description: Markup applied to mid-market, in basis points.
-                  sell_amount:
-                    $ref: '#/components/schemas/Money'
-                  buy_amount:
-                    $ref: '#/components/schemas/Money'
-                  rate_timestamp:
-                    $ref: '#/components/schemas/Timestamp'
+                  data:
+                    type: object
+                    required: [sell_currency, buy_currency, mid_market_rate, customer_rate, fx_markup_bps]
+                    properties:
+                      sell_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      buy_currency:
+                        $ref: '#/components/schemas/CurrencyCode'
+                      mid_market_rate:
+                        $ref: '#/components/schemas/Money'
+                      customer_rate:
+                        $ref: '#/components/schemas/Money'
+                        description: Mid-market adjusted by your pricing plan's FX markup.
+                      fx_markup_bps:
+                        type: integer
+                        description: Markup applied to mid-market, in basis points.
+                      sell_amount:
+                        $ref: '#/components/schemas/Money'
+                      buy_amount:
+                        $ref: '#/components/schemas/Money'
+                      rate_timestamp:
+                        $ref: '#/components/schemas/Timestamp'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -3692,7 +4054,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FXExchange'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FXExchange'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -4774,7 +5140,12 @@ components:
             type: string
         end_user_ip:
           type: string
-          description: IP of the merchant's end-user who initiated the payout. Used for risk signals.
+          description: |
+            IP of the merchant's end-user who initiated the payout. Used for
+            risk signals. Superseded by `session.ip` — when both are present,
+            `session.ip` wins; prefer sending the `session` object.
+        session:
+          $ref: '#/components/schemas/SessionAssertion'
         quote_id:
           type: string
           pattern: '^pq_[a-zA-Z0-9]+$'
@@ -4784,6 +5155,60 @@ components:
             must be unexpired, unbound, and match the payout's currencies + amount,
             otherwise the create returns `422 quote_expired` / `422 quote_already_used`
             / `422 quote_mismatch`.
+
+    SessionAssertion:
+      type: object
+      description: |
+        End-user session context for the action, as observed by YOUR
+        edge — the person who initiated this payout in your product, not
+        your server. Every field is optional, but richer context makes
+        Anton's risk assessment of the payout materially better (IP
+        geolocation and network type, timezone-vs-location consistency,
+        device continuity).
+
+        Data-quality issues never fail the payout: only a syntactically
+        invalid `ip` is rejected (`422`). Everything else — a private
+        `ip` (usually a misconfigured proxy forwarding your own LB
+        address), an unrecognized `timezone`, a future `started_at` —
+        is accepted and reported back in the response's
+        `session_quality` array so you can fix your integration.
+
+        By sending session data you confirm you collected it lawfully
+        from your end user (under your own privacy notice) and are
+        authorized to share it with Anton for fraud prevention and
+        AML transaction-monitoring purposes.
+      properties:
+        ip:
+          type: string
+          description: |
+            The end user's public IP address (IPv4 or IPv6) as your edge
+            observed it. Must be syntactically valid if present.
+          example: 203.0.113.7
+        user_agent:
+          type: string
+          maxLength: 512
+          description: The end user's browser/client User-Agent, verbatim.
+        accept_language:
+          type: string
+          maxLength: 64
+          description: The end user's Accept-Language header value.
+          example: en-CA
+        timezone:
+          type: string
+          maxLength: 64
+          description: The end user's IANA timezone name.
+          example: America/Toronto
+        device_hash:
+          type: string
+          maxLength: 128
+          description: |
+            An opaque device identifier computed by YOU (hash of whatever
+            device signals you collect). Anton treats it as an opaque
+            continuity token and never sees the underlying attributes.
+        started_at:
+          type: string
+          format: date-time
+          description: When the end user's session began (RFC 3339).
 
     Payout:
       type: object

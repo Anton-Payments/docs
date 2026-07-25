@@ -69,6 +69,89 @@ Two required fields that serve different audiences:
 - `purpose` — a compliance-facing payment-purpose code. Examples: `contractor_payment`, `supplier_payment`, `salary`, `refund`, `services`, `goods`. Used for reporting and some rails require it.
 - `reference` — your own free-form string, up to 100 chars. Appears on the beneficiary's statement where the rail supports it. Use your invoice or order number so both sides can reconcile.
 
+## Send end-user session context
+
+If a *person* triggered this payout in your product — a customer hitting "pay", an
+operator releasing an invoice — send the `session` object. Every field is optional and
+none of them can fail your payout, but they are the difference between Anton scoring a
+payout it can see and one it is guessing at.
+
+```json
+{
+  "beneficiary_id": "ben_...",
+  "source_amount": "250.00",
+  "session": {
+    "ip": "203.0.113.7",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ...",
+    "accept_language": "en-CA",
+    "timezone": "America/Toronto",
+    "device_hash": "b41c9f...",
+    "started_at": "2026-07-25T14:02:11Z"
+  }
+}
+```
+
+### Why it materially improves the risk assessment
+
+Without session context, the only address Anton sees is **your server's** — which tells it
+where your infrastructure runs, not where your user is. That is the single biggest blind
+spot in scoring a payout. With it, Anton can reason about:
+
+- **Where the payer actually is** — country and network of `ip`, checked against the
+  payout's destination corridor.
+- **Whether the story is consistent** — `timezone` against the country the IP resolves to.
+  A Toronto browser paying from a Singapore address is worth a second look; the same
+  browser from a Toronto address is not.
+- **What kind of network it is** — residential broadband, a datacenter, a Tor exit, an
+  iCloud Private Relay egress. These carry very different weight, and Anton treats
+  legitimate consumer privacy tooling differently from anonymity infrastructure.
+- **Whether it fits your own pattern** — once you send session data consistently, a payout
+  that arrives *without* it stands out against your own baseline, which is a useful signal
+  in its own right.
+
+The practical effect is fewer false positives on your legitimate traffic. A payout Anton
+can place in a coherent, ordinary-looking session is one it does not need to hold for
+review on thinner evidence.
+
+<Note>
+  Send the IP **your edge observed for the end user** — not your server's address and not
+  a value the browser supplied. If you sit behind a load balancer or CDN, take the client
+  entry from `X-Forwarded-For` counting from the right, at the hop your own infrastructure
+  appends. A caller-supplied leftmost entry is attacker-controlled.
+</Note>
+
+### Data-quality feedback, never rejection
+
+Only a syntactically invalid `ip` is an error (`422`). Everything else is accepted and
+reported back on the payout as `session_quality`, so you can fix your integration without
+anything failing in production:
+
+```json
+{
+  "data": {
+    "id": "pay_...",
+    "session_quality": ["non_public_ip"]
+  }
+}
+```
+
+`non_public_ip` almost always means a misconfigured proxy handed us your own load
+balancer's private address instead of the user's.
+
+### `session.ip` supersedes `end_user_ip`
+
+The older top-level `end_user_ip` field still works. When both are present, `session.ip`
+wins, unconditionally. New integrations should send `session` and leave `end_user_ip`
+alone.
+
+### What you are confirming by sending it
+
+By sending session data you confirm you collected it lawfully from your end user under
+your own privacy notice, and that you are authorized to share it with Anton for fraud
+prevention and AML transaction monitoring. Anton keeps it as transaction evidence on a
+7-year horizon aligned to the payout record, and never uses it to build a profile of your
+users outside that purpose.
+
 ## Idempotency
 
 `POST /v1/payouts` requires an `Idempotency-Key` header. Derive it from your own business data so retries after a network failure converge on the same payout:
