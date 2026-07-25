@@ -70,3 +70,19 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 Screening, velocity, and engine evaluation run automatically on every live payout. You cannot disable them, override them at submission time, or skip them with a flag. This is a compliance requirement, not a limitation.
 
 For select merchants, Anton can enable programmatic access to the engine — risk signals, velocity rule management, and dashboard-equivalent views — on top of the public API surface. These are not part of the public v1.0.0 contract; they're negotiated per account. [Contact us](https://help.antonpayments.com) if you want to inspect or tune risk signals programmatically.
+
+## What you send changes what Anton can see
+
+Anton scores what it is given. The largest single improvement most integrations can make
+is sending the `session` object on `POST /v1/payouts` — the end-user IP, timezone, and
+user agent your own edge observed.
+
+Without it the only address in the request is your server's, so network- and
+location-based reasoning has nothing to work with. With it, Anton can check the payer's
+country against the destination corridor, test whether the browser's timezone agrees with
+where the address resolves, and tell residential traffic apart from datacenter, Tor, or
+relay egress.
+
+Every field is optional and none of them can fail a payout — invalid values come back as
+`session_quality` warnings, not errors. See
+[Send end-user session context](/guides/send-a-payout#send-end-user-session-context).
