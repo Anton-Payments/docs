@@ -429,7 +429,10 @@ import time, requests
 res = requests.post(
     "https://api.antonpayments.dev/v1/payouts",
     headers={
-        "Authorization": f"Bearer {api_key}",
+        # dpop_proof is signed per request and binds this method + URL.
+        # See /authentication for how to generate it.
+        "Authorization": f"DPoP {access_token}",
+        "DPoP": dpop_proof,
         "Idempotency-Key": idempotency_key,
     },
     json=payout,
