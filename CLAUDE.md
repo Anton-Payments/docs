@@ -29,10 +29,25 @@ that arrives gets triaged into Linear with a `Repo: docs` label and the GitHub l
 | **Base branch** | `develop`. PR with `--base develop`. |
 | Install | `npm ci` |
 | Preview | `npm run dev` (`mintlify dev --port 3003`) |
+| Spellcheck | `npm i -g mdx2vast && vale .` — must exit 0 |
 | Check | Preview locally and confirm every changed page renders and every link resolves. |
 
-There are no CI workflows in this repo, so **nothing catches a broken page but you.** A dead
-link or an unrendered MDX block ships straight to a public site.
+CI runs **one** workflow, `.github/workflows/vale.yml` (spellcheck only). Rendering and links
+are still unchecked, so **nothing catches a broken page but you** — a dead link or an
+unrendered MDX block ships straight to a public site.
+
+### Vale lints the whole repo, not your diff
+
+This is the one that bites. Mintlify's hosted `vale-spellcheck` check runs over every file,
+so a term you leave unaccepted does not fail *your* PR — it fails **every PR afterwards**,
+including ones containing no prose at all. That is how ten Dependabot PRs came to be red
+simultaneously, one of them a lockfile-only diff, the oldest stuck 82 days.
+
+So: run `vale .` over the **whole tree** before pushing, never just the files you touched.
+Legitimate technical terms go in `styles/config/vocabularies/AntonDocs/accept.txt`; possessive
+forms are separate tokens (`balancer` passing does not make `balancer's` pass). Mintlify's
+check reports `targetUrl: https://mintlify.com` — the marketing page — so when it fails there
+is nothing to read on GitHub. The local run is the only place you see the reason.
 
 ## Keeping it honest
 

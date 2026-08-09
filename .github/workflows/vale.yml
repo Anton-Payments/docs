@@ -1,0 +1,96 @@
+name: Vale
+
+# Mintlify runs Vale as a hosted check on every PR, but it lints the WHOLE
+# repo rather than the diff — and its check reports `targetUrl:
+# https://mintlify.com`, the marketing page, so a failure carries no readable
+# detail on GitHub at all.
+#
+# The consequence is that an unaccepted term does not fail the PR that
+# introduced it. It fails every PR afterwards, forever, including ones that
+# contain no prose: on 2026-08-09 all ten open Dependabot PRs were red on
+# vale-spellcheck, one of them a lockfile-only diff with no words in it, the
+# oldest stuck 82 days. A queue of unmerged security advisories on a public
+# repo is what an auditor reads (SOC 2 CC7.1, PCI DSS 6.3.3).
+#
+# This job is that same lint, run where the author can see it and read the
+# output. It does not replace Mintlify's check — it makes it diagnosable, and
+# it moves the failure onto the PR that caused it.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vale-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  lint:
+    name: spellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned so a CI result is reproducible on a laptop with the same
+      # binary. Bumping this is a deliberate change: a newer dictionary can
+      # start flagging prose that has been in the repo for months, which is
+      # the failure this workflow exists to stop happening silently.
+      VALE_VERSION: 3.15.1
+      VALE_SHA256: c024d9c157874fb043d4f24a055d60050d1bb18755251f590593eed5bace1857
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Vale
+        run: |
+          set -euo pipefail
+          curl -sSfL -o vale.tar.gz \
+            "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
+          echo "${VALE_SHA256}  vale.tar.gz" | sha256sum -c -
+          tar -xzf vale.tar.gz vale
+          sudo install -m 0755 vale /usr/local/bin/vale
+          rm -f vale.tar.gz vale
+          vale --version
+
+      - name: Install mdx2vast
+        # Vale cannot parse .mdx without it — without this step every .mdx
+        # file errors with `mdx2vast not found` and the run fails for a
+        # reason that has nothing to do with the prose.
+        run: npm install -g mdx2vast@0.5.0
+
+      # Proves the linter can still fail before its silence is trusted. A
+      # misconfigured StylesPath, an empty vocabulary, or a Vale that quietly
+      # skipped every file all produce the same clean output as a genuinely
+      # clean tree. Planting a known-bad word and requiring a non-zero exit is
+      # the only thing that tells those apart.
+      - name: Control — the linter must reject a known typo
+        # `rc=0; cmd || rc=$?` rather than `cmd; rc=$?`: Actions runs `run:`
+        # under `bash -e`, so an untested non-zero exit aborts the step
+        # instantly. Since this step EXPECTS a non-zero exit, the naive form
+        # would fail the build on every green run.
+        run: |
+          set -uo pipefail
+          printf -- '---\ntitle: "Vale control"\n---\n\nThis sentence contains a deliberate mispelling.\n' \
+            > guides/_vale_control.mdx
+          rc=0
+          vale guides/_vale_control.mdx > control.log 2>&1 || rc=$?
+          rm -f guides/_vale_control.mdx
+          cat control.log
+          if [ "${rc}" -eq 0 ]; then
+            echo "::error::Vale accepted a known misspelling. The spellchecker is not actually running, so a clean result from the next step would be meaningless."
+            exit 1
+          fi
+          echo "Control passed: Vale rejected the planted typo (exit ${rc})."
+
+      - name: Lint the repository
+        run: |
+          set -uo pipefail
+          rc=0
+          vale . > vale.log 2>&1 || rc=$?
+          cat vale.log
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error::Vale failed. If these are legitimate technical terms, add them to styles/config/vocabularies/AntonDocs/accept.txt — do not weaken the rule. Note Vale lints the whole repo, so an unfixed term here will block every later PR, including Dependabot lockfile bumps that contain no prose."
+            exit 1
+          fi
