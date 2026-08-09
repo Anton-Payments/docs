@@ -53,12 +53,22 @@ CI runs **one** workflow, `.github/workflows/vale.yml` (spellcheck only). Render
 are still unchecked, so **nothing catches a broken page but you** — a dead link or an
 unrendered MDX block ships straight to a public site.
 
-### Vale lints the whole repo, not your diff
+### The spellcheck does not fail on the PR that breaks it
 
-This is the one that bites. Vale runs over every file, so a term you leave unaccepted does not
-fail *your* PR — it fails **every PR afterwards**, including ones containing no prose at all,
-such as a dependency lockfile bump. One missing word can hold the whole queue, and the person
-who added it is the one person who never sees it fail.
+Mintlify's hosted Vale check lints the `.md`/`.mdx` files a PR **changes** — and when a PR
+changes none, it falls back to **the whole repository**. That asymmetry is the trap:
+
+| your PR | what gets linted |
+|---|---|
+| touches prose | only your changed files |
+| touches no prose (a lockfile bump) | **every file in the repo** |
+
+So a term you leave unaccepted never fails *your* PR. It surfaces later, on a dependency PR
+whose author did not write the prose and cannot reasonably fix it. The PRs least able to fix
+prose are the only ones that ever see the whole-repo state — which is how a dependency queue
+goes red on a backlog nobody in it created.
+
+CI closes that gap: `.github/workflows/vale.yml` lints the whole tree on **every** PR.
 
 So: run `vale .` over the **whole tree** before pushing, never just the files you touched.
 Legitimate technical terms go in `styles/config/vocabularies/AntonDocs/accept.txt`; possessive

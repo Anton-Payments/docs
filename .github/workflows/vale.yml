@@ -1,16 +1,19 @@
 name: Vale
 
-# Vale lints the WHOLE repo, not the PR diff. So an unaccepted term does not
-# fail the PR that introduced it — it fails every PR afterwards, including
-# ones that contain no prose at all, such as a dependency lockfile bump. One
-# missing word can therefore hold every open PR indefinitely, and the author
-# who added it never sees a failure.
+# Mintlify's hosted Vale check lints the .md/.mdx files a PR CHANGES — and
+# when a PR changes none, it falls back to the whole repository.
 #
-# Mintlify also runs this lint as a hosted check when its integration is
-# reporting, but that check's `targetUrl` is `https://mintlify.com` — the
-# marketing page, not a run — so a failure there carries no readable detail
-# on GitHub. Treat this job as the diagnosable one: same lint, output you can
-# read, failing on the PR that caused it.
+# That asymmetry is the bug this job exists for. An unaccepted term never
+# fails the PR that introduced it, because that PR only ever sees its own
+# files. It surfaces later, on a PR containing no prose at all — a
+# dependency lockfile bump — which then fails on a backlog its author did
+# not write and cannot reasonably fix. The PRs least able to fix prose are
+# the only ones that ever see the whole-repo state.
+#
+# This job lints the whole tree on EVERY PR, so the author who adds a term
+# is the one who sees it fail. It is also the diagnosable one: the hosted
+# check reports `targetUrl: https://mintlify.com`, the marketing page rather
+# than a run, so its failures carry no detail on the PR page.
 on:
   pull_request:
     branches: [develop, main]
@@ -98,10 +101,17 @@ jobs:
           echo "Control passed: Vale rejected the planted typo via Vale.Spelling (exit ${rc})."
 
       - name: Lint the repository
+        # Absolute path, not `vale .`, deliberately. A file-scoped section in
+        # .vale.ini matches differently depending on the path form it is
+        # handed: `[CLAUDE.md]` applies to a relative path and silently does
+        # NOT apply to an absolute one. Mintlify's runner passes absolute
+        # paths, so linting relatively here would exercise a different code
+        # path than the check this job is meant to mirror — and would go
+        # green on a config that fails there.
         run: |
           set -uo pipefail
           rc=0
-          vale . > vale.log 2>&1 || rc=$?
+          vale "${GITHUB_WORKSPACE}" > vale.log 2>&1 || rc=$?
           cat vale.log
           if [ "${rc}" -ne 0 ]; then
             echo "::error::Vale failed. If these are legitimate technical terms, add them to styles/config/vocabularies/AntonDocs/accept.txt — do not weaken the rule. Note Vale lints the whole repo, so an unfixed term here will block every later PR, including Dependabot lockfile bumps that contain no prose."
