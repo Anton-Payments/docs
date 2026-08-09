@@ -1,0 +1,119 @@
+name: Vale
+
+# Mintlify's hosted Vale check lints the .md/.mdx files a PR CHANGES — and
+# when a PR changes none, it falls back to the whole repository.
+#
+# That asymmetry is the bug this job exists for. An unaccepted term never
+# fails the PR that introduced it, because that PR only ever sees its own
+# files. It surfaces later, on a PR containing no prose at all — a
+# dependency lockfile bump — which then fails on a backlog its author did
+# not write and cannot reasonably fix. The PRs least able to fix prose are
+# the only ones that ever see the whole-repo state.
+#
+# This job lints the whole tree on EVERY PR, so the author who adds a term
+# is the one who sees it fail. It is also the diagnosable one: the hosted
+# check reports `targetUrl: https://mintlify.com`, the marketing page rather
+# than a run, so its failures carry no detail on the PR page.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vale-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  lint:
+    name: spellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned so a CI result is reproducible on a laptop with the same
+      # binary. Bumping this is a deliberate change: a newer dictionary can
+      # start flagging prose that has been in the repo for months, which is
+      # the failure this workflow exists to stop happening silently.
+      VALE_VERSION: 3.15.1
+      VALE_SHA256: c024d9c157874fb043d4f24a055d60050d1bb18755251f590593eed5bace1857
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing here uses git after checkout, and the default leaves the
+          # Actions token in .git/config where any later step — the npm
+          # install below being the realistic one — could read it.
+          persist-credentials: false
+
+      - name: Install Vale
+        run: |
+          set -euo pipefail
+          # vale-cli/vale, not errata-ai/vale: the project was renamed and the
+          # old path only works through GitHub's rename redirect, which stops
+          # the day someone registers a repo at the old name.
+          curl -sSfL -o vale.tar.gz \
+            "https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
+          echo "${VALE_SHA256}  vale.tar.gz" | sha256sum -c -
+          tar -xzf vale.tar.gz vale
+          sudo install -m 0755 vale /usr/local/bin/vale
+          rm -f vale.tar.gz vale
+          vale --version
+
+      - name: Install mdx2vast
+        # Vale cannot parse .mdx without it — without this step every .mdx
+        # file errors with `mdx2vast not found` and the run fails for a
+        # reason that has nothing to do with the prose.
+        #
+        # --ignore-scripts because this is the one binary in the job that is
+        # not checksummed; it is a pure-JS parser and needs no lifecycle
+        # scripts to work.
+        run: npm install -g --ignore-scripts mdx2vast@0.5.0
+
+      # Proves the linter can still fail before its silence is trusted. A
+      # misconfigured StylesPath, an empty vocabulary, or a Vale that quietly
+      # skipped every file all produce the same clean output as a genuinely
+      # clean tree. Planting a known-bad word and requiring a non-zero exit is
+      # the only thing that tells those apart.
+      - name: Control — the linter must reject a known typo
+        # `rc=0; cmd || rc=$?` rather than `cmd; rc=$?`: Actions runs `run:`
+        # under `bash -e`, so an untested non-zero exit aborts the step
+        # instantly. Since this step EXPECTS a non-zero exit, the naive form
+        # would fail the build on every green run.
+        run: |
+          set -uo pipefail
+          printf -- '---\ntitle: "Vale control"\n---\n\nThis sentence contains a deliberate mispelling.\n' \
+            > guides/_vale_control.mdx
+          rc=0
+          vale guides/_vale_control.mdx > control.log 2>&1 || rc=$?
+          rm -f guides/_vale_control.mdx
+          cat control.log
+          # `rc != 0` is NOT enough. Vale exits 1 for alerts and 2 for config
+          # or runtime errors, so a broken StylesPath would also be non-zero
+          # and this step would report "Vale rejected the planted typo" while
+          # the spellchecker was not running at all — a message asserting a
+          # state it never measured. Require the spelling rule by name.
+          if [ "${rc}" -ne 1 ] || ! grep -q 'Vale.Spelling' control.log; then
+            echo "::error::Control did not fire as a spelling alert (exit ${rc}). Vale is not spellchecking, so a clean result from the next step would be meaningless."
+            exit 1
+          fi
+          echo "Control passed: Vale rejected the planted typo via Vale.Spelling (exit ${rc})."
+
+      - name: Lint the repository
+        # Absolute path, not `vale .`, deliberately. A file-scoped section in
+        # .vale.ini matches differently depending on the path form it is
+        # handed: `[CLAUDE.md]` applies to a relative path and silently does
+        # NOT apply to an absolute one. Mintlify's runner passes absolute
+        # paths, so linting relatively here would exercise a different code
+        # path than the check this job is meant to mirror — and would go
+        # green on a config that fails there.
+        run: |
+          set -uo pipefail
+          rc=0
+          vale "${GITHUB_WORKSPACE}" > vale.log 2>&1 || rc=$?
+          cat vale.log
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error::Vale failed. If these are legitimate technical terms, add them to styles/config/vocabularies/AntonDocs/accept.txt — do not weaken the rule. Note Vale lints the whole repo, so an unfixed term here will block every later PR, including Dependabot lockfile bumps that contain no prose."
+            exit 1
+          fi
