@@ -22,7 +22,7 @@ The Anton sandbox runs the same API, the same state machine, the same compliance
 
 ## What's identical to production
 
-- **Authentication** — same `Bearer` header format, same `401` responses, same rotation flow.
+- **Authentication** — same `Authorization: DPoP <access_token>` + `DPoP: <proof>` header pair, same `401` responses, same rotation flow. Sandbox access tokens live 8 hours rather than 1.
 - **Data model** — beneficiaries, payouts, instruments, batches, and webhooks all share the same schemas.
 - **State machine** — a payout moves through `pending_screening → approved → processing → sent → completed` exactly as it would in production.
 - **Idempotency** — `Idempotency-Key` behaves the same way and enforces the same 24-hour window.
