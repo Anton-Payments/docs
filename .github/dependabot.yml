@@ -25,7 +25,23 @@ updates:
           - 'minor'
           - 'patch'
 
-# github-actions ecosystem intentionally omitted — this repo has no
-# .github/workflows/ directory yet, and Dependabot fails the update
-# job with `dependency_file_not_found` when no workflows exist.
-# Re-add this block as soon as the first workflow lands.
+  # Re-added per the note this block replaces: it said to restore the
+  # github-actions ecosystem "as soon as the first workflow lands", and
+  # .github/workflows/vale.yml is that workflow.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    target-branch: 'develop'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Toronto'
+    labels:
+      - 'dependencies'
+
+# `target-branch` does not mean what it looks like: it governs VERSION
+# updates only. SECURITY updates always target the repository's DEFAULT
+# branch, and no key in this file changes that. The default is currently
+# `develop`, which is what makes the two agree. If it is ever moved back
+# to `main`, this file will keep looking correct while security updates
+# quietly stop landing on the branch feature work targets.

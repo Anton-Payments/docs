@@ -3669,7 +3669,6 @@ paths:
         The new secret is shown **once** in the response. Store it now.
       parameters:
         - name: immediate
-        - $ref: '#/components/parameters/IdempotencyKey'
           in: query
           required: false
           schema:
@@ -3679,6 +3678,7 @@ paths:
             When true, skip the dual-signature grace window: the previous
             secret is dropped at once and `previous_secret_expires_at` is
             null.
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Rotated. Response carries the new secret.
@@ -4148,7 +4148,25 @@ paths:
 components:
   securitySchemes:
     oauthDPoP:
-      type: oauth2
+      # DECLARED AS http/DPoP, NOT oauth2, deliberately.
+      #
+      # This is an OAuth 2.0 client_credentials flow, so `type: oauth2` reads as
+      # the honest choice — but it renders every generated example as
+      # `Authorization: Bearer <token>`, because Bearer is the OAuth2 default and
+      # OpenAPI has no way to say otherwise. Anton rejects Bearer on /v1: the
+      # token is DPoP-bound, and sending it as Bearer returns 401. A merchant
+      # reported exactly this, having followed the generated examples.
+      #
+      # `type: http` with `scheme: DPoP` (registered by RFC 9449) makes the
+      # rendered Authorization header correct, which is what a reader copies.
+      #
+      # What this gives up: `flows.clientCredentials.tokenUrl` and `scopes` as
+      # structured data. That costs less than it looks like — a generic OAuth2
+      # helper could never execute this flow anyway, because even the token
+      # request requires a signed DPoP proof it has no way to produce. The flow
+      # and both scopes are documented in full below.
+      type: http
+      scheme: DPoP
       description: |
         OAuth 2.0 client_credentials grant (RFC 6749 §4.4) bound to a DPoP keypair (RFC 9449).
 
@@ -4160,13 +4178,14 @@ components:
 
         Tokens expire in **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
 
-        OpenAPI 3.0 has no native DPoP scheme; this declaration plus `dpopHeader` together convey both the access-token Authorization and the per-request proof header.
-      flows:
-        clientCredentials:
-          tokenUrl: /oauth/token
-          scopes:
-            payouts: Money movement — payouts, batches, beneficiaries, instruments, balances, funding, FX.
-            intelligence: Anton Intelligence — screening evaluations and evidence.
+        **Scopes** (requested at `POST /oauth/token`, returned in the `scope` response field):
+
+        | Scope | Grants |
+        |---|---|
+        | `payouts` | Money movement — payouts, batches, beneficiaries, instruments, balances, funding, FX. |
+        | `intelligence` | Anton Intelligence — screening evaluations and evidence. |
+
+        This scheme is declared as `http`/`DPoP` rather than `oauth2` so that generated examples show the correct `Authorization: DPoP <access_token>` header. Sending `Authorization: Bearer <access_token>` returns `401 unauthorized` — the token is sender-constrained and the scheme is not interchangeable.
     dpopHeader:
       type: apiKey
       in: header

@@ -1,10 +1,39 @@
 # Technical terms that appear in the Anton Payments public docs.
 # One term per line. Vale treats entries as regex-ready tokens; case
 # variants are honoured exactly. Keep sorted within sections.
+#
+# Vale lints the whole repo, not the PR diff, so a term missing from
+# this file fails every later PR — including ones containing no prose.
+# Populate it from `vale .` over the full tree, never from the diff.
+# Possessive forms are separate tokens: `balancer` passing does not
+# make `balancer's` pass.
 
 # API / web concepts
 allowlist
 APIs
+async
+balancer's
+cacheable
+client_credentials
+creds
+datacenter
+dest
+env
+exfiltrates
+iCloud
+integrator's
+jittered
+jkt
+keypair
+listable
+mitigations
+openssl
+quickstarts
+Resumability
+substrings
+transcodes
+untrusted
+walkthrough
 cooldown
 cutover
 decisioned
@@ -100,15 +129,25 @@ LLC
 PII
 NATs
 RFIs
+TTLs
 
 # Finance / operations
 counterparty
 crypto
+cryptocurrencies
 Doe
 payee
 payees
 payout
 payouts
+stablecoin
+Stablecoin
+stablecoins
+
+# Blockchain networks named in the crypto-payout guide
+Arbitrum
+Ethereum
+Solana
 
 # Python keywords that appear in code samples and Vale flags
 elif
