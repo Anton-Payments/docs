@@ -18,6 +18,23 @@ It is the only Anton repo an outsider can read. That changes the rules:
 - Do not describe licences we do not hold. FINTRAC and RPAA are in process; only US FinCEN
   MSB registration is complete.
 
+### Branch names are public too — do not use the Linear-generated one here
+
+The root `CLAUDE.md` says to push the branch name Linear generates, because that is what
+auto-links the PR. **That rule is for the twelve private repos. It is wrong here**, and it is
+the easiest of these rules to break without noticing, because following the harness correctly
+is what breaks it.
+
+A Linear branch name carries the issue key *and the issue title verbatim* — so pushing
+`ryan/eng-129-docsantonpaymentscom-has-not-deployed-since-2026-07-17-one` publishes both an
+internal tracker key and a live operational-failure state to anyone watching a public repo.
+Deleting the branch afterwards does not undo it: GitHub keeps PR head refs indefinitely and
+they stay readable through the API.
+
+**Name branches `docs/<slug>`, `fix/<slug>` or `feat/<slug>`, with no issue key** — the
+convention every PR here used before #71. Attach the PR to the issue from the Linear side
+instead; losing the automatic link is the cost, and it is much cheaper than the disclosure.
+
 **GitHub Issues stays ENABLED here** — it is the external channel for developers integrating
 against the reference, and the one exception to Linear-is-the-tracker-of-record. Anything real
 that arrives gets triaged into Linear with a `Repo: docs` label and the GitHub link attached.
@@ -38,16 +55,16 @@ unrendered MDX block ships straight to a public site.
 
 ### Vale lints the whole repo, not your diff
 
-This is the one that bites. Mintlify's hosted `vale-spellcheck` check runs over every file,
-so a term you leave unaccepted does not fail *your* PR — it fails **every PR afterwards**,
-including ones containing no prose at all. That is how ten Dependabot PRs came to be red
-simultaneously, one of them a lockfile-only diff, the oldest stuck 82 days.
+This is the one that bites. Vale runs over every file, so a term you leave unaccepted does not
+fail *your* PR — it fails **every PR afterwards**, including ones containing no prose at all,
+such as a dependency lockfile bump. One missing word can hold the whole queue, and the person
+who added it is the one person who never sees it fail.
 
 So: run `vale .` over the **whole tree** before pushing, never just the files you touched.
 Legitimate technical terms go in `styles/config/vocabularies/AntonDocs/accept.txt`; possessive
 forms are separate tokens (`balancer` passing does not make `balancer's` pass). Mintlify's
-check reports `targetUrl: https://mintlify.com` — the marketing page — so when it fails there
-is nothing to read on GitHub. The local run is the only place you see the reason.
+hosted check reports `targetUrl: https://mintlify.com` — the marketing page — so when *it*
+fails there is nothing to read on GitHub. The local run and the CI job are where you see why.
 
 ## Keeping it honest
 
