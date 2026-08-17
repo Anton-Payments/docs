@@ -1,0 +1,85 @@
+name: Dependabot auto-merge
+
+# The standing half of ENG-17. Clearing the backlog once is a sweep; this is the
+# thing that stops it re-forming.
+#
+# READ THIS BEFORE COPYING THIS FILE ANYWHERE ELSE — the safety argument that
+# holds in the sibling repos does NOT hold here, and the difference is invisible
+# from the file itself.
+#
+# Elsewhere, `gh pr merge --auto` is safe because it does not merge: it asks
+# GitHub to merge *when the branch-protection ruleset is satisfied*, so a bump
+# that breaks a required check sits open instead of landing. The gate is the
+# ruleset, not this workflow.
+#
+# This repo's ruleset carries NO `required_status_checks` rule at all. Verify
+# rather than trust this comment:
+#
+#   gh api repos/Anton-Payments/docs/rulesets/<id> \
+#     --jq '[.rules[]|select(.type=="required_status_checks")]'
+#
+# An empty list means auto-merge here waits on nothing. `vale-spellcheck`,
+# `link-rot` and `Mintlify Deployment` all run and all report, but none of them
+# block, so a red one does not stop the merge.
+#
+# That is a deliberate, recorded decision, not an oversight (Ryan, 2026-08-16):
+# this is a Mintlify site whose npm tree is almost entirely mintlify's own
+# transitive deps, Mintlify scans and validates that tree independently, and the
+# repo ships documentation rather than executing code in our infrastructure. The
+# cost of a bad dependency bump here is a docs build, not a payout.
+#
+# ENG-122 is the other half of why no check is required: `vale-spellcheck` lints
+# the *whole repo* on any PR that changes no Markdown, which is exactly what a
+# lockfile-only Dependabot PR is. Promoting it to required would re-block this
+# queue on prose the PR's author never wrote.
+#
+# If this repo ever gains a check that genuinely gates correctness, make it
+# required — and this file becomes gate-driven like its siblings with no edit.
+#
+# pull_request_target, not pull_request: a Dependabot-authored PR gets a
+# read-only GITHUB_TOKEN on `pull_request` no matter what the permissions block
+# says, so the merge call would 403. pull_request_target runs in the base-branch
+# context with a writable token. The usual injection risk does not apply because
+# this workflow never checks out — or runs — a single line of PR code.
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # A grouped PR reports the highest update-type across its members, so one
+      # major in a group holds the whole group for review. That is the intent.
+      - name: Queue patch and minor for auto-merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Label majors for human review
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr edit "$PR_URL" --add-label "major-update" || true
+          gh pr comment "$PR_URL" --body \
+            "Held for review: this is a **major** version update (\`${{ steps.meta.outputs.update-type }}\`). Auto-merge is deliberately not queued. See ENG-17 for the standing policy."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
