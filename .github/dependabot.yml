@@ -20,10 +20,24 @@ updates:
       - 'dependencies'
     groups:
       production-dependencies:
+        applies-to: version-updates
         dependency-type: 'production'
         update-types:
           - 'minor'
           - 'patch'
+      # `applies-to` defaults to version-updates, so the group above has never
+      # applied to a security fix — every advisory opened its own PR no matter
+      # what the group said. That is the whole mechanism behind this repo's
+      # queue: nine of the ten PRs ENG-122 found were single-CVE bumps, and
+      # they sat for up to 82 days.
+      #
+      # It matters more here than anywhere else in the fleet. The 40+ alerts
+      # live inside mintlify's tree, so they land in waves whenever mintlify
+      # ships — ungrouped, that is a wave of PRs rather than one.
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - '*'
 
   # Re-added per the note this block replaces: it said to restore the
   # github-actions ecosystem "as soon as the first workflow lands", and
@@ -36,8 +50,14 @@ updates:
       day: 'monday'
       time: '06:00'
       timezone: 'America/Toronto'
+    open-pull-requests-limit: 3
     labels:
       - 'dependencies'
+      - 'github-actions'
+    groups:
+      actions:
+        patterns:
+          - '*'
 
 # `target-branch` does not mean what it looks like: it governs VERSION
 # updates only. SECURITY updates always target the repository's DEFAULT
