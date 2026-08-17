@@ -20,10 +20,23 @@ updates:
       - 'dependencies'
     groups:
       production-dependencies:
+        applies-to: version-updates
         dependency-type: 'production'
         update-types:
           - 'minor'
           - 'patch'
+      # `applies-to` defaults to version-updates, so the group above does not
+      # apply to a security fix — without the group below, every advisory opens
+      # its own PR no matter what the version groups say.
+      #
+      # That matters particularly here: this site's direct dependency is
+      # `mintlify`, and the advisories are almost all inside its tree, so they
+      # clear in waves whenever mintlify ships. Ungrouped, a wave arrives as a
+      # wave of pull requests.
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - '*'
 
   # Re-added per the note this block replaces: it said to restore the
   # github-actions ecosystem "as soon as the first workflow lands", and
@@ -36,8 +49,14 @@ updates:
       day: 'monday'
       time: '06:00'
       timezone: 'America/Toronto'
+    open-pull-requests-limit: 3
     labels:
       - 'dependencies'
+      - 'github-actions'
+    groups:
+      actions:
+        patterns:
+          - '*'
 
 # `target-branch` does not mean what it looks like: it governs VERSION
 # updates only. SECURITY updates always target the repository's DEFAULT
