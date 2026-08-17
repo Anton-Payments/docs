@@ -25,15 +25,14 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
-      # `applies-to` defaults to version-updates, so the group above has never
-      # applied to a security fix — every advisory opened its own PR no matter
-      # what the group said. That is the whole mechanism behind this repo's
-      # queue: nine of the ten PRs ENG-122 found were single-CVE bumps, and
-      # they sat for up to 82 days.
+      # `applies-to` defaults to version-updates, so the group above does not
+      # apply to a security fix — without the group below, every advisory opens
+      # its own PR no matter what the version groups say.
       #
-      # It matters more here than anywhere else in the fleet. The 40+ alerts
-      # live inside mintlify's tree, so they land in waves whenever mintlify
-      # ships — ungrouped, that is a wave of PRs rather than one.
+      # That matters particularly here: this site's direct dependency is
+      # `mintlify`, and the advisories are almost all inside its tree, so they
+      # clear in waves whenever mintlify ships. Ungrouped, a wave arrives as a
+      # wave of pull requests.
       security-updates:
         applies-to: security-updates
         patterns:
