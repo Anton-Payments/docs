@@ -93,6 +93,10 @@ Errors block specific rows; warnings don't. Typical errors:
 - Beneficiary mismatch (PII conflicts with existing record at same `external_ref`)
 - Unsupported method for the destination country
 
+Warnings use these `type` values today: `duplicate_in_batch`, `beneficiary_name_change`, `velocity_block_predicted`, and `velocity_review_predicted`. Treat any other value as informational. A `beneficiary_name_change` warning names the field that will change, not the beneficiary's name.
+
+Validation checks the file itself — format, amounts, methods, credentials, beneficiary resolution, and a velocity preview. It never returns screening results. Every payout a confirmed batch creates goes through the same checks as any other payout — see [How Anton Evaluates Payouts](/how-anton-evaluates-payouts).
+
 Fix errors in your source file and re-upload — batches are immutable once uploaded.
 
 ## Confirm a validated batch
