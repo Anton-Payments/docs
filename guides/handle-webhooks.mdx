@@ -81,18 +81,20 @@ Core payout lifecycle:
 - `payout.completed` — funds delivered
 - `payout.failed` — rail rejected or failed settlement
 - `payout.returned` — funds returned after send
-- `payout.screening_failed` — sanctions or compliance block
+- `payout.screening_failed` — payout on hold until it is reviewed
+- `payout.cannot_be_processed` — payout cannot be processed
 - `payout.velocity_blocked` — velocity rule rejected
 - `payout.engine_blocked` — engine-driven block; fires alongside `payout.velocity_blocked`
 
 Beneficiary lifecycle:
 - `beneficiary.created`
 - `beneficiary.updated` — edit, PII update, archive, or restore
-- `beneficiary.blocked` — compliance action
+- `beneficiary.blocked` — beneficiary can no longer be used for payouts
 
-Compliance workflow:
+Requests for Information:
 - `rfi.created` — Anton raised a Request for Information
-- `screening.hit` — payout held pending screening review
+
+`screening.hit` is no longer sent. A payout under review shows `on_hold: true` and its status instead.
 
 FX:
 - `fx.exchange.completed`, `fx.exchange.failed`

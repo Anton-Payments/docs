@@ -1,6 +1,6 @@
 ---
 title: "How Anton Evaluates Payouts"
-description: "Every payout moves through sanctions screening, velocity control, and AI risk scoring before a single dollar leaves your balance. Here's what happens — and how your integration should respond."
+description: "Every payout moves through screening, velocity control, and AI risk scoring before a single dollar leaves your balance. Here's what happens — and how your integration should respond."
 ---
 
 A payout created via `POST /v1/payouts` is not submitted to a rail immediately. Anton evaluates it first. The evaluation outcome is reflected in the payout's state — your application reads that state (and the webhook events that announce transitions) to decide what to do next.
@@ -8,39 +8,43 @@ A payout created via `POST /v1/payouts` is not submitted to a rail immediately. 
 ## What runs on every payout
 
 <Steps>
-  <Step title="Sanctions screening">
-    The beneficiary and, where applicable, the sending counterparty are checked against OFAC, EU, UK, UN, and other consolidated sanctions lists. A hit moves the payout to `screening_failed` — it will not be submitted.
+  <Step title="Screening">
+    The beneficiary and, where applicable, the sending counterparty are screened before any funds move.
   </Step>
   <Step title="Velocity evaluation">
     Anton applies merchant-scoped velocity rules: daily and monthly caps, geographic limits, instrument-level thresholds. Exceeding a rule moves the payout to `velocity_blocked`.
   </Step>
   <Step title="Risk scoring">
-    The Anton Engine evaluates the payout against cross-merchant trust signals, beneficiary history, counterparty reputation, and real-time anomaly detection. A sufficiently risky payout moves to `manual_review` for a human decision.
+    The Anton Engine evaluates the payout against cross-merchant trust signals, beneficiary history, counterparty reputation, and real-time anomaly detection.
   </Step>
   <Step title="Rail submission">
-    A payout that clears all three checks moves to `approved` and is queued for the rail. From here, `processing → sent → completed` are rail-driven and reflect settlement reality.
+    A payout that clears every check moves to `approved` and is queued for the rail. From here, `processing → sent → completed` are rail-driven and reflect settlement reality.
   </Step>
 </Steps>
+
+A payout that needs a closer look is placed **under review** instead of moving on. While it is under review the payout carries `on_hold: true`, and Anton does not say why. A review ends with the payout continuing, being cancelled, or moving to `cannot_be_processed`.
 
 ## The payout state machine
 
 ```
 created
   ├─ pending_screening
-  │    ├─ screening_failed         (sanctions hit)
-  │    └─ pending_approval
-  │         ├─ approved
-  │         │    ├─ processing
-  │         │    └─ sent
-  │         │         ├─ completed
-  │         │         ├─ failed
-  │         │         └─ returned
-  │         └─ velocity_blocked
-  ├─ manual_review
-  │    ├─ approved
-  │    └─ cancelled
+  │    ├─ approved ─ processing ─ sent
+  │    │                            ├─ completed
+  │    │                            ├─ failed
+  │    │                            └─ returned
+  │    ├─ pending_approval ─ approved
+  │    ├─ manual_review            (under review)
+  │    └─ screening_failed         (under review)
+  ├─ pending_engine_review         (under review)
+  ├─ velocity_blocked
   └─ cancelled
+
+Any status before processing can also move to:
+  cannot_be_processed
 ```
+
+A payout under review (`manual_review`, `screening_failed`, `pending_engine_review`) returns to the flow, is cancelled, or moves to `cannot_be_processed` when the review concludes. A payout can also be placed on hold in another pre-rail status; `on_hold` tells you, whatever the status.
 
 Every transition emits a `payout.*` webhook event. Every transition is recorded in the audit log.
 
@@ -51,7 +55,7 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 | `completed` | Funds delivered to the beneficiary and settled. | Mark the payout done in your system. |
 | `failed` | The rail accepted the payout but settlement failed. | Review the failure reason, potentially retry with a different instrument. |
 | `returned` | Funds were returned by the receiving bank or counterparty. | Handle the return in your accounting — the original payout is final. |
-| `screening_failed` | Sanctions or compliance block. | Do not retry. Verify beneficiary details if the hit looks like a false positive. |
+| `cannot_be_processed` | The payout cannot be processed. Anton is unable to provide further detail. | Treat as final. It cannot be cancelled via the API; contact support about the funds. |
 | `velocity_blocked` | A merchant velocity rule rejected the payout. | Wait for the velocity window to reset, or contact support to raise a threshold. |
 | `cancelled` | Cancelled by the merchant or operations team. | Final. Create a new payout if you still need to send funds. |
 
@@ -59,11 +63,11 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 
 **Subscribe to webhooks. Do not poll.** The payout lifecycle is event-driven. Polling wastes rate-limit budget and misses transitions.
 
-**Treat `manual_review` as a normal state.** Most legitimate payouts clear review in minutes. Surface a pending state to your end user; do not surface an error.
+**Treat a review as a normal state.** Most legitimate payouts clear review in minutes. When a payout shows `on_hold: true`, surface a pending state to your end user; do not surface an error. A payout on hold cannot be cancelled until the review concludes — the cancel request returns `409 payout_on_hold`.
 
-**Respond to RFIs promptly.** If a payout enters `manual_review` and Anton needs more information — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. Your merchant responds through the dashboard. The payout cannot clear review until the RFI is closed.
+**Respond to RFIs promptly.** If Anton needs more information during a review — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. A team member with the `rfis.respond` permission (held by the Admin and Operator roles) responds in the dashboard and can attach documents to the response. RFI responses are accepted from signed-in dashboard users only, not from API credentials. The payout cannot clear review until the RFI is closed.
 
-**Never retry a `screening_failed` payout with the same beneficiary.** It will fail again. Either correct the beneficiary's details or stop attempting to send to them.
+**Don't retry a `cannot_be_processed` payout.** Creating a new payout to the same beneficiary does not change the outcome.
 
 ## What you can and can't control
 

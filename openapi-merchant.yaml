@@ -1380,7 +1380,7 @@ paths:
       operationId: restoreBeneficiary
       description: |
         Restores a previously archived beneficiary to active status. Beneficiaries
-        blocked by compliance cannot be restored via this endpoint — contact support.
+        that cannot be used for payouts (`blocked`) cannot be restored via this endpoint — contact support.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -1434,8 +1434,8 @@ paths:
         Synchronous: on success the response carries the new and previous
         risk scores (0–1000 integers, higher is ALWAYS worse) and tiers.
 
-        Not the same as `POST /v1/beneficiaries/{id}/rescreen`, which runs
-        compliance screening (sanctions/PEP) rather than risk scoring.
+        Not the same as `POST /v1/beneficiaries/{id}/rescreen`, which queues a
+        fresh check of the beneficiary rather than recomputing the risk score.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -1534,12 +1534,10 @@ paths:
       summary: Re-screen a beneficiary
       operationId: rescreenBeneficiary
       description: |
-        Queue a fresh compliance screen (sanctions / PEP / adverse media) of
-        an active beneficiary. Asynchronous: responds `202` immediately and
-        the screening worker runs the check. A non-clear outcome blocks the
-        beneficiary pending review and dispatches `screening.hit` and
-        `beneficiary.blocked` webhook events; a clear outcome changes
-        nothing. Both the request and the screening outcome are audited.
+        Queue a fresh check of an active beneficiary. Asynchronous: responds
+        `202` immediately. The beneficiary may become unavailable for payouts
+        (`blocked`, with the `beneficiary.blocked` webhook event); otherwise
+        nothing changes. Both the request and its outcome are audited.
 
         Not the same as `POST /v1/beneficiaries/{id}/rescore`, which
         recomputes the engine risk score.
@@ -1897,9 +1895,15 @@ paths:
       description: |
         Cancel a payout that has not yet been submitted to a rail. Cancellation is
         only possible from `created`, `pending_screening`, `pending_approval`,
-        `pending_engine_review`, or `manual_review`. Once a payout reaches
+        or `approved`. Once a payout reaches
         `processing` or beyond, it cannot be cancelled via the API — contact
         support if you need to halt a payout in flight.
+
+        A payout that is on hold (`on_hold: true` — for example in
+        `manual_review` or `pending_engine_review`) cannot be cancelled until
+        the review concludes; the request returns `409` with code
+        `payout_on_hold`. A payout in `cannot_be_processed` cannot be
+        cancelled via the API.
 
         Any debited source funds (source amount, fee, and cross-currency buffer)
         are released back to the merchant balance on successful cancellation.
@@ -1936,7 +1940,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Payout is not in a cancellable state, or idempotency conflict.
+          description: |
+            Payout is not in a cancellable state, the payout is under review
+            (`payout_on_hold`), or idempotency conflict.
           content:
             application/json:
               schema:
@@ -2668,6 +2674,12 @@ paths:
         `validating` phase. Each error or warning carries the row number and
         field it applies to so you can point the merchant back to their source
         file.
+
+        Validation checks the file itself — format, amounts, methods,
+        credentials, beneficiary resolution and a velocity preview. It does
+        not run sanctions, PEP or watchlist screening and never reports a
+        screening outcome. Each payout a confirmed batch creates follows the
+        normal payout lifecycle and is screened before it can be released.
       responses:
         '200':
           description: Errors and warnings keyed by row.
@@ -4681,7 +4693,7 @@ components:
           description: |
             - `active` — usable for payouts.
             - `archived` — soft-disabled by the merchant; not usable. Can be restored.
-            - `blocked` — blocked by compliance. Not usable and cannot be restored via the API.
+            - `blocked` — cannot be used for payouts. Not usable and cannot be restored via the API.
         display_name:
           type: string
           description: |
@@ -5049,6 +5061,7 @@ components:
         - manual_review
         - velocity_blocked
         - pending_engine_review
+        - cannot_be_processed
 
     PayoutMethod:
       type: string
@@ -5275,6 +5288,11 @@ components:
           description: Set when the payout was created as part of a batch upload.
         status:
           $ref: '#/components/schemas/PayoutStatus'
+        on_hold:
+          type: boolean
+          description: |
+            True while the payout waits on a review and cannot be cancelled
+            (cancel returns `409 payout_on_hold`). It carries no reason.
         method:
           $ref: '#/components/schemas/PayoutMethod'
         source_amount:
@@ -5500,7 +5518,14 @@ components:
           type: integer
         type:
           type: string
-          description: Category — e.g. `beneficiary_mismatch`, `duplicate_skip`, `duplicate_conflict`.
+          description: |
+            Category. Current values: `duplicate_in_batch`,
+            `beneficiary_name_change`, `velocity_block_predicted`,
+            `velocity_review_predicted`. Not exhaustive — treat unknown
+            values as informational.
+            Warnings never carry screening results, and a
+            `beneficiary_name_change` message names the field that will
+            change, not the beneficiary's name.
         message:
           type: string
 
@@ -5763,7 +5788,10 @@ components:
       type: string
       description: |
         See [Webhook Events](/api-reference/webhook-events) for the full catalog
-        and payload shapes. Some reserved event types (`balance.low` on some
+        and payload shapes. `payout.cannot_be_processed` fires when a payout
+        enters the `cannot_be_processed` status. `screening.hit` is no longer
+        sent: a payout under review shows `on_hold: true` and its status
+        instead; the type stays accepted for existing subscriptions. Some reserved event types (`balance.low` on some
         paths) may be defined but not yet dispatched — subscribing to them is
         safe but no deliveries arrive until they're wired up.
       enum:
@@ -5776,6 +5804,7 @@ components:
         - payout.cancelled
         - payout.returned
         - payout.screening_failed
+        - payout.cannot_be_processed
         - payout.velocity_blocked
         - payout.engine_blocked
         - beneficiary.created
