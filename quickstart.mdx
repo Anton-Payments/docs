@@ -80,7 +80,7 @@ defer resp.Body.Close()
 
 ## Step 2: Create a beneficiary
 
-A **beneficiary** is who you're paying — a person or business. Personal details (name, address, DOB) are tokenized in Basis Theory on creation; Anton's database never holds them in plaintext.
+A **beneficiary** is who you're paying — a person or business. Personal details (name, address, DOB) are tokenized in a secure vault on creation; Anton's database never holds them in plaintext.
 
 <CodeGroup>
 
@@ -221,7 +221,7 @@ Save the returned `id` (prefixed `ben_`). You'll use it in the next step.
 
 ## Step 3: Attach a payment instrument
 
-A **beneficiary** is the identity; an **instrument** is where the money goes — a bank account, wallet, or card. One beneficiary can have many instruments. Credentials (account numbers, wallet addresses, card PANs) are tokenized in Basis Theory on receipt.
+A **beneficiary** is the identity; an **instrument** is where the money goes — a bank account, wallet, or card. One beneficiary can have many instruments. Credentials (account numbers, wallet addresses, card PANs) are tokenized in a secure vault on receipt.
 
 This example attaches a UK bank account. See [`GET /v1/payment-methods`](/api-reference/reference-data/list-payment-methods) for the complete per-country catalog.
 

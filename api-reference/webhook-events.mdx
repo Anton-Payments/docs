@@ -140,8 +140,8 @@ These share the same lifecycle payload shape. `rail_provider`, `rail_reference`,
     "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
     "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
     "reference": "Invoice #1042",
-    "rail_provider": "openpayd",
-    "rail_reference": "OP-2026-04-15-778812",
+    "rail_provider": "partner_bank",
+    "rail_reference": "RAIL-2026-04-15-778812",
     "created_at": "2026-04-15T14:30:00Z",
     "updated_at": "2026-04-15T14:45:12Z",
     "completed_at": "2026-04-15T14:45:12Z"
@@ -360,7 +360,7 @@ Same shape as `beneficiary.created` with the event type and resource state refle
 }
 ```
 
-Credential tokens and fingerprints are never included — raw instrument credentials live only in the Basis Theory vault.
+Credential tokens and fingerprints are never included — raw instrument credentials live only in Anton's secure vault.
 
 ### `instrument.updated`
 
@@ -506,8 +506,8 @@ Fires when a batch finishes with `status = failed` — either the file could not
     "buy_amount": "1173.40",
     "mid_market_rate": "1.17450",
     "customer_rate": "1.17340",
-    "provider": "openpayd",
-    "provider_ref": "OP-FX-2026-04-15-41102",
+    "provider": "partner_bank",
+    "provider_ref": "FX-2026-04-15-41102",
     "status": "completed"
   }
 }
@@ -551,7 +551,7 @@ Fires when incoming funds are received on a merchant account and credited to the
     "sender_name": "J*** S****",
     "account_id": "opa_01HX8Z9K0M2N3P4Q5R6S7T8UF4",
     "reference": "Invoice top-up",
-    "source_provider": "openpayd",
+    "source_provider": "partner_bank",
     "credited_at": "2026-04-15T16:00:00Z"
   }
 }
