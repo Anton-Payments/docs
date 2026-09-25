@@ -3,6 +3,28 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-09-24 — Payout holds, `cannot_be_processed`, and RFI responses
+
+### Added
+
+- **`on_hold` on payouts.** `true` while a payout waits on a review, in any status before `processing`. It carries no reason. See [How Anton Evaluates Payouts](/how-anton-evaluates-payouts).
+- **`cannot_be_processed` payout status** and the **`payout.cannot_be_processed`** webhook event. Treat the status as final; it cannot be cancelled via the API.
+- **`409 payout_on_hold`** on `POST /v1/payouts/{id}/cancel` when the payout is under review, whatever the review is about. See [Errors](/api-reference/errors).
+
+### Changed
+
+- **Cancellable statuses.** A payout can be cancelled from `created`, `pending_screening`, `pending_approval`, or `approved`. Payouts under review (`manual_review`, `pending_engine_review`, `screening_failed`, or any payout with `on_hold: true`) can no longer be cancelled until the review concludes.
+- **`payout.screening_failed` payload.** Now carries `id`, `merchant_id`, `status`, and `on_hold`, with no `reason`.
+- **RFI responses.** Responding to an RFI, and attaching documents to a response, now requires the `rfis.respond` permission, held by the Admin and Operator roles, in the dashboard. Operators can now respond. API credentials cannot respond to RFIs.
+- **Batch validation.** Validation no longer returns screening results. The warning `type` values are now documented, and `beneficiary_name_change` warnings name the changed field instead of the beneficiary's name.
+- **Blocked beneficiaries.** Documentation now describes `blocked` as "cannot be used for payouts".
+
+### Deprecated
+
+- **`screening.hit` is no longer sent.** A payout under review shows `on_hold: true` and its status instead. Existing subscriptions keep working but receive no deliveries.
+
+---
+
 ## 2026-07-17 — Machine credentials across the payout surface
 
 OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-movement mutation surface. Previously, machine callers could read but not mutate on several payout-surface endpoints; credential scopes now map directly to the permissions each endpoint requires, so a `payouts`-scoped credential creates and cancels payouts, manages beneficiaries and instruments, uploads and confirms batches, executes FX, and manages webhook subscriptions — end to end.

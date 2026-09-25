@@ -59,8 +59,8 @@ Each delivery also carries these HTTP headers:
   <Card title="Funding events" icon="money-bill-1" href="#funding-events">
     Incoming funds credited to your balance.
   </Card>
-  <Card title="Compliance events" icon="shield-halved" href="#compliance-events">
-    Screening hits that require manual review.
+  <Card title="Retired events" icon="box-archive" href="#retired-events">
+    Event types that are no longer sent.
   </Card>
   <Card title="Verification events" icon="id-card" href="#verification-events">
     KYC/KYB verification lifecycle, from link delivery to decision.
@@ -82,11 +82,12 @@ Each delivery also carries these HTTP headers:
 | `payout.failed` | Rail submission or execution failed terminally. |
 | `payout.cancelled` | The payout was cancelled before execution. |
 | `payout.returned` | The rail reported the funds were returned after sending. |
-| `payout.screening_failed` | Compliance screening blocked the payout. |
+| `payout.screening_failed` | The payout is on hold and cannot proceed until it is reviewed. |
+| `payout.cannot_be_processed` | The payout entered `cannot_be_processed`. Anton is unable to provide further detail. |
 | `payout.velocity_blocked` | A risk/velocity rule blocked the payout at create time. |
 | `payout.engine_blocked` | A blocked payout where the Anton engine layer was the primary decider. Fires alongside `payout.velocity_blocked`. |
 
-The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.screening_failed`, `payout.velocity_blocked`, and `payout.engine_blocked` use a compact shape with just `id`, `status`, and `reason`.
+The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.velocity_blocked` and `payout.engine_blocked` use a compact shape with just `id`, `status`, and `reason`. `payout.screening_failed` uses a compact shape with `id`, `merchant_id`, `status`, and `on_hold` — it carries no reason.
 
 <Note>
   When a real-time risk score is available on the payout (available via the Anton risk engine), the lifecycle event payloads include a `risk` object summarising the score and contributing factors.
@@ -159,7 +160,30 @@ These share the same lifecycle payload shape. `rail_provider`, `rail_reference`,
     "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
     "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
     "status": "screening_failed",
-    "reason": "compliance screening flagged this payout"
+    "on_hold": true
+  }
+}
+```
+
+### `payout.cannot_be_processed`
+
+Fires when a payout enters the `cannot_be_processed` status. The payload is the payout object. Anton is unable to provide further detail; the payout cannot be cancelled via the API.
+
+```json
+{
+  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UC1",
+  "type": "payout.cannot_be_processed",
+  "created_at": "2026-04-15T15:10:00Z",
+  "data": {
+    "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
+    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
+    "status": "cannot_be_processed",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "dest_amount": "458.25",
+    "dest_currency": "EUR",
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "updated_at": "2026-04-15T15:10:00Z"
   }
 }
 ```
@@ -198,7 +222,7 @@ Fires **alongside** `payout.velocity_blocked` when a payout is blocked and the A
 
 ### `payout.approved`
 
-Fires when a payout transitions to `approved` — either because compliance screening cleared it or an ops reviewer approved the manual review case it was queued in. Arrives before `payout.processing` for the same payout.
+Fires when a payout transitions to `approved` — either because its checks cleared or a review concluded and released it. Arrives before `payout.processing` for the same payout.
 
 ```json
 {
@@ -257,7 +281,7 @@ Fires when a payout is cancelled before being submitted to the rail. The payload
 | `beneficiary.created` | A beneficiary is created via `POST /v1/beneficiaries`. |
 | `beneficiary.updated` | A beneficiary is edited, archived, restored, or has its PII updated. |
 | `beneficiary.deleted` | A beneficiary is deleted. Payload contains only the id. |
-| `beneficiary.blocked` | A beneficiary is blocked (e.g. by compliance). |
+| `beneficiary.blocked` | A beneficiary can no longer be used for payouts. |
 
 The payload's `data` field contains the beneficiary resource. Sensitive fields (BT token references, fingerprints, deletion timestamps) are never included.
 
@@ -533,28 +557,11 @@ Fires when incoming funds are received on a merchant account and credited to the
 }
 ```
 
-## Compliance events
+## Retired events
 
 ### `screening.hit`
 
-Fires when compliance screening returns a possible match that requires manual review. The payload intentionally omits the matched sanctions-list entry content — Anton treats that information as compliance-sensitive and does not surface match details to merchants to avoid tipping-off risk. Subscribers should treat this event as a signal that a review case is open for the payout; the payout itself transitions to `manual_review`.
-
-```json
-{
-  "id": "evt_01HX8Z9K0M2N3P4Q5R6S7T8UF5",
-  "type": "screening.hit",
-  "created_at": "2026-04-15T14:30:04Z",
-  "data": {
-    "payout_id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
-    "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
-    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
-    "screening_id": "scr_01HX8Z9K0M2N3P4Q5R6S7T8UF6",
-    "highest_score": 0.72,
-    "review_id": "rev_01HX8Z9K0M2N3P4Q5R6S7T8UF7",
-    "status": "manual_review"
-  }
-}
-```
+No longer sent. A payout under review shows `on_hold: true` and its current status instead — see [How Anton Evaluates Payouts](/how-anton-evaluates-payouts). The type is still accepted on existing subscriptions, so nothing breaks, but no deliveries arrive. Remove it from your subscriptions when convenient.
 
 ## Verification events
 
