@@ -13,7 +13,7 @@ Without DPoP, a leaked access token is full account access. With DPoP, a leaked 
 Anton accepts two credential types on the same `/v1` routes:
 
 - **OAuth access tokens** (DPoP-bound) — for server-to-server integrations.
-- **WorkOS portal JWTs** — issued to users signed in to the merchant dashboard.
+- **Portal JWTs** — issued by our identity provider to users signed in to the merchant dashboard.
 
 This page covers programmatic OAuth auth. Portal JWT auth is automatic from the dashboard and not something integrators need to wire by hand.
 

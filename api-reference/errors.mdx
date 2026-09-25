@@ -67,7 +67,7 @@ The `field` is dotted-path notation for nested objects (for example `individual.
 | `429 Too Many Requests`     | Per-merchant rate limit exceeded. Respect `Retry-After`. See [Rate limits](./rate-limits).                                                                                                              |
 | `500 Internal Server Error` | An unexpected server error. Safe to retry with exponential backoff. The detailed error is never exposed to clients — correlate via `X-Request-ID`.                                                      |
 | `501 Not Implemented`       | The endpoint exists but is not enabled in this environment due to missing configuration (for example, the engine admin token is not set on this API instance). Not a caller mistake.                    |
-| `503 Service Unavailable`   | A downstream dependency (rail provider, FX provider, Basis Theory, WorkOS) is degraded or circuit-broken. Retry with backoff.                                                                           |
+| `503 Service Unavailable`   | A downstream dependency (rail provider, FX provider, secure vault, identity provider) is degraded or circuit-broken. Retry with backoff.                                                                           |
 | `504 Gateway Timeout`       | The request exceeded the 25-second handler timeout. Retry; consider whether your payload can be split.                                                                                                  |
 
 ## The `X-Request-ID` header
@@ -264,9 +264,9 @@ The strict Intelligence request contract returns two codes beyond the standard s
 | `422` | `duplicate_beneficiary`         | A beneficiary with the same fingerprint already exists for the merchant.                                         | Reuse the existing beneficiary.                                |
 | `422` | `invalid_display_name`          | The supplied display name is missing or invalid.                                                                 | Provide a valid display name.                                  |
 | `422` | `missing_beneficiary_details`   | Neither `individual` nor `business` details were provided.                                                       | Include the appropriate detail block for the beneficiary type. |
-| `422` | `beneficiary_create_failed`     | Catch-all for creation failures (Basis Theory tokenization, database). The detailed cause is logged server-side. | Retry; share the `X-Request-ID` if persistent.                 |
+| `422` | `beneficiary_create_failed`     | Catch-all for creation failures (vault tokenization, database). The detailed cause is logged server-side. | Retry; share the `X-Request-ID` if persistent.                 |
 | `422` | `beneficiary_update_failed`     | Generic update failure.                                                                                          | Inspect the message; retry.                                    |
-| `422` | `beneficiary_pii_update_failed` | PII update via Basis Theory failed.                                                                              | Retry; if persistent, share the `X-Request-ID`.                |
+| `422` | `beneficiary_pii_update_failed` | PII update in the secure vault failed.                                                                              | Retry; if persistent, share the `X-Request-ID`.                |
 | `422` | `beneficiary_archive_failed`    | Generic archive failure.                                                                                         | Inspect the message; retry.                                    |
 | `422` | `beneficiary_restore_failed`    | Generic restore failure.                                                                                         | Inspect the message; retry.                                    |
 | `422` | `beneficiary_delete_failed`     | Generic delete failure.                                                                                          | Inspect the message; retry.                                    |
@@ -290,7 +290,7 @@ Codes returned only by `POST /v1/beneficiaries/{id}/rescore`.
 | `422` | `duplicate_instrument`     | An instrument with the same fingerprint already exists for the beneficiary.                      | Reuse the existing instrument.                  |
 | `422` | `invalid_credentials`      | The instrument credentials (IBAN check digit, account number, routing number) failed validation. | Fix the input.                                  |
 | `422` | `method_not_supported`     | The requested payment method is not supported for the country.                                   | Use a method valid for the destination country. |
-| `422` | `instrument_create_failed` | Catch-all creation failure (Basis Theory, database).                                             | Retry; share the `X-Request-ID` if persistent.  |
+| `422` | `instrument_create_failed` | Catch-all creation failure (vault tokenization, database).                                             | Retry; share the `X-Request-ID` if persistent.  |
 | `422` | `instrument_update_failed` | Generic update failure.                                                                          | Inspect the message; retry.                     |
 | `422` | `instrument_delete_failed` | Generic delete failure.                                                                          | Inspect the message; retry.                     |
 

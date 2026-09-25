@@ -4,7 +4,7 @@ sidebarTitle: "Manage beneficiaries"
 description: "Create, update, search, archive, and delete the people and businesses you pay."
 ---
 
-A beneficiary is the identity of a payout recipient. Every beneficiary belongs to exactly one merchant — two merchants paying the same real person each create their own beneficiary record. PII submitted at creation is tokenized in Basis Theory; Anton's core database stores only a display name and country plus an opaque token reference.
+A beneficiary is the identity of a payout recipient. Every beneficiary belongs to exactly one merchant — two merchants paying the same real person each create their own beneficiary record. PII submitted at creation is tokenized in a secure vault; Anton's core database stores only a display name and country plus an opaque token reference.
 
 This guide covers the full lifecycle — create, update, search, archive, restore, delete — plus the deduplication, PII rotation, and cross-merchant trust considerations you need for production.
 
@@ -63,7 +63,7 @@ curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID \
 
 ## Updating PII
 
-Tokens in Basis Theory are immutable. Updating PII replaces the entire token — you send the full detail block, Anton re-tokenizes, and the old token is dropped:
+Vault tokens are immutable. Updating PII replaces the entire token — you send the full detail block, Anton re-tokenizes, and the old token is dropped:
 
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/pii \

@@ -443,8 +443,8 @@ paths:
       operationId: createVerificationSubject
       description: |
         Creates a verification subject (a person or a business) and opens its first verification
-        attempt. Anton mints a **hosted verification link** — a one-time Persona flow where the
-        subject submits their government ID and selfie (person) or business details plus a UBO
+        attempt. Anton mints a **hosted verification link** — a one-time identity verification
+        flow where the subject submits their government ID and selfie (person) or business details plus a UBO
         cascade (business). Identity documents live with the verification provider and Anton's
         vault; they never touch your systems.
 
@@ -1010,7 +1010,7 @@ paths:
       operationId: createBeneficiary
       description: |
         Create a person (`individual`) or business (`business`) you want to pay. PII
-        submitted in the request body is tokenized in Basis Theory on creation — only
+        submitted in the request body is tokenized in a secure vault on creation — only
         a display name, country, and opaque token reference are stored in the Anton
         database.
 
@@ -1272,7 +1272,7 @@ paths:
       summary: Replace beneficiary PII
       operationId: updateBeneficiaryPII
       description: |
-        Replaces the PII stored in Basis Theory for this beneficiary. The entire PII
+        Replaces the PII stored in the secure vault for this beneficiary. The entire PII
         blob is replaced — partial updates are not supported, because tokens are
         immutable.
 
@@ -4671,7 +4671,7 @@ components:
     Beneficiary:
       type: object
       description: |
-        A person or business you pay. PII is tokenized in Basis Theory on creation —
+        A person or business you pay. PII is tokenized in a secure vault on creation —
         raw identifiers are never returned in this response. Use
         `GET /v1/beneficiaries/{id}/pii` to retrieve detokenized PII for a
         beneficiary you own.
@@ -4978,7 +4978,7 @@ components:
       type: object
       description: |
         A payment destination attached to a beneficiary. Credentials (account numbers,
-        wallet addresses, card PANs) are tokenized in Basis Theory and never returned
+        wallet addresses, card PANs) are tokenized in a secure vault and never returned
         by the API. Only masked display fields and method metadata are exposed.
       required: [id, beneficiary_id, merchant_id, method, status, is_default, created_at, updated_at]
       properties:
@@ -5337,7 +5337,7 @@ components:
         rail_provider:
           type: string
           description: External rail name. Populated at rail-submission time.
-          example: openpayd
+          example: partner_bank
         rail_reference:
           type: string
           description: External provider reference. Useful for support tickets.
@@ -5437,8 +5437,8 @@ components:
         buffer_amount: "2.50"
         buffer_currency: USD
         rail_type: fiat
-        rail_provider: openpayd
-        rail_reference: OP-2026-04-15-778812
+        rail_provider: partner_bank
+        rail_reference: RAIL-2026-04-15-778812
         network: sepa
         purpose: supplier_payment
         reference: PO-8821

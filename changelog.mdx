@@ -100,7 +100,7 @@ The v1.0.0 merchant contract is now frozen. Merchant integrations built against 
 ### Security
 
 - **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity — not even as booleans. Anton-network intelligence is aggregated only into opaque verification signals that are indistinguishable from external-provider outcomes.
-- **PII isolation.** All beneficiary PII and payment instrument details are tokenized in Basis Theory. Raw values are only ever returned from the dedicated `GET /v1/beneficiaries/{id}/pii` endpoint.
+- **PII isolation.** All beneficiary PII and payment instrument details are tokenized in a secure vault. Raw values are only ever returned from the dedicated `GET /v1/beneficiaries/{id}/pii` endpoint.
 
 ---
 
