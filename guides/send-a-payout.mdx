@@ -164,7 +164,7 @@ If you retry with the same key, Anton returns the original response and sets `X-
 
 ## The state machine
 
-Payouts move through a 13-state machine. The full detail is in [How Anton Evaluates Payouts](/how-anton-evaluates-payouts); the short version:
+Payouts move through a 15-state machine. The full detail is in [How Anton Evaluates Payouts](/how-anton-evaluates-payouts); the short version:
 
 | State | Meaning | What to do |
 |---|---|---|
@@ -177,10 +177,14 @@ Payouts move through a 13-state machine. The full detail is in [How Anton Evalua
 | `completed` | Funds delivered and settled. | Mark the payout done in your system. |
 | `failed` | Rail returned a hard failure. | Review failure reason; may retry with a different instrument. |
 | `returned` | Funds were returned after send. | Handle the return in your accounting. |
-| `screening_failed` | Sanctions or compliance block. | Do NOT retry with same beneficiary. |
+| `screening_failed` | Under review (`on_hold: true`). | Treat as a normal "pending" state. |
 | `velocity_blocked` | Merchant velocity rule rejected. | Wait for velocity window to reset, or request a higher threshold. |
-| `manual_review` | Held for human review — usually Anton Engine flagged risk. | Treat as a normal "pending" state; can take minutes to hours. |
+| `manual_review` | Under review (`on_hold: true`). | Treat as a normal "pending" state; can take minutes to hours. |
+| `pending_engine_review` | Under review (`on_hold: true`). | Treat as a normal "pending" state. |
+| `cannot_be_processed` | The payout cannot be processed. Anton is unable to provide further detail. | Final. Cannot be cancelled via the API; contact support. |
 | `cancelled` | Cancelled before rail submission. | Final. |
+
+The `on_hold` field on the payout is `true` while the payout waits on a review, in any status before `processing`. It carries no reason.
 
 ## Subscribe to webhooks — don't poll
 
@@ -188,14 +192,16 @@ Every state transition fires a `payout.*` event. Subscribe once via `POST /v1/we
 
 - `payout.completed` — funds delivered
 - `payout.failed`, `payout.returned` — terminal failure paths
-- `payout.screening_failed`, `payout.velocity_blocked`, `payout.engine_blocked` — compliance/risk blocks (`payout.engine_blocked` fires alongside `payout.velocity_blocked` when the Anton engine drove the block)
+- `payout.velocity_blocked`, `payout.engine_blocked` — risk blocks (`payout.engine_blocked` fires alongside `payout.velocity_blocked` when the Anton engine drove the block)
+- `payout.screening_failed` — the payout is on hold until it is reviewed
+- `payout.cannot_be_processed` — the payout cannot be processed
 - `payout.cancelled` — operator or API cancellation
 
 Polling `GET /v1/payouts/{id}` works in development but wastes rate-limit budget at scale and misses transitions.
 
 ## Cancelling a payout
 
-You can cancel a payout that has not yet been submitted to a rail — from `created`, `pending_screening`, `pending_approval`, `pending_engine_review`, or `manual_review`:
+You can cancel a payout that has not yet been submitted to a rail — from `created`, `pending_screening`, `pending_approval`, or `approved`:
 
 ```bash
 curl https://api.antonpayments.dev/v1/payouts/$PAYOUT_ID/cancel \
@@ -207,6 +213,8 @@ curl https://api.antonpayments.dev/v1/payouts/$PAYOUT_ID/cancel \
 ```
 
 Once a payout reaches `processing`, the rail has it — cancellation is no longer possible via the API. Contact support if you need to halt an in-flight payout.
+
+A payout on hold (`on_hold: true`) cannot be cancelled until the review concludes: the request returns `409` with code `payout_on_hold`. A payout in `cannot_be_processed` cannot be cancelled via the API (`422 payout_not_cancellable`).
 
 On successful cancellation, the debited funds (source amount, fee, and any FX buffer) are released back to your balance.
 

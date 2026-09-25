@@ -104,8 +104,8 @@ curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/restore \
 ```
 
 <Warning>
-  Beneficiaries `blocked` by compliance (status: `blocked`) cannot be restored
-  via the API. Contact support if you believe a block was applied in error.
+  Beneficiaries that cannot be used for payouts (status: `blocked`) cannot be
+  restored via the API. Contact support if you believe this is in error.
 </Warning>
 
 ## Searching and filtering
@@ -130,7 +130,7 @@ Subscribe to the `beneficiary.*` events to react to lifecycle changes out-of-ban
 - `beneficiary.created`
 - `beneficiary.updated` (fires on edit, archive, restore, AND PII update)
 - `beneficiary.deleted` (payload is just the id)
-- `beneficiary.blocked` (compliance block)
+- `beneficiary.blocked` (the beneficiary can no longer be used for payouts)
 
 See [Webhook Events](/api-reference/webhook-events) for payload schemas.
 

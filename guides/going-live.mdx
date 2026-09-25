@@ -41,8 +41,8 @@ Moving from sandbox to production is a deliberate switch, not an upgrade. The en
   <Step title="Error handling for every documented code">
     Parse the `error.code` field on `4xx` and `5xx` responses and map each to a deliberate behavior: retry, escalate to a human, surface to the end user, or fail the job. See [Errors](/api-reference/errors).
   </Step>
-  <Step title="Graceful handling of manual_review">
-    Payouts in `manual_review` can clear in minutes, or take longer if an RFI is raised. Surface a pending state to your end user; do not treat review as an error.
+  <Step title="Graceful handling of payouts under review">
+    Payouts under review (`on_hold: true`) can clear in minutes, or take longer if an RFI is raised. Surface a pending state to your end user; do not treat review as an error. Handle `cannot_be_processed` as a final state.
   </Step>
 </Steps>
 
@@ -50,7 +50,7 @@ Moving from sandbox to production is a deliberate switch, not an upgrade. The en
 
 <Steps>
   <Step title="Monitoring and alerting">
-    Alert on: unexpected payout failures, webhook delivery retries exhausted, elevated `5xx` rates from the Anton API, stale `manual_review` payouts, and open RFIs older than your SLA.
+    Alert on: unexpected payout failures, webhook delivery retries exhausted, elevated `5xx` rates from the Anton API, payouts on hold for longer than you expect, and open RFIs older than your SLA.
   </Step>
   <Step title="Credential management">
     Production API keys live in your secrets manager — never in environment files committed to source control, never in frontend code. Document your rotation procedure before go-live, not after the first incident.

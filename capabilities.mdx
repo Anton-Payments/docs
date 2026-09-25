@@ -92,7 +92,7 @@ Neither code is retryable — the same request will fail identically until the a
 | Payouts, batches, beneficiaries, instruments, balances, accounts & funding, FX, pricing, corridors, sandbox seeders | `payouts` capability + `payouts` scope                                                                                  |
 | Intelligence evaluations and evidence                                                                               | `intelligence` capability + `intelligence` scope                                                                        |
 | Verifications (KYC/KYB)                                                                                             | `intelligence` capability + `intelligence` scope. Name reveal and captured-document viewing are dashboard-only (admin). |
-| Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data       | Any authenticated credential — available on every tier                                                                  |
+| Webhooks, documents, RFIs, onboarding, users & settings, API credential management, audit log, reference data       | Any authenticated credential — available on every tier. Responding to an RFI is dashboard-only and needs `rfis.respond` (Admin or Operator role). |
 
 Two classes of operation are **dashboard-only** regardless of scope, and reject machine credentials with `403 oauth_client_not_accepted` or `403 insufficient_permissions`:
 
