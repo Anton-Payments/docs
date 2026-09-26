@@ -105,6 +105,8 @@ tags:
     description: Glass-box view of Anton's risk intelligence.
   - name: Intelligence
     description: Normalized payee, instrument, payout, and merchant risk intelligence evaluations.
+  - name: Reviews
+    description: Your team's own compliance reviews over the API, with webhooks and exports for your own auditors. Needs the Reviews API and Webhooks add-on; exports need the Audit Pack.
   - name: Verifications
     description: KYC/KYB-as-a-service — verify the identity of your customers and their businesses through Anton-hosted flows, with sanctions screening built in.
   - name: Onboarding
@@ -380,6 +382,343 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
+
+  /v1/intelligence/reviews:
+    get:
+      tags: [Reviews]
+      summary: List reviews
+      description: |
+        Your team's compliance reviews, newest first. Needs the **Reviews API and Webhooks** add-on
+        (`403 module_not_enabled` otherwise), the `intelligence` scope and `reviews.view`.
+        The API returns the masked subject and your own reference for it — never names, dates of birth,
+        contact details or note text.
+        Anton's own screening of your payouts never appears here.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReviewStatus'
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReviewKind'
+        - name: created_after
+          in: query
+          required: false
+          description: RFC 3339 timestamp or `YYYY-MM-DD` (midnight UTC), inclusive.
+          schema:
+            type: string
+        - name: created_before
+          in: query
+          required: false
+          description: RFC 3339 timestamp or `YYYY-MM-DD` (midnight UTC), exclusive.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of reviews.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Review'
+                  has_more:
+                    type: boolean
+                  next_cursor:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/intelligence/reviews/settings:
+    get:
+      tags: [Reviews]
+      summary: Retrieve review settings
+      description: |
+        Your review settings, read only (change them in the portal; Admin only). `api_clearance_requires_approval`
+        is always `true`: a decision your API credential proposes that clears the subject waits for a person.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      responses:
+        '200':
+          description: The settings (the defaults until your team saves them).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReviewSettings'
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+
+  /v1/intelligence/reviews/{id}:
+    get:
+      tags: [Reviews]
+      summary: Retrieve a review
+      description: |
+        A review with its decisions, approvals, notes and activity. Notes appear as presence only: their text
+        is never returned by the API. Another account's review is a 404.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewID'
+      responses:
+        '200':
+          description: The review.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReviewDetail'
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/intelligence/reviews/{id}/decisions:
+    post:
+      tags: [Reviews]
+      summary: Record a decision
+      description: |
+        Records a decision with a reason code (`reviews.decide`). `waiting_on_customer` pauses the due time.
+        A decision your second-approver setting covers waits for a person to approve it in the portal.
+        A decision your **API credential** proposes that clears the subject (`not_a_match`, `no_concern`)
+        **always** waits for a person, whatever the setting (`approval_rule: api_clearance`), and that person
+        must be independent of your API credentials: not the one who created the credential, and not in a role
+        that can create, rotate or revoke credentials (Admin, Technical) — in practice your Compliance role.
+        With no such person on your team the decision is refused (`409 second_approver_unavailable`).
+        Approving, sending back and withdrawing are done by people in the portal.
+
+        | Review kind | Decisions |
+        |---|---|
+        | `possible_sanctions_match`, `possible_pep_match`, `screening_review` | `waiting_on_customer`, `not_a_match`, `confirmed_match` |
+        | `manual` | `waiting_on_customer`, `no_concern`, `concern_confirmed` |
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionRequest'
+      responses:
+        '201':
+          description: The decision and the review after it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [review, decision]
+                    properties:
+                      review:
+                        $ref: '#/components/schemas/Review'
+                      decision:
+                        $ref: '#/components/schemas/ReviewDecision'
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `review_closed`, `decision_pending` (a decision is waiting for approval), or
+            `second_approver_unavailable` (nobody else on your team can approve).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: '`invalid_decision`, `invalid_reason_code` or `note_too_long`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/intelligence/reviews/{id}/resume:
+    post:
+      tags: [Reviews]
+      summary: Resume a review
+      description: Ends a wait on your customer. The due time moves out by the time spent waiting.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The review.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Review'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`review_not_waiting`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/intelligence/reviews/{id}/notes:
+    post:
+      tags: [Reviews]
+      summary: Add a note
+      description: |
+        Adds a note to an open review. The text is stored in a vault, separately for your account, and is
+        never returned by the API: your team reads it in the portal, and it appears in the case file your
+        people export.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              additionalProperties: false
+              properties:
+                text:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: The note (without its text).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReviewNote'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`review_closed`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/intelligence/reviews/exports/csv:
+    post:
+      tags: [Reviews]
+      summary: Export reviews as CSV
+      description: |
+        Your reviews opened in `[from, to)` (at most 366 days, at most 10,000 reviews) as CSV, for your own
+        auditors. Needs the **Audit Pack** add-on and `reviews.view`. Codes, ids and the masked subject only.
+        Each call is one export, recorded in your audit log with the range, row count and a SHA-256 of the file;
+        it does not accept an `Idempotency-Key`. Works for any review your account still holds, whatever
+        its status and whatever other add-ons you hold.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCSVExportRequest'
+      responses:
+        '200':
+          description: The CSV file.
+          headers:
+            X-Export-Id:
+              description: The export reference in your audit log.
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: '`idempotency_key_not_accepted`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+        '422':
+          description: '`invalid_export_range` or `export_too_large`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/intelligence/reviews/{id}/case-file:
+    post:
+      tags: [Reviews]
+      summary: Export a case file (PDF)
+      description: |
+        The review's formal record as a PDF, for your own auditors and regulators. Needs the **Audit Pack**
+        add-on and `reviews.view`. Each call is one export, recorded in your audit log (and once more when the
+        file is rendered, with its size and SHA-256); it does not accept an `Idempotency-Key`. A file
+        exported with an API credential never contains note text or your team members' names.
+      security:
+        - oauthDPoP: []
+          dpopHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewID'
+      responses:
+        '200':
+          description: The PDF.
+          headers:
+            X-Export-Id:
+              description: The export reference in your audit log.
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/ModuleNotEnabled'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /v1/verification-subjects:
     get:
@@ -4241,6 +4580,14 @@ components:
       schema:
         type: string
         pattern: '^eval_[a-zA-Z0-9]+$'
+    ReviewID:
+      name: id
+      in: path
+      required: true
+      description: Review ID.
+      schema:
+        type: string
+        pattern: '^irv_[a-zA-Z0-9]+$'
     VerificationSubjectID:
       name: id
       in: path
@@ -4341,6 +4688,21 @@ components:
                 error:
                   code: insufficient_scope
                   message: this endpoint requires a credential with the "payouts" scope
+    ModuleNotEnabled:
+      description: |
+        `module_not_enabled` — your account does not have the add-on this endpoint needs (the Reviews API and
+        Webhooks add-on, or the Audit Pack for exports). Also `capability_required` / `insufficient_scope`
+        (the `intelligence` scope) and `insufficient_permissions`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            module_not_enabled:
+              value:
+                error:
+                  code: module_not_enabled
+                  message: this feature is not enabled for your account
     NotFound:
       description: The resource does not exist, or belongs to a different merchant.
       content:
@@ -5784,6 +6146,317 @@ components:
         updated_at:
           $ref: '#/components/schemas/Timestamp'
 
+    ReviewKind:
+      type: string
+      description: |
+        `payout_held_by_rule` and `payee_risk_by_rule` are opened by your own payout rules; their money
+        decision is made on the linked approval in the portal, not through this API.
+      enum: [possible_sanctions_match, possible_pep_match, screening_review, manual, payout_held_by_rule, payee_risk_by_rule]
+    ReviewStatus:
+      type: string
+      enum: [open, waiting_on_customer, awaiting_approval, closed]
+    ReviewDecisionType:
+      type: string
+      description: |
+        The first five are decisions you can record through this API. `release` and `cancel` are votes on a
+        payout your rule held, and `approved`, `rejected` and `expired` are how such a review can close; both are
+        made in the portal.
+      enum: [waiting_on_customer, not_a_match, confirmed_match, no_concern, concern_confirmed, release, cancel, approved, rejected, expired]
+    ReviewReasonCode:
+      type: string
+      description: |
+        Accepted per decision: `waiting_on_customer` — `dob_needed`, `id_document_needed`, `more_information_needed`;
+        `not_a_match` — `dob_differs`, `nationality_differs`, `id_document_verified`, `different_entity_type`, `location_differs`;
+        `confirmed_match` — `identity_confirmed`, `exact_identifier_match`, `customer_confirmed`;
+        `no_concern` — `activity_explained`, `documents_verified`; `concern_confirmed` — `suspicious_activity`, `policy_breach`;
+        `other` with any decision.
+      enum: [dob_needed, id_document_needed, more_information_needed, dob_differs, nationality_differs, id_document_verified,
+        different_entity_type, location_differs, identity_confirmed, exact_identifier_match, customer_confirmed,
+        activity_explained, documents_verified, suspicious_activity, policy_breach, other]
+    ReviewActor:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [user, api_client, system]
+        id:
+          type: string
+          description: The user id or your API credential's client id. Absent for `system`.
+    Review:
+      type: object
+      required: [id, number, kind, priority, status, source, subject, opened_by, overdue, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: irv_01JB8QK2
+        number:
+          type: string
+          example: RV-0142
+        kind:
+          $ref: '#/components/schemas/ReviewKind'
+        priority:
+          type: string
+          enum: [high, medium, low]
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
+        outcome:
+          $ref: '#/components/schemas/ReviewDecisionType'
+        source:
+          type: string
+          enum: [evaluation, manual, monitoring, list_screening, payout_rule]
+        evaluation_id:
+          type: string
+          description: The evaluation of yours that opened the review.
+        linked_evaluation_id:
+          type: string
+        linked_review_id:
+          type: string
+        subject:
+          type: object
+          required: [type, display]
+          properties:
+            type:
+              type: string
+              enum: [person, business, account, transaction_pattern, unknown]
+            display:
+              type: string
+              description: Masked (first letter of each word).
+              example: V*** S***
+            reference:
+              type: string
+              description: Your own reference for the subject.
+              example: cust_7731
+        open_reason:
+          type: string
+          enum: [unusual_activity, due_diligence_refresh, external_referral, screening_follow_up, other]
+        opened_by:
+          $ref: '#/components/schemas/ReviewActor'
+        owner_id:
+          type: string
+        due_at:
+          $ref: '#/components/schemas/Timestamp'
+        paused_at:
+          $ref: '#/components/schemas/Timestamp'
+        overdue:
+          type: boolean
+        closed_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    ReviewDecision:
+      type: object
+      required: [id, decision, reason_code, note_recorded, proposed_by, requires_approval, created_at]
+      properties:
+        id:
+          type: string
+          example: ird_01JB9A
+        decision:
+          $ref: '#/components/schemas/ReviewDecisionType'
+        reason_code:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note_recorded:
+          type: boolean
+        proposed_by:
+          $ref: '#/components/schemas/ReviewActor'
+        requires_approval:
+          type: boolean
+        approval_rule:
+          type: string
+          description: Why a second approver is needed.
+          enum: [sanctions_pep, all, api_clearance]
+        approval:
+          type: object
+          required: [id, outcome, by, note_recorded, created_at]
+          properties:
+            id:
+              type: string
+            outcome:
+              type: string
+              enum: [approved, sent_back, withdrawn]
+            by:
+              $ref: '#/components/schemas/ReviewActor'
+            note_recorded:
+              type: boolean
+            created_at:
+              $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    ReviewNote:
+      type: object
+      required: [id, author, created_at]
+      description: A note's presence. Its text is never returned by the API.
+      properties:
+        id:
+          type: string
+          example: irn_01JB9C
+        author:
+          $ref: '#/components/schemas/ReviewActor'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    ReviewDetail:
+      allOf:
+        - $ref: '#/components/schemas/Review'
+        - type: object
+          required: [matched_entries, opening_note_recorded, decisions, notes, events]
+          properties:
+            matched_entries:
+              type: integer
+              description: How many list entries the source screening matched.
+            opening_note_recorded:
+              type: boolean
+            pending_decision_id:
+              type: string
+              description: The decision waiting for a second approver, if any.
+            decisions:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReviewDecision'
+            notes:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReviewNote'
+            events:
+              type: array
+              items:
+                type: object
+                required: [kind, actor, summary, created_at]
+                properties:
+                  kind:
+                    type: string
+                  actor:
+                    $ref: '#/components/schemas/ReviewActor'
+                  summary:
+                    type: string
+                  created_at:
+                    $ref: '#/components/schemas/Timestamp'
+    ReviewDecisionRequest:
+      type: object
+      required: [decision, reason_code]
+      additionalProperties: false
+      properties:
+        decision:
+          $ref: '#/components/schemas/ReviewDecisionType'
+        reason_code:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note:
+          type: string
+          maxLength: 2000
+          description: Stored in a vault; never returned by the API.
+    ReviewCSVExportRequest:
+      type: object
+      required: [from, to]
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          description: RFC 3339 timestamp or `YYYY-MM-DD` (midnight UTC), inclusive.
+          example: '2026-09-01'
+        to:
+          type: string
+          description: RFC 3339 timestamp or `YYYY-MM-DD` (midnight UTC), exclusive. At most 366 days after `from`.
+          example: '2026-10-01'
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
+    ReviewSettings:
+      type: object
+      properties:
+        second_approver:
+          type: string
+          enum: [off, sanctions_pep, all]
+        cleared_list_enabled:
+          type: boolean
+        cleared_list_min_decisions:
+          type: integer
+        cleared_list_months:
+          type: integer
+        target_high_minutes:
+          type: integer
+        target_medium_minutes:
+          type: integer
+        target_low_minutes:
+          type: integer
+        business_day_start_minute:
+          type: integer
+        business_day_end_minute:
+          type: integer
+        business_days:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        timezone:
+          type: string
+          example: America/Toronto
+        auto_open:
+          type: boolean
+        retention_years:
+          type: integer
+          minimum: 7
+          description: How long your review records are kept. 7 years by default; it can only be extended (beyond 7 years with the Audit Pack).
+        min_retention_years:
+          type: integer
+        api_clearance_requires_approval:
+          type: boolean
+          enum: [true]
+    ReviewWebhookData:
+      type: object
+      description: |
+        The `data` of every `intelligence.review.*` event: ids, codes and your own reference for the
+        subject. It never carries a name (not even the masked subject), a date of birth, contact details,
+        note text, a person on your team, anything about Anton's own screening, or anything about another
+        account. Fetch the review for more.
+      required: [review_id, number, kind, priority, source, actor_type, occurred_at]
+      properties:
+        review_id:
+          type: string
+        number:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ReviewKind'
+        priority:
+          type: string
+        source:
+          type: string
+        evaluation_id:
+          type: string
+        reference:
+          type: string
+          description: Your own reference for the subject, when you gave one.
+        actor_type:
+          type: string
+          enum: [user, api_client, system]
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
+        due_at:
+          $ref: '#/components/schemas/Timestamp'
+        decision_id:
+          type: string
+        decision:
+          $ref: '#/components/schemas/ReviewDecisionType'
+        reason_code:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        requires_approval:
+          type: boolean
+        approval_rule:
+          type: string
+          enum: [sanctions_pep, all, api_clearance]
+        approved:
+          type: boolean
+        reason:
+          type: string
+          description: Why a review reopened.
+          enum: [sent_back, withdrawn, customer_responded]
+        outcome:
+          $ref: '#/components/schemas/ReviewDecisionType'
+        note_id:
+          type: string
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+
     WebhookEventType:
       type: string
       description: |
@@ -5825,6 +6498,13 @@ components:
         - screening.hit
         - intelligence.evaluation.completed
         - intelligence.evaluation.failed
+        - intelligence.review.opened
+        - intelligence.review.decision_proposed
+        - intelligence.review.decided
+        - intelligence.review.reopened
+        - intelligence.review.closed
+        - intelligence.review.overdue
+        - intelligence.review.note_added
         - balance.low
         - test
 

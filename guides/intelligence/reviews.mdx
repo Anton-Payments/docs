@@ -1,0 +1,89 @@
+---
+title: "Reviews API"
+sidebarTitle: "Reviews API and webhooks"
+description: "Work your team's compliance reviews from your own case system: read reviews, record decisions and notes, get events, and export records for your auditors."
+---
+
+Reviews are your team's own compliance reviews: the screenings of yours that need a person (a possible sanctions or PEP match, a result flagged for review), the ones your ongoing monitoring or list screening opens, and the ones your team opens by hand. The portal is where your team works them. The Reviews API lets your own case system do the same, and keeps it in step through webhooks.
+
+<Note>
+  The Reviews API and its webhooks need the **Reviews API and Webhooks** add-on. Exports need the **Audit Pack**. Without the add-on an endpoint answers `403 module_not_enabled`. Every endpoint also needs a credential with the `intelligence` scope.
+</Note>
+
+These are your records, held for you. Reviews only ever contain your own screenings and your own team's work. Anton's own screening of payouts is separate and never appears in a review, a count or an event.
+
+## What the API returns
+
+A review carries ids, codes, the **masked** subject (`V*** S***`) and your own reference for it (`cust_7731`). It never returns a name, a date of birth, contact details or the text of a note. Notes are stored in a vault, separately for your account. The API can add them but never reads them back. Your team reads them in the portal, and they appear in the case files your people export.
+
+```bash
+curl "https://api.antonpayments.dev/v1/intelligence/reviews?status=open&limit=25" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "irv_01JB8QK2EXAMPLE",
+      "number": "RV-0142",
+      "kind": "possible_sanctions_match",
+      "priority": "high",
+      "status": "open",
+      "source": "evaluation",
+      "evaluation_id": "eval_01JB7ZEXAMPLE",
+      "subject": { "type": "person", "display": "V*** S***", "reference": "cust_7731" },
+      "opened_by": { "type": "system" },
+      "due_at": "2026-09-25T21:05:00Z",
+      "overdue": false,
+      "created_at": "2026-09-25T13:14:00Z",
+      "updated_at": "2026-09-25T13:14:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_cursor": ""
+}
+```
+
+## Recording decisions
+
+Record a decision with a reason code. Send an `Idempotency-Key` with every change.
+
+```bash
+curl https://api.antonpayments.dev/v1/intelligence/reviews/irv_01JB8QK2EXAMPLE/decisions \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: rv-0142-decision-1" \
+  -d '{ "decision": "not_a_match", "reason_code": "dob_differs", "note": "Passport date of birth differs from the list entry." }'
+```
+
+| Review kind | Decisions |
+|---|---|
+| `possible_sanctions_match`, `possible_pep_match`, `screening_review` | `waiting_on_customer`, `not_a_match`, `confirmed_match` |
+| `manual` | `waiting_on_customer`, `no_concern`, `concern_confirmed` |
+
+- `waiting_on_customer` pauses the review's due time while you ask your customer for something. Call [resume](/api-reference/reviews/resume-review) when they answer.
+- A decision covered by your second-approver setting waits for someone on your team to approve it in the portal.
+- **A decision your API credential makes that clears the subject (`not_a_match`, `no_concern`) always waits for a person**, whatever your setting (`approval_rule: api_clearance`). That person must be independent of your API credentials. They cannot be the one who created the credential, or have a role that can create, rotate or revoke credentials (Admin, Technical). In practice that is your Compliance role. If nobody on your team qualifies, the decision is refused with `409 second_approver_unavailable`.
+- Approving, sending a decision back and withdrawing one are done by people, in the portal. The API has no endpoints for them.
+- Reviews opened by your own payout rules (`payout_held_by_rule`, `payee_risk_by_rule`) are decided on their approval in the portal.
+
+## Events
+
+Subscribe to `intelligence.review.*` with [`POST /v1/webhooks`](/api-reference/webhooks/create-webhook-subscription) to keep your case system in step. See [Webhook Events](/api-reference/webhook-events#intelligence-review-events) for the payloads. Events carry ids, codes and your own reference only.
+
+## Exports for your auditors
+
+With the Audit Pack you can export your records at any time, for any review your account holds, whatever its status:
+
+- [CSV](/api-reference/reviews/export-reviews-csv): reviews opened in a date range (up to 366 days and 10,000 reviews per export).
+- [Case file](/api-reference/reviews/export-case-file): one review's formal record as a PDF, with the summary, decisions and approvals, the screening evidence and the audit trail.
+
+Each export is recorded in your audit log: who exported what, when, and a SHA-256 digest of the file. Exports don't take an `Idempotency-Key`, because each call is a separate audited export. A case file exported with an API credential leaves out note text and your team members' names. Your people get notes in the case files they export.
+
+## Retention
+
+Review records are kept for **7 years** by default. An Admin can extend the period in the portal (beyond 7 years with the Audit Pack). It can never be shortened, and nothing is deleted early while your account is active. [Get review settings](/api-reference/reviews/get-review-settings) shows the current period.
