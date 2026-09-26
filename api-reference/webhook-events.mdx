@@ -65,6 +65,9 @@ Each delivery also carries these HTTP headers:
   <Card title="Verification events" icon="id-card" href="#verification-events">
     KYC/KYB verification lifecycle, from link delivery to decision.
   </Card>
+  <Card title="Intelligence review events" icon="clipboard-check" href="#intelligence-review-events">
+    Your team's compliance reviews, for your own case system.
+  </Card>
   <Card title="Test events" icon="flask" href="#test-events">
     Fired by the test-delivery endpoint.
   </Card>
@@ -614,6 +617,97 @@ Same shape. The event **type** is the delivery receipt; `status` carries the att
 <Note>
   `verification.link_sent` fires only when Anton actually delivered the email. Manual-delivery flows (`delivery: "manual"`) and environments without an email path never emit it — the attempt stays `created` and you deliver the returned `hosted_link` yourself.
 </Note>
+
+## Intelligence review events
+
+Sent for your team's [Reviews](/guides/intelligence/reviews) while your account has the **Reviews API and Webhooks** add-on, including to `"*"` subscriptions. Every event carries the same compact `data`: ids, codes and your own reference for the subject. It never carries a name (not even the masked one), a date of birth, contact details, note text, a person on your team, anything about Anton's own screening, or anything about another account. Fetch `GET /v1/intelligence/reviews/{id}` for more.
+
+| Event type | Fires when |
+|---|---|
+| `intelligence.review.opened` | A review opened: from your screening, monitoring or list screening, from your payout rules, or by your team. |
+| `intelligence.review.decision_proposed` | A decision is waiting for a second approver (`approval_rule` says why). |
+| `intelligence.review.decided` | A decision took effect: one that needed no approval (including `waiting_on_customer`), or one that was approved (`approved: true`). |
+| `intelligence.review.reopened` | The review is open again: a decision was sent back or withdrawn, or your customer responded (`reason`). |
+| `intelligence.review.closed` | The review closed, with its `outcome`. |
+| `intelligence.review.overdue` | The review passed its due time without a decision. Sent once per due time. |
+| `intelligence.review.note_added` | A note was added. The note itself is never sent. |
+
+### `intelligence.review.opened`
+
+```json
+{
+  "id": "evt_01JB8QK2EXAMPLE0000000001",
+  "type": "intelligence.review.opened",
+  "created_at": "2026-09-25T13:14:00Z",
+  "data": {
+    "review_id": "irv_01JB8QK2EXAMPLE",
+    "number": "RV-0142",
+    "kind": "possible_sanctions_match",
+    "priority": "high",
+    "source": "evaluation",
+    "evaluation_id": "eval_01JB7ZEXAMPLE",
+    "reference": "cust_7731",
+    "status": "open",
+    "due_at": "2026-09-25T21:05:00Z",
+    "actor_type": "system",
+    "occurred_at": "2026-09-25T13:14:00Z"
+  }
+}
+```
+
+### `intelligence.review.decision_proposed`
+
+```json
+{
+  "id": "evt_01JB8QK2EXAMPLE0000000002",
+  "type": "intelligence.review.decision_proposed",
+  "created_at": "2026-09-25T14:51:00Z",
+  "data": {
+    "review_id": "irv_01JB8QK2EXAMPLE",
+    "number": "RV-0142",
+    "kind": "possible_sanctions_match",
+    "priority": "high",
+    "source": "evaluation",
+    "evaluation_id": "eval_01JB7ZEXAMPLE",
+    "reference": "cust_7731",
+    "decision_id": "ird_01JB9AEXAMPLE",
+    "decision": "not_a_match",
+    "reason_code": "dob_differs",
+    "requires_approval": true,
+    "approval_rule": "api_clearance",
+    "actor_type": "api_client",
+    "occurred_at": "2026-09-25T14:51:00Z"
+  }
+}
+```
+
+`intelligence.review.decided` has the same shape with `requires_approval: false` (or `approved: true` when a second approver approved it).
+
+### `intelligence.review.closed`
+
+```json
+{
+  "id": "evt_01JB8QK2EXAMPLE0000000003",
+  "type": "intelligence.review.closed",
+  "created_at": "2026-09-25T15:02:00Z",
+  "data": {
+    "review_id": "irv_01JB8QK2EXAMPLE",
+    "number": "RV-0142",
+    "kind": "possible_sanctions_match",
+    "priority": "high",
+    "source": "evaluation",
+    "evaluation_id": "eval_01JB7ZEXAMPLE",
+    "reference": "cust_7731",
+    "status": "closed",
+    "outcome": "not_a_match",
+    "decision_id": "ird_01JB9AEXAMPLE",
+    "actor_type": "user",
+    "occurred_at": "2026-09-25T15:02:00Z"
+  }
+}
+```
+
+`intelligence.review.reopened` carries `status`, `reason` (`sent_back`, `withdrawn` or `customer_responded`) and `due_at`; `intelligence.review.overdue` carries `status` and `due_at`; `intelligence.review.note_added` carries `note_id`.
 
 ## Balance events
 
