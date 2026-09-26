@@ -88,6 +88,7 @@
               "guides/intelligence/merchant-onboarding",
               "guides/intelligence/decisions",
               "guides/intelligence/evidence",
+              "guides/intelligence/reviews",
               "guides/intelligence/pii-and-vault",
               "guides/intelligence/idempotency-retries",
               "guides/intelligence/rate-limits-errors"
@@ -169,6 +170,19 @@
               "api-reference/intelligence/list-evaluations",
               "api-reference/intelligence/get-evaluation",
               "api-reference/intelligence/get-evidence"
+            ]
+          },
+          {
+            "group": "Reviews",
+            "pages": [
+              "api-reference/reviews/list-reviews",
+              "api-reference/reviews/get-review",
+              "api-reference/reviews/get-review-settings",
+              "api-reference/reviews/record-decision",
+              "api-reference/reviews/resume-review",
+              "api-reference/reviews/add-note",
+              "api-reference/reviews/export-reviews-csv",
+              "api-reference/reviews/export-case-file"
             ]
           },
           {
