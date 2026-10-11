@@ -54,7 +54,7 @@ Every transition emits a `payout.*` webhook event. Every transition is recorded 
 |---|---|---|
 | `completed` | Funds delivered to the beneficiary and settled. | Mark the payout done in your system. |
 | `failed` | The rail accepted the payout but settlement failed. | Review the failure reason, potentially retry with a different instrument. |
-| `returned` | Funds were returned by the receiving bank or counterparty. | Handle the return in your accounting — the original payout is final. |
+| `returned` | Funds were returned by the receiving bank or counterparty. The source amount is credited back to your balance and any unused FX buffer is released; the fee is retained, because the payout was attempted. | Handle the return in your accounting, including the retained fee — the original payout is final. |
 | `cannot_be_processed` | The payout cannot be processed. Anton is unable to provide further detail. | Treat as final. It cannot be cancelled via the API; contact support about the funds. |
 | `velocity_blocked` | A merchant velocity rule rejected the payout. | Wait for the velocity window to reset, or contact support to raise a threshold. |
 | `cancelled` | Cancelled by the merchant or operations team. | Final. Create a new payout if you still need to send funds. |
