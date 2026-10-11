@@ -176,7 +176,7 @@ Payouts move through a 15-state machine. The full detail is in [How Anton Evalua
 | `sent` | Rail confirmed dispatch. | Surface "sent" in your UI. |
 | `completed` | Funds delivered and settled. | Mark the payout done in your system. |
 | `failed` | Rail returned a hard failure. | Review failure reason; may retry with a different instrument. |
-| `returned` | Funds were returned after send. | Handle the return in your accounting. |
+| `returned` | Funds were returned after send. The source amount is credited back to your balance in the source currency and any unused FX buffer is released; the fee is retained, because the payout was attempted. | Handle the return in your accounting, including the retained fee. |
 | `screening_failed` | Under review (`on_hold: true`). | Treat as a normal "pending" state. |
 | `velocity_blocked` | Merchant velocity rule rejected. | Wait for velocity window to reset, or request a higher threshold. |
 | `manual_review` | Under review (`on_hold: true`). | Treat as a normal "pending" state; can take minutes to hours. |

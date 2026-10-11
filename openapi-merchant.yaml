@@ -5408,6 +5408,11 @@ components:
         Payout lifecycle state. See the
         [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) guide for
         the full state machine and integration guidance.
+
+        On `returned`, the source amount is credited back to your balance in
+        the source currency and any unused FX buffer is released; the fee is
+        retained, because the payout was attempted. (A payout cancelled before
+        rail submission releases the source amount, fee and buffer in full.)
       enum:
         - created
         - pending_screening
