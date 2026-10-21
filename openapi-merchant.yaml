@@ -5037,7 +5037,7 @@ components:
         raw identifiers are never returned in this response. Use
         `GET /v1/beneficiaries/{id}/pii` to retrieve detokenized PII for a
         beneficiary you own.
-      required: [id, merchant_id, type, status, display_name, country, risk_score, risk_tier, created_at, updated_at]
+      required: [id, merchant_id, type, status, display_name, country, risk_score, risk_tier, risk_signals, created_at, updated_at]
       properties:
         id:
           type: string
@@ -5076,16 +5076,40 @@ components:
           minimum: 0
           maximum: 1000
           description: |
-            Anton Engine payee risk score, 0–1000 integer. Higher is ALWAYS
-            worse. `null` until the engine has profiled this beneficiary
-            (typically after its first payout). Derived from the payee
-            profile at read time.
+            Payee risk score, 0–1000 integer. Higher is always worse.
+            Reflects the payee and recent payouts to it, and is refreshed
+            over time. `null` until the payee's first score, shortly after
+            it is created.
         risk_tier:
           type: [string, 'null']
           enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
           description: >-
             Risk band for `risk_score` — `>= 900` CRITICAL, `>= 700` HIGH,
             `>= 400` MEDIUM, else LOW. `null` while unscored.
+        risk_signals:
+          type: array
+          maxItems: 2
+          description: |
+            The main reasons behind `risk_score`, worst first, at most two.
+            Empty while unscored or when nothing stands out. Show `label`
+            as-is; branch on `code`, which is stable. New codes may be added.
+
+            Codes: `regulatory_review`, `high_risk_country`,
+            `possible_duplicate`, `identity_mismatch`, `masked_network`,
+            `location_mismatch`, `details_changed`, `high_payout_volume`,
+            `large_payouts`, `unusual_activity`, `unverified_account`,
+            `crypto_focused`, `new_payee`, `incomplete_details`,
+            `established`, `trusted_by_other_merchants`.
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code:
+                type: string
+                example: new_payee
+              label:
+                type: string
+                example: New payee
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -5100,6 +5124,9 @@ components:
         external_ref: contractor-1042
         risk_score: 120
         risk_tier: LOW
+        risk_signals:
+          - code: new_payee
+            label: New payee
         metadata:
           department: engineering
         created_at: "2026-04-15T14:30:00Z"
