@@ -5094,7 +5094,7 @@ components:
             Empty while unscored or when nothing stands out. Show `label`
             as-is; branch on `code`, which is stable. New codes may be added.
 
-            Codes: `regulatory_review`, `high_risk_country`,
+            Codes: `regulatory_review`, `flagged_across_network`, `high_risk_country`,
             `possible_duplicate`, `identity_mismatch`, `masked_network`,
             `location_mismatch`, `details_changed`, `high_payout_volume`,
             `large_payouts`, `unusual_activity`, `unverified_account`,
