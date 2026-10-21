@@ -3,6 +3,18 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-10-21 — Filters on the evaluations list
+
+### Added
+
+- **Filters on `GET /v1/intelligence/evaluations`**: `decision` and `event_type` (each one or more values, comma-separated), `risk_level`, `evaluated_after` and `evaluated_before`. Every filter is optional.
+
+### Changed
+
+- **Unknown filter values are rejected** with `400 validation_error`, never an empty list.
+
+---
+
 ## 2026-09-24 — Payout holds, `cannot_be_processed`, and RFI responses
 
 ### Added
