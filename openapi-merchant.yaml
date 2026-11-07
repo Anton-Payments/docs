@@ -3573,11 +3573,39 @@ paths:
       summary: List transactions on a funding account
       operationId: listAccountTransactions
       description: |
-        Cursor-paginated list of transactions for this funding account — deposits
-        from external parties, payout debits, fee deductions, and FX transfers.
+        Cursor-paginated list of transactions for this funding account, newest
+        first: deposits, payout debits, fees and exchanges. Takes the same
+        filters as `GET /v1/transactions`, except `currency`, which the path sets.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
+        - name: type
+          in: query
+          description: Only this type.
+          schema:
+            type: string
+            enum: [payin, payout, fee, exchange, transfer, return]
+        - name: direction
+          in: query
+          description: '`credit` for money in, `debit` for money out.'
+          schema:
+            type: string
+            enum: [credit, debit]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [completed, pending, failed, returned]
+        - name: created_after
+          in: query
+          description: Inclusive lower bound, RFC 3339.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          description: Exclusive upper bound, RFC 3339.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Transactions on this account.
@@ -3592,6 +3620,8 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/MerchantTransaction'
+        '400':
+          description: A filter value is not one the API accepts (`validation_error`).
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3604,7 +3634,8 @@ paths:
       operationId: listTransactions
       description: |
         Cursor-paginated list of transactions across every funding account you
-        hold. Filter by currency, type, or time range as needed.
+        hold, newest first. Every filter is optional; an unknown value is a 400,
+        never an empty list.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -3614,15 +3645,29 @@ paths:
             $ref: '#/components/schemas/CurrencyCode'
         - name: type
           in: query
-          description: Transaction type — `credit`, `debit`, `fee`, `fx`, etc.
+          description: Only this type.
           schema:
             type: string
+            enum: [payin, payout, fee, exchange, transfer, return]
+        - name: direction
+          in: query
+          description: '`credit` for money in, `debit` for money out.'
+          schema:
+            type: string
+            enum: [credit, debit]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [completed, pending, failed, returned]
         - name: created_after
           in: query
+          description: Inclusive lower bound, RFC 3339.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
+          description: Exclusive upper bound, RFC 3339.
           schema:
             $ref: '#/components/schemas/Timestamp'
       responses:
@@ -3641,12 +3686,93 @@ paths:
                           $ref: '#/components/schemas/MerchantTransaction'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '400':
+          description: A filter value is not one the API accepts (`validation_error`).
 
+  /v1/transactions/export.csv:
+    get:
+      tags: [Accounts]
+      summary: Export transactions as CSV
+      operationId: exportTransactions
+      description: |
+        Every transaction matching the same filters as `GET /v1/transactions`,
+        newest first, as UTF-8 CSV with a header row. Debits carry a negative
+        amount; a row with an empty `direction` carries the unsigned amount,
+        so leave those out of any total until you know which way they moved. Needs the `reports.download` permission, is limited to a few
+        exports a minute, and each export is recorded in your audit log. More
+        than 10,000 matching rows is refused: narrow the dates and export again.
+      parameters:
+        - name: currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [payin, payout, fee, exchange, transfer, return]
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [credit, debit]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [completed, pending, failed, returned]
+        - name: created_after
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: created_before
+          in: query
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: The CSV file.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: A filter value is not one the API accepts (`validation_error`).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Your role can't export (`insufficient_permissions`).
+        '422':
+          description: More than 10,000 transactions match (`export_too_large`).
+        '429':
+          description: Too many exports; try again in a minute.
 
-
-
-
-
+  /v1/transactions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Accounts]
+      summary: Retrieve a transaction
+      operationId: getTransaction
+      description: One transaction on your balances. Another merchant's id is a 404.
+      responses:
+        '200':
+          description: The transaction.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MerchantTransaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such transaction (`transaction_not_found`).
 
   /v1/pricing:
     get:
@@ -4478,22 +4604,16 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
-        - name: sell_currency
+        - name: status
           in: query
+          schema:
+            type: string
+            enum: [pending, completed, failed]
+        - name: currency
+          in: query
+          description: Exchanges that sold or bought this currency.
           schema:
             $ref: '#/components/schemas/CurrencyCode'
-        - name: buy_currency
-          in: query
-          schema:
-            $ref: '#/components/schemas/CurrencyCode'
-        - name: created_after
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
-        - name: created_before
-          in: query
-          schema:
-            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Paginated list of exchanges.
@@ -4510,6 +4630,36 @@ paths:
                           $ref: '#/components/schemas/FXExchange'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /v1/fx/exchanges/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^fxx_[a-zA-Z0-9]+$'
+    get:
+      tags: [FX]
+      summary: Retrieve an FX exchange
+      operationId: getFXExchange
+      description: |
+        One executed exchange, with the markup and fee of the quote it
+        executed. Another merchant's id is a 404.
+      responses:
+        '200':
+          description: The exchange.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FXExchangeDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such exchange (`exchange_not_found`).
 
 
 
@@ -5064,7 +5214,7 @@ components:
         raw identifiers are never returned in this response. Use
         `GET /v1/beneficiaries/{id}/pii` to retrieve detokenized PII for a
         beneficiary you own.
-      required: [id, merchant_id, type, status, display_name, country, risk_score, risk_tier, created_at, updated_at]
+      required: [id, merchant_id, type, status, display_name, country, risk_score, risk_tier, risk_signals, created_at, updated_at]
       properties:
         id:
           type: string
@@ -5103,16 +5253,40 @@ components:
           minimum: 0
           maximum: 1000
           description: |
-            Anton Engine payee risk score, 0–1000 integer. Higher is ALWAYS
-            worse. `null` until the engine has profiled this beneficiary
-            (typically after its first payout). Derived from the payee
-            profile at read time.
+            Payee risk score, 0–1000 integer. Higher is always worse.
+            Reflects the payee and recent payouts to it, and is refreshed
+            over time. `null` until the payee's first score, shortly after
+            it is created.
         risk_tier:
           type: [string, 'null']
           enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
           description: >-
             Risk band for `risk_score` — `>= 900` CRITICAL, `>= 700` HIGH,
             `>= 400` MEDIUM, else LOW. `null` while unscored.
+        risk_signals:
+          type: array
+          maxItems: 2
+          description: |
+            The main reasons behind `risk_score`, worst first, at most two.
+            Empty while unscored or when nothing stands out. Show `label`
+            as-is; branch on `code`, which is stable. New codes may be added.
+
+            Codes: `regulatory_review`, `flagged_across_network`, `high_risk_country`,
+            `possible_duplicate`, `identity_mismatch`, `masked_network`,
+            `location_mismatch`, `details_changed`, `high_payout_volume`,
+            `large_payouts`, `unusual_activity`, `unverified_account`,
+            `crypto_focused`, `new_payee`, `incomplete_details`,
+            `established`, `trusted_by_other_merchants`.
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code:
+                type: string
+                example: new_payee
+              label:
+                type: string
+                example: New payee
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -5127,6 +5301,9 @@ components:
         external_ref: contractor-1042
         risk_score: 120
         risk_tier: LOW
+        risk_signals:
+          - code: new_payee
+            label: New payee
         metadata:
           department: engineering
         created_at: "2026-04-15T14:30:00Z"
@@ -6998,6 +7175,20 @@ components:
         created_at:
           $ref: '#/components/schemas/Timestamp'
 
+    FXExchangeDetail:
+      description: An exchange plus the pricing of the quote it executed.
+      allOf:
+        - $ref: '#/components/schemas/FXExchange'
+        - type: object
+          properties:
+            fx_markup_bps:
+              type: integer
+              description: Markup over the mid-market rate, in basis points.
+            fx_fee:
+              $ref: '#/components/schemas/Money'
+            fx_fee_currency:
+              $ref: '#/components/schemas/CurrencyCode'
+
     MerchantAccount:
       type: object
       description: |
@@ -7056,7 +7247,9 @@ components:
 
     MerchantTransaction:
       type: object
-      description: A transaction on a merchant funding account.
+      description: |
+        One movement on a merchant balance. The amount is unsigned;
+        `direction` says which way it moved.
       required: [id, type, status, amount, currency, created_at]
       properties:
         id:
@@ -7065,10 +7258,17 @@ components:
           type: string
         type:
           type: string
-          description: '`credit` | `debit` | `fee` | `fx` | provider-specific types.'
+          enum: [payin, payout, fee, exchange, transfer, return]
         status:
           type: string
-          description: '`pending` | `posted` | `failed`.'
+          enum: [completed, pending, failed, returned]
+        direction:
+          type: string
+          enum: [credit, debit]
+          description: |
+            `credit` is money in, `debit` money out. Absent on the rare
+            transaction whose side can't be told (a transfer recorded before
+            directions were kept).
         amount:
           $ref: '#/components/schemas/Money'
         currency:
@@ -7077,6 +7277,12 @@ components:
           type: string
         counterparty_name:
           type: string
+        payout_id:
+          type: string
+          description: The payout this movement belongs to, when there is one.
+        exchange_id:
+          type: string
+          description: The FX exchange this movement belongs to, when there is one.
         created_at:
           $ref: '#/components/schemas/Timestamp'
 
