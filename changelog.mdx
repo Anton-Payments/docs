@@ -3,6 +3,26 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-10-21 — Transactions: direction, filters, single reads and export
+
+### Added
+
+- **`direction` on transactions.** `credit` for money in, `debit` for money out. Amounts stay unsigned. It's absent on the rare transaction whose side can't be told.
+- **`payout_id` and `exchange_id` on transactions**, linking a movement to the payout or FX exchange it belongs to, when known.
+- **Filters on `GET /v1/transactions`** and `GET /v1/accounts/{currency}/transactions`: `type`, `direction`, `status`, `currency`, `created_after`, `created_before`.
+- **`GET /v1/transactions/{id}`** and **`GET /v1/fx/exchanges/{id}`** (the exchange with its quote's markup and fee).
+- **`GET /v1/transactions/export.csv`**: the matching transactions as CSV. Needs the `reports.download` permission, and each export is recorded in your audit log.
+- **`return` transaction type**, for a payout returned to your balance or a deposit recalled from it.
+
+### Changed
+
+- **Transaction `type` and `status` values** are now always lowercase and from a fixed list: types `payin`, `payout`, `fee`, `exchange`, `transfer`, `return`; statuses `completed`, `pending`, `failed`, `returned`. The values previously documented (`credit`, `debit`, `fx`, `posted`) were never sent.
+- **Unknown filter values are rejected** with `400 validation_error` instead of being ignored. On the per-currency list, a `currency` different from the path is rejected.
+- **Transaction list cursors.** Pages no longer repeat or skip a transaction that arrives while you page. A cursor issued before this change returns `400 invalid_cursor`; start again from the first page.
+- **`GET /v1/fx/exchanges` filters** are documented as what the API accepts: `status` and `currency`.
+
+---
+
 ## 2026-09-24 — Payout holds, `cannot_be_processed`, and RFI responses
 
 ### Added
