@@ -255,9 +255,36 @@ paths:
         Pages the authenticated merchant's evaluations, newest first. Authenticated-only — there is no
         anonymous variant. Strictly merchant-scoped: only evaluations created under your account appear.
         Requires the `intelligence` credential scope and account capability.
+        Every filter is optional; an unknown value is a 400, never an empty list.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
+        - name: decision
+          in: query
+          description: One or more of `approve`, `review_manual`, `decline`, `review_auto`, comma-separated.
+          schema:
+            type: string
+          example: review_manual,decline
+        - name: event_type
+          in: query
+          description: One or more of `payee.create`, `instrument.create`, `payout.create`, `merchant.onboard`, `monitoring.evaluate`, comma-separated.
+          schema:
+            type: string
+        - name: risk_level
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: evaluated_after
+          in: query
+          description: Inclusive lower bound, RFC 3339.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
+        - name: evaluated_before
+          in: query
+          description: Exclusive upper bound, RFC 3339.
+          schema:
+            $ref: '#/components/schemas/Timestamp'
       responses:
         '200':
           description: Page of evaluations.
