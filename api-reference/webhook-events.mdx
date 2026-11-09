@@ -90,7 +90,7 @@ Each delivery also carries these HTTP headers:
 | `payout.velocity_blocked` | A risk/velocity rule blocked the payout at create time. |
 | `payout.engine_blocked` | A blocked payout where the Anton engine layer was the primary decider. Fires alongside `payout.velocity_blocked`. |
 
-The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.velocity_blocked` and `payout.engine_blocked` use a compact shape with just `id`, `status`, and `reason`. `payout.on_hold` uses a compact shape with `id`, `merchant_id`, `status`, and `on_hold` — it carries no reason.
+The payload for payout lifecycle events is the payout object. The exact shape depends on the event — `payout.created` includes the initial fields; `payout.sent`, `payout.completed`, and `payout.failed` include rail identifiers and timestamps as they become available. `payout.velocity_blocked` and `payout.engine_blocked` use a compact shape with just `id`, `status`, and `reason`. `payout.on_hold` uses a compact shape with `id`, `merchant_id` and `on_hold`. It carries no reason.
 
 <Note>
   When a real-time risk score is available on the payout (available via the Anton risk engine), the lifecycle event payloads include a `risk` object summarising the score and contributing factors.
@@ -164,7 +164,6 @@ A payout is on hold.
   "data": {
     "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
     "merchant_id": "mer_01HX8Z9K0M2N3P4Q5R6S7T8UZZ",
-    "status": "screening_failed",
     "on_hold": true
   }
 }
