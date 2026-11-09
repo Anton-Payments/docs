@@ -448,7 +448,7 @@ json.NewDecoder(resp.Body).Decode(&payout)
 
 </CodeGroup>
 
-The payout starts at `pending_screening`. In the sandbox, it moves through the full lifecycle in seconds:
+The payout starts at `pending_screening`: the payout is completing required checks before it can be sent. A payout can return to this status after approval or review. No action is needed. In the sandbox, it moves through the full lifecycle in seconds:
 
 ```
 pending_screening → pending_approval → approved → processing → sent → completed
@@ -474,7 +474,7 @@ curl https://api.antonpayments.dev/v1/webhooks \
       "payout.completed",
       "payout.failed",
       "payout.returned",
-      "payout.screening_failed"
+      "payout.on_hold"
     ]
   }'
 ```

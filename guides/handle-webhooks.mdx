@@ -31,7 +31,7 @@ curl https://api.antonpayments.dev/v1/webhooks \
       "payout.completed",
       "payout.failed",
       "payout.returned",
-      "payout.screening_failed",
+      "payout.on_hold",
       "beneficiary.blocked",
       "rfi.created"
     ]
@@ -81,7 +81,7 @@ Core payout lifecycle:
 - `payout.completed` — funds delivered
 - `payout.failed` — rail rejected or failed settlement
 - `payout.returned` — funds returned after send
-- `payout.screening_failed` — payout on hold until it is reviewed
+- `payout.on_hold` — a payout is on hold
 - `payout.cannot_be_processed` — payout cannot be processed
 - `payout.velocity_blocked` — velocity rule rejected
 - `payout.engine_blocked` — engine-driven block; fires alongside `payout.velocity_blocked`
