@@ -3,6 +3,13 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-11-09 — `payout.on_hold` webhook event
+
+### Changed
+
+- **`payout.screening_failed` is renamed `payout.on_hold`.** The event fires at the same point with the same payload: `id`, `merchant_id`, `status` and `on_hold`. Subscribe to `payout.on_hold` in place of `payout.screening_failed`. Payout statuses are unchanged.
+- **`pending_screening` described.** The payout is completing required checks before it can be sent. A payout can return to this status after approval or review. No action is needed.
+
 ## 2026-10-21 — Filters on the evaluations list
 
 ### Added

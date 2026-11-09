@@ -44,6 +44,8 @@ Any status before processing can also move to:
   cannot_be_processed
 ```
 
+`pending_screening`: the payout is completing required checks before it can be sent. A payout can return to this status after approval or review. No action is needed.
+
 A payout under review (`manual_review`, `screening_failed`, `pending_engine_review`) returns to the flow, is cancelled, or moves to `cannot_be_processed` when the review concludes. A payout can also be placed on hold in another pre-rail status; `on_hold` tells you, whatever the status.
 
 Every transition emits a `payout.*` webhook event. Every transition is recorded in the audit log.
