@@ -5613,6 +5613,8 @@ components:
         [How Anton Evaluates Payouts](/how-anton-evaluates-payouts) guide for
         the full state machine and integration guidance.
 
+        `pending_screening`: the payout is completing required checks before it can be sent. A payout can return to this status after approval or review. No action is needed.
+
         On `returned`, the source amount is credited back to your balance in
         the source currency and any unused FX buffer is released; the fee is
         retained, because the payout was attempted. (A payout cancelled before
@@ -6671,7 +6673,8 @@ components:
       description: |
         See [Webhook Events](/api-reference/webhook-events) for the full catalog
         and payload shapes. `payout.cannot_be_processed` fires when a payout
-        enters the `cannot_be_processed` status. `screening.hit` is no longer
+        enters the `cannot_be_processed` status. `payout.on_hold` fires when a
+        payout is on hold. `screening.hit` is no longer
         sent: a payout under review shows `on_hold: true` and its status
         instead; the type stays accepted for existing subscriptions. Some reserved event types (`balance.low` on some
         paths) may be defined but not yet dispatched — subscribing to them is
@@ -6685,7 +6688,7 @@ components:
         - payout.failed
         - payout.cancelled
         - payout.returned
-        - payout.screening_failed
+        - payout.on_hold
         - payout.cannot_be_processed
         - payout.velocity_blocked
         - payout.engine_blocked

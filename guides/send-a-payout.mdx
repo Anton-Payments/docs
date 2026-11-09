@@ -169,7 +169,7 @@ Payouts move through a 15-state machine. The full detail is in [How Anton Evalua
 | State | Meaning | What to do |
 |---|---|---|
 | `created` | Payout record exists. Next: screening. | No action. |
-| `pending_screening` | OFAC + velocity + engine scoring running. | No action. Transient. |
+| `pending_screening` | The payout is completing required checks before it can be sent. A payout can return to this status after approval or review. | No action is needed. |
 | `pending_approval` | Clear to submit; waiting for maker-checker if configured. | No action. |
 | `approved` | Ready for the rail. | No action. |
 | `processing` | Submitted to the rail. | Surface "in flight" in your UI. |
@@ -193,7 +193,7 @@ Every state transition fires a `payout.*` event. Subscribe once via `POST /v1/we
 - `payout.completed` — funds delivered
 - `payout.failed`, `payout.returned` — terminal failure paths
 - `payout.velocity_blocked`, `payout.engine_blocked` — risk blocks (`payout.engine_blocked` fires alongside `payout.velocity_blocked` when the Anton engine drove the block)
-- `payout.screening_failed` — the payout is on hold until it is reviewed
+- `payout.on_hold` — a payout is on hold
 - `payout.cannot_be_processed` — the payout cannot be processed
 - `payout.cancelled` — operator or API cancellation
 
