@@ -32,8 +32,7 @@ Some endpoints are more expensive or more sensitive and carry a tighter ceiling:
 | `POST /v1/fx/quote` | 30 / minute per merchant |
 | `GET /v1/fx/rate` | 30 / minute per merchant |
 | `POST /v1/fx/exchange` | 10 / minute per merchant |
-| `/v1/intelligence/*` (authenticated) | 120 / minute per merchant, on top of the global quota |
-| `/v1/intelligence/*` (anonymous public test surface, where enabled) | 120 / minute per IP |
+| `/v1/intelligence/*` | 120 / minute per merchant, on top of the global quota |
 | `POST /v1/webhooks/{id}/test` | Reduced (sensitive operations ceiling) |
 
 **Sensitive operations** — webhook test sends and similar one-off verification flows — run under a lower per-merchant ceiling to prevent abuse. Normal integration traffic will not reach it.
