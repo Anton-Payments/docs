@@ -7,8 +7,7 @@ description: "Intelligence rate limits, capability and scope gates, and strict r
 
 | Surface | Limit |
 |---|---|
-| Authenticated (`/v1/intelligence/*` with credentials) | **120 requests / minute per merchant** by default, on top of the global per-merchant quota. |
-| Anonymous public test surface (where enabled) | 120 requests / minute per IP. |
+| `/v1/intelligence/*` | **120 requests / minute per merchant** by default, on top of the global per-merchant quota. |
 
 When a request is limited, Anton returns `429 Too Many Requests`, a `Retry-After` header, and the standard JSON error envelope:
 

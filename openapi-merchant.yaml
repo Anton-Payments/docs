@@ -135,22 +135,20 @@ paths:
         These conditional requirements can't be expressed in the static `required` arrays below, so they are
         enumerated here.
 
-        **Dual surface.** With OAuth+DPoP credentials, the evaluation is persisted under YOUR merchant account
-        (retrievable via the scoped reads below) and the `Idempotency-Key` header is REQUIRED. The credential
-        must carry the `intelligence` scope and the account the `intelligence` capability — every Anton account
-        has it, including AI-compliance-only merchants. Vault-token enrichment only accepts tokens owned by the
-        calling merchant. Without credentials, the request runs on the anonymous public TEST surface (where
-        enabled) under a synthetic shared merchant — public evaluations are not tied to your account.
+        **Authentication.** OAuth+DPoP credentials are required; a request without them is refused with `401`.
+        The evaluation is persisted under YOUR merchant account (retrievable via the scoped reads below) and
+        the `Idempotency-Key` header is REQUIRED. The credential must carry the `intelligence` scope and the
+        account the `intelligence` capability — every Anton account has it, including AI-compliance-only
+        merchants. Vault-token enrichment only accepts tokens owned by the calling merchant.
 
         **Asynchronous money-movement evaluations.** On the authenticated (OAuth+DPoP) surface, a
         `payout_screening` evaluation runs the full AI panel and can take up to ~20 seconds, so it is accepted
         asynchronously: the response is `202 Accepted` with `{evaluation_id, status: "pending"}` and a
         `Location` header. Poll `GET /v1/intelligence/evaluations/{id}` (which returns the pending state until
         the evaluation settles), or subscribe to the `intelligence.evaluation.completed` /
-        `intelligence.evaluation.failed` webhook events for push notification. All other use cases — and every
-        call on the anonymous test surface — respond synchronously with `200` and the full evaluation.
+        `intelligence.evaluation.failed` webhook events for push notification. All other use cases respond
+        synchronously with `200` and the full evaluation.
       security:
-        - {}
         - oauthDPoP: []
           dpopHeader: []
       parameters:
@@ -316,9 +314,8 @@ paths:
     post:
       tags: [Intelligence]
       summary: Validate an intelligence evaluation request
-      description: Validates the strict request contract without creating or persisting an evaluation. Works on both the authenticated and (where enabled) anonymous public surface.
+      description: Validates the strict request contract without creating or persisting an evaluation. Requires OAuth+DPoP credentials, like every evaluation route.
       security:
-        - {}
         - oauthDPoP: []
           dpopHeader: []
       parameters:
@@ -358,11 +355,9 @@ paths:
       tags: [Intelligence]
       summary: Retrieve an intelligence evaluation
       description: |
-        Strictly scoped to the calling surface: authenticated callers can only retrieve evaluations created
-        under their own merchant account; anonymous callers can only retrieve public-test evaluations.
+        Strictly scoped to the caller: you can only retrieve evaluations created under your own merchant account.
         A foreign evaluation ID is a 404 — indistinguishable from a nonexistent one.
       security:
-        - {}
         - oauthDPoP: []
           dpopHeader: []
       parameters:
@@ -389,7 +384,6 @@ paths:
       summary: Retrieve obscured intelligence evidence
       description: Returns provider-neutral, PII-free evidence and records an audit event. Scoped identically to the evaluation read — your own evaluations only.
       security:
-        - {}
         - oauthDPoP: []
           dpopHeader: []
       parameters:
@@ -7369,7 +7363,7 @@ components:
           $ref: '#/components/schemas/IntelligencePayout'
         merchant:
           type: object
-          description: Accepted for future compatibility but ignored on the public test endpoint.
+          description: Accepted for future compatibility; currently ignored.
         context:
           $ref: '#/components/schemas/IntelligenceContext'
 

@@ -8,14 +8,11 @@ Anton Intelligence turns payment-risk inputs into one concise evaluation result.
 
 The create endpoint is intentionally strict. Unknown fields are rejected, enum values are fixed, and sensitive values are used only in memory. Anton persists redacted decision evidence, not raw PII. Every response includes `contract_version: "intelligence-public-v1"` so clients can pin and generate SDKs against a stable schema.
 
-## Two surfaces, one contract
+## Authentication
 
-| Surface | Auth | Persistence |
-|---|---|---|
-| **Authenticated** (production contract) | OAuth + DPoP with the `intelligence` scope — see [Authentication](/authentication) | Evaluations persist under **your** merchant account; read them back via the scoped [list](/api-reference/intelligence/list-evaluations), get, and evidence endpoints. `Idempotency-Key` is **required** on create. |
-| **Anonymous public test** (where enabled) | None | Evaluations run under a shared synthetic test merchant — not tied to your account, and not listable. |
+Every Intelligence route requires OAuth + DPoP credentials with the `intelligence` scope — see [Authentication](/authentication). There is no anonymous surface; a request without credentials returns `401`. Evaluations persist under **your** merchant account; read them back via the scoped [list](/api-reference/intelligence/list-evaluations), get, and evidence endpoints. `Idempotency-Key` is **required** on create. To try the API, use your sandbox credentials.
 
-The request and response contract is identical on both surfaces. Intelligence is available on **every** account tier — including [AI-compliance-only accounts](/capabilities) that have no payout surface. Start with the [quickstart](/guides/intelligence/quickstart) for the full authenticated walkthrough.
+Intelligence is available on **every** account tier — including [AI-compliance-only accounts](/capabilities) that have no payout surface. Start with the [quickstart](/guides/intelligence/quickstart) for the full authenticated walkthrough.
 
 ## Use cases
 

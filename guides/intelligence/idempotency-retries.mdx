@@ -3,7 +3,7 @@ title: "Idempotency and Retries"
 description: "Safely retry Intelligence create requests."
 ---
 
-The `Idempotency-Key` header is **required** on authenticated `POST /v1/intelligence/evaluations` calls (omitting it returns `400 missing_idempotency_key`). On the anonymous public test surface it is optional but recommended.
+The `Idempotency-Key` header is **required** on `POST /v1/intelligence/evaluations` (omitting it returns `400 missing_idempotency_key`).
 
 ```http
 Idempotency-Key: intel-payee-crm-84012-v1
