@@ -3,6 +3,12 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-11-18 — Intelligence requires credentials
+
+### Removed
+
+- **The anonymous public test surface for Anton Intelligence.** Every `/v1/intelligence/evaluations` route now requires OAuth + DPoP credentials with the `intelligence` scope, in every environment, sandbox included. A request without credentials returns `401`. Use your sandbox credentials to try the API.
+
 ## 2026-11-09 — `payout.on_hold` webhook event
 
 ### Changed
