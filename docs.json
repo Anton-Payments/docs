@@ -279,7 +279,7 @@
             "group": "FX",
             "pages": [
               "api-reference/fx/create-fx-quote",
-              "api-reference/fx/get-indicative-fx-rate",
+              "api-reference/fx/list-indicative-fx-rates",
               "api-reference/fx/create-fx-exchange",
               "api-reference/fx/list-fx-exchanges",
               "api-reference/fx/get-fx-exchange"
@@ -345,6 +345,10 @@
     "indexing": "navigable"
   },
   "redirects": [
+    {
+      "source": "/api-reference/fx/get-indicative-fx-rate",
+      "destination": "/api-reference/fx/list-indicative-fx-rates"
+    },
     {
       "source": "/api-reference/fx/execute-fx-exchange",
       "destination": "/api-reference/fx/create-fx-exchange"

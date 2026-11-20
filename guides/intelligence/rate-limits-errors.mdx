@@ -20,7 +20,7 @@ When a request is limited, Anton returns `429 Too Many Requests`, a `Retry-After
 }
 ```
 
-Honor `Retry-After` and use jittered backoff — see [Rate Limits](/api-reference/rate-limits) for handling patterns and the `X-RateLimit-*` headers present on every response. Sustained-volume screening integrations can request a higher ceiling via [help.antonpayments.com](https://help.antonpayments.com).
+Honor `Retry-After` and use jittered backoff — see [Rate Limits](/api-reference/rate-limits) for handling patterns and the `X-RateLimit-*` headers on every authenticated response. Sustained-volume screening integrations can request a higher ceiling via [help.antonpayments.com](https://help.antonpayments.com).
 
 ## Common errors
 

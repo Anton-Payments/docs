@@ -6,7 +6,7 @@ description: "Get indicative rates, lock a quote, execute an exchange between cu
 
 Three related surfaces sit under `/v1/fx`:
 
-- **Indicative rate** (`GET /v1/fx/rate`) — read-only, cheap, non-binding. For display.
+- **Indicative rates** (`GET /v1/fx/rates`) — read-only, cheap, non-binding. For display.
 - **Lockable quote** (`POST /v1/fx/quotes`) — binding rate for a short window. Use when you need price certainty before committing.
 - **Exchange** (`POST /v1/fx/exchanges`) — executes a locked quote, moves funds between your own merchant balances in different currencies.
 
@@ -16,7 +16,7 @@ Plus — cross-currency payouts automatically use FX under the hood when you sub
 
 | You want to... | Use |
 |---|---|
-| Show a customer what a payout will cost them in their currency | `GET /v1/fx/rate` |
+| Show a customer what a payout will cost them in their currency | `GET /v1/fx/rates` |
 | Lock in a rate before showing "send" to the customer | `POST /v1/fx/quotes` then `POST /v1/fx/exchanges` |
 | Convert your own balance from one currency to another | `POST /v1/fx/quotes` then `POST /v1/fx/exchanges` |
 | Send a payout that debits one of your currencies and credits another on the beneficiary's side | `POST /v1/payouts` with different source/dest currencies — FX is automatic |
@@ -26,33 +26,40 @@ Plus — cross-currency payouts automatically use FX under the hood when you sub
 For display-only use. Two currencies, optional recipient-side (`buy`) amount:
 
 ```bash
-curl "https://api.antonpayments.dev/v1/fx/rate?source_currency=USD&destination_currency=EUR&destination_amount=1000" \
+curl "https://api.antonpayments.dev/v1/fx/rates?source_currency=USD&destination_currency=EUR&destination_amount=1000" \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
-Response:
+Response: a list holding one quote for the pair (`has_more` is always `false`).
 
 ```json
 {
-  "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFY",
-  "object": "fx_quote",
-  "livemode": false,
-  "status": "active",
-  "locked": false,
-  "source_currency": "USD",
-  "destination_currency": "EUR",
-  "source_amount": "1090.18",
-  "destination_amount": "1000.00",
-  "mid_market_rate": "0.9215",
-  "customer_rate": "0.9173",
-  "inverse_rate": "1.0902",
-  "markup_basis_points": 45,
-  "fee": "0.00",
-  "fee_currency": "USD",
-  "expires_at": "2026-04-15T14:32:00.000Z",
-  "metadata": {},
-  "created_at": "2026-04-15T14:31:00.000Z",
-  "updated_at": "2026-04-15T14:31:00.000Z"
+  "object": "list",
+  "data": [
+    {
+      "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFY",
+      "object": "fx_quote",
+      "livemode": false,
+      "status": "active",
+      "locked": false,
+      "source_currency": "USD",
+      "destination_currency": "EUR",
+      "source_amount": "1090.18",
+      "destination_amount": "1000.00",
+      "mid_market_rate": "0.9215",
+      "customer_rate": "0.9173",
+      "inverse_rate": "1.0902",
+      "markup_basis_points": 45,
+      "fee": "0.00",
+      "fee_currency": "USD",
+      "expires_at": "2026-04-15T14:32:00.000Z",
+      "metadata": {},
+      "created_at": "2026-04-15T14:31:00.000Z",
+      "updated_at": "2026-04-15T14:31:00.000Z"
+    }
+  ],
+  "has_more": false,
+  "next_cursor": null
 }
 ```
 
