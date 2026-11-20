@@ -141,7 +141,7 @@ See [Webhook Events](/api-reference/webhook-events) for payload schemas.
 | `duplicate_beneficiary`         | 422  | Exact PII match already exists under your merchant.                | Search by `external_ref` or PII; reuse the existing ID.             |
 | `missing_beneficiary_details`   | 400  | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`.                              |
 | `invalid_display_name`          | 422  | Name fields empty or invalid characters.                           | Fix name; a minimum of first + last is required for individuals.    |
-| `beneficiary_not_found`         | 404  | ID doesn't exist or belongs to a different merchant.               | Check the ID and prefix.                                            |
+| `resource_missing`              | 404  | ID doesn't exist or belongs to a different merchant.               | Check the ID and prefix.                                            |
 | `beneficiary_pii_update_failed` | 422  | PII update hit a validation or tokenization error.                 | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |
 
 ## Next steps

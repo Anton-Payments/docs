@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=86f58e915bf1fcddb1f9670aa8480da5b6337bcbe4c728795724c2b12863a485
+# anton-spec-sync sha256=bd105696f0575d5ea183260b893d763fb277f0b83702ca231def080685ee8bf5
 openapi: 3.1.0
 
 info:
@@ -35,6 +35,9 @@ info:
     status: `authentication_error` 401, `permission_error` 403, `invalid_request_error` 400/404/409/422,
     `idempotency_error` (the three `Idempotency-Key` failures: 409 `idempotency_in_flight`, 422
     `idempotency_key_reused`, 400 `missing_idempotency_key`), `rate_limit_error` 429, `api_error` 500/502/503.
+    A `401` carries `WWW-Authenticate`. An ID in a path with the wrong prefix or shape is `400
+    resource_id_invalid` with `param` set; a well-formed ID that names nothing of yours (or belongs to another
+    merchant) is `404 resource_missing`; a bad or expired `cursor` is `400 cursor_invalid`.
     `param` names the request field at fault; a validation failure lists every failing field at once in
     `details`. A 5xx never carries internal detail in `message`; it is safe to retry with the same
     `Idempotency-Key`. `/oauth/token` keeps the RFC 6749 error format.
@@ -50,7 +53,7 @@ info:
     `X-Request-ID` header carries the same value for one transition and will be removed; do not send it
     expecting it to be echoed. To correlate with your own systems, send `X-Client-Request-Id` (up to 128
     characters from `A-Z a-z 0-9 . _ : -`; anything else is ignored). We log it beside ours and never use it
-    as ours. An idempotent replay (`X-Idempotent-Replayed: true`) returns the original body unchanged, so its
+    as ours. An idempotent replay (`Idempotent-Replayed: true`) returns the original body unchanged, so its
     `error.request_id`, if any, is the original request's; its `Request-Id` header is the replay's own.
 
     See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
@@ -1548,7 +1551,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OAuthError' }
         '401':
-          description: invalid_client (unknown client_id or wrong secret).
+          description: 'invalid_client (unknown client_id or wrong secret). Carries the `WWW-Authenticate` header (RFC 6749 section 5.2); the body stays in the RFC 6749 format.'
+          headers:
+            WWW-Authenticate:
+              description: '`Basic realm="anton"`: the token endpoint authenticates clients with their id and secret.'
+              schema:
+                type: string
+                example: 'Basic realm="anton"'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OAuthError' }
@@ -2461,8 +2470,8 @@ paths:
           headers:
             Request-Id:
               $ref: '#/components/headers/Request-Id'
-            X-Idempotent-Replayed:
-              $ref: '#/components/headers/X-Idempotent-Replayed'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
               schema:
@@ -3130,8 +3139,8 @@ paths:
         '201':
           description: Payout created. Its later lifecycle is reported by webhooks.
           headers:
-            X-Idempotent-Replayed:
-              $ref: '#/components/headers/X-Idempotent-Replayed'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
               example: {"data":{"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null}}
@@ -3160,7 +3169,7 @@ paths:
         '403':
           $ref: '#/components/responses/CapabilityForbidden'
         '404':
-          description: '`beneficiary_not_found` or `quote_not_found` — the beneficiary or the pricing quote does not exist for your merchant.'
+          description: '`resource_missing` — `beneficiary_id` or `quote_id` names no beneficiary or pricing quote of yours.'
           content:
             application/json:
               schema:
@@ -3326,7 +3335,7 @@ paths:
           description: The outcome for each ID.
           content:
             application/json:
-              example: {"data":{"object":"payout_cancellation_result","livemode":false,"cancelled":[],"failed":[{"id":"pay_dbvqrpqukoh470i0a7tg","code":"payout_not_cancellable","message":"payout could not be cancelled"},{"id":"pay_missing","code":"payout_not_found","message":"payout not found"}]}}
+              example: {"data":{"object":"payout_cancellation_result","livemode":false,"cancelled":[],"failed":[{"id":"pay_dbvqrpqukoh470i0a7tg","code":"payout_not_cancellable","message":"payout could not be cancelled"},{"id":"pay_missing","code":"resource_missing","message":"payout not found"}]}}
               schema:
                 type: object
                 required: [data]
@@ -3334,7 +3343,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/PayoutCancelResult'
         '400':
-          description: '`ids_required`, `too_many_ids`, `invalid_id` (an ID is not a payout ID; `param` names it), or the request body is malformed.'
+          description: '`ids_required`, `too_many_ids`, `resource_id_invalid` (an ID is not a payout ID; `param` names it), or the request body is malformed.'
           content:
             application/json:
               schema:
@@ -3368,7 +3377,7 @@ paths:
       summary: Retrieve a payout
       operationId: getPayout
       description: |
-        Return a payout. `404` if it does not exist or belongs to another merchant; `400 invalid_id` if the ID
+        Return a payout. `404` if it does not exist or belongs to another merchant; `400 resource_id_invalid` if the ID
         is not a payout ID. The response adds `risk` (the payout's score and tier) and `delivery` (corridor timing,
         when known and the payout is neither on hold nor finished) to the payout object. `risk` is omitted for a
         payout that is on hold or `failed` with `cannot_be_processed`.
@@ -3666,7 +3675,7 @@ paths:
                     $ref: '#/components/schemas/BeneficiaryImport'
         '400':
           description: |
-            `invalid_import_id` — the path parameter does not look like an `imp_` ID — or
+            `resource_id_invalid` — the path parameter does not look like an `imp_` ID — or
             `invalid_request` — a request body was sent — or `missing_idempotency_key`.
           content:
             application/json:
@@ -3677,7 +3686,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`import_not_found` — no import matches this ID for your merchant.'
+          description: '`resource_missing` — no import matches this ID for your merchant.'
           content:
             application/json:
               schema:
@@ -3797,7 +3806,7 @@ paths:
         '403':
           $ref: '#/components/responses/CapabilityForbidden'
         '404':
-          description: '`template_not_found` — the template could not be located.'
+          description: '`resource_missing` — the template could not be located.'
           content:
             application/json:
               schema:
@@ -4349,8 +4358,8 @@ paths:
           headers:
             Request-Id:
               $ref: '#/components/headers/Request-Id'
-            X-Idempotent-Replayed:
-              $ref: '#/components/headers/X-Idempotent-Replayed'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
               example: {"data":{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","is_default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}}
@@ -4367,7 +4376,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`beneficiary_not_found` — `beneficiary_id` names no beneficiary of yours.'
+          description: '`resource_missing` — `beneficiary_id` names no beneficiary of yours.'
           content:
             application/json:
               schema:
@@ -4403,7 +4412,7 @@ paths:
         Filters are exact-match and validated: an unknown query parameter, a filter value
         outside its allowed set, an out-of-range `limit` or a bad `cursor` is a `400`,
         never an empty list. A `beneficiary_id` that names no beneficiary of yours is
-        `404 beneficiary_not_found`. `created_after` is inclusive and `created_before`
+        `404 resource_missing`. `created_after` is inclusive and `created_before`
         exclusive; both are RFC 3339 UTC timestamps.
       parameters:
         - $ref: '#/components/parameters/Limit'
@@ -4477,7 +4486,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`beneficiary_not_found` — `beneficiary_id` names no beneficiary of yours.'
+          description: '`resource_missing` — `beneficiary_id` names no beneficiary of yours.'
           content:
             application/json:
               schema:
@@ -4819,7 +4828,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No balance exists for this currency on your account (`balance_not_found`).
+          description: No balance exists for this currency on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -5045,7 +5054,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: You have no account in this currency (`account_not_found`).
+          description: You have no account in this currency (`resource_missing`).
           content:
             application/json:
               schema:
@@ -5108,7 +5117,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: You have no account in this currency (`account_not_found`).
+          description: You have no account in this currency (`resource_missing`).
           content:
             application/json:
               schema:
@@ -5226,7 +5235,7 @@ paths:
         '400':
           description: >-
             An unknown query parameter, a filter value that is not valid, a timestamp that does not parse, a
-            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`invalid_cursor`).
+            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`cursor_invalid`).
           content:
             application/json:
               schema:
@@ -5250,7 +5259,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: You have no account in this currency (`account_not_found`).
+          description: You have no account in this currency (`resource_missing`).
           content:
             application/json:
               schema:
@@ -5368,7 +5377,7 @@ paths:
         '400':
           description: >-
             An unknown query parameter, a filter value that is not valid, a timestamp that does not parse, a
-            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`invalid_cursor`).
+            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`cursor_invalid`).
           content:
             application/json:
               schema:
@@ -5546,7 +5555,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -5556,7 +5565,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such transaction on your account (`transaction_not_found`).
+          description: No such transaction on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6157,7 +6166,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6169,10 +6178,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6181,7 +6190,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6250,7 +6259,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6295,7 +6304,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6307,10 +6316,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6319,7 +6328,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6386,7 +6395,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6398,10 +6407,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6410,7 +6419,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6478,7 +6487,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6490,10 +6499,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6502,7 +6511,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6567,7 +6576,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6579,10 +6588,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6591,7 +6600,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6651,7 +6660,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6663,10 +6672,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6675,7 +6684,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -6945,7 +6954,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6957,10 +6966,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -6969,7 +6978,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such event on your account (`webhook_event_not_found`).
+          description: No such event on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -7058,7 +7067,7 @@ paths:
                       "next_cursor": null
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -7070,10 +7079,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -7082,7 +7091,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such event on your account (`webhook_event_not_found`).
+          description: No such event on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -7167,7 +7176,7 @@ paths:
                       "next_cursor": null
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -7179,10 +7188,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -7191,7 +7200,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -7267,7 +7276,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such subscription on your account (`webhook_subscription_not_found`).
+          description: No such subscription on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -8220,7 +8229,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such quote on your account (`quote_not_found`).
+          description: No such quote on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -8232,10 +8241,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "quote_not_found",
+                        "code": "resource_missing",
                         "message": "quote not found or unavailable",
                         "param": "quote_id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#quote_not_found",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_missing",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -8453,7 +8462,7 @@ paths:
                       }
                     }
         '400':
-          description: A malformed id (`invalid_id`).
+          description: A malformed id (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -8465,10 +8474,10 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "invalid_id",
+                        "code": "resource_id_invalid",
                         "message": "invalid id format",
                         "param": "id",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_id",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_id_invalid",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -8477,7 +8486,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such exchange on your account (`exchange_not_found`).
+          description: No such exchange on your account (`resource_missing`).
           content:
             application/json:
               schema:
@@ -8489,9 +8498,9 @@ paths:
                     {
                       "error": {
                         "type": "invalid_request_error",
-                        "code": "exchange_not_found",
+                        "code": "resource_missing",
                         "message": "exchange not found",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#exchange_not_found",
+                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#resource_missing",
                         "request_id": "req_01JD3XB7Q2"
                       }
                     }
@@ -8687,7 +8696,16 @@ components:
       description: Seconds to wait before retrying. Included on 429 responses.
       schema:
         type: integer
-    X-Idempotent-Replayed:
+    WWW-Authenticate:
+      description: |
+        On every `401`: the authentication challenge (RFC 6750, RFC 9449). `DPoP realm="anton", algs="ES256 EdDSA"`
+        names the scheme and the DPoP proof algorithms we accept. When a credential was sent and refused it
+        adds `error="invalid_token"` (the access token, or a static API key) or `error="invalid_dpop_proof"`
+        (the DPoP proof). A request with no credential carries no `error`.
+      schema:
+        type: string
+        example: 'DPoP realm="anton", algs="ES256 EdDSA", error="invalid_token"'
+    Idempotent-Replayed:
       description: '`true` when the response is a replay of a previous request with the same `Idempotency-Key`.'
       schema:
         type: string
@@ -8701,7 +8719,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
     Unauthorized:
-      description: Missing, expired or invalid credentials (access token or DPoP proof).
+      description: Missing, expired or invalid credentials (access token or DPoP proof). Carries `WWW-Authenticate`.
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWW-Authenticate'
       content:
         application/json:
           schema:
@@ -10338,7 +10359,7 @@ components:
                 type: string
               code:
                 type: string
-                description: '`payout_not_found`, `payout_on_hold`, `payout_not_cancellable` or `internal_error`.'
+                description: '`resource_missing`, `payout_on_hold`, `payout_not_cancellable` or `internal_error`.'
               message:
                 type: string
 

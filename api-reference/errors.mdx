@@ -75,7 +75,7 @@ The type follows the status, so you can handle a class of error without knowing 
 | `201` | A new resource was created. |
 | `202` | Accepted for asynchronous work. The body is the resource in its pending state. |
 | `400` | The request is malformed: JSON, an unknown field or parameter, a type, an ID's shape, a missing `Idempotency-Key`. |
-| `401` | No credentials, or credentials that do not verify. |
+| `401` | No credentials, or credentials that do not verify. Carries `WWW-Authenticate`, see [Authentication challenge](#authentication-challenge). |
 | `403` | Valid credentials without the permission, scope or capability. |
 | `404` | The resource does not exist for your account. |
 | `409` | The request conflicts with the resource's current state, or an identical request is still in flight. |
@@ -83,6 +83,16 @@ The type follows the status, so you can handle a class of error without knowing 
 | `422` | The request is well formed but fails a business rule. |
 | `429` | Rate limited. Carries `Retry-After`. |
 | `500`, `502`, `503` | Our failure, a provider's failure, or temporary unavailability. |
+
+## Authentication challenge
+
+Every `401` carries a `WWW-Authenticate` header (RFC 6750, RFC 9449). It names the scheme, the realm and the DPoP proof algorithms the API accepts:
+
+```
+WWW-Authenticate: DPoP realm="anton", algs="ES256 EdDSA"
+```
+
+When you sent a credential and it was refused, the header also names the reason: `error="invalid_token"` for an access token (or a static API key) that does not verify, and `error="invalid_dpop_proof"` when the DPoP proof is what failed. A request with no credential carries no `error`. `POST /oauth/token` answers a `401` with `WWW-Authenticate: Basic realm="anton"` and keeps its RFC 6749 body.
 
 ## Handling errors
 
@@ -108,9 +118,9 @@ Codes group below by what went wrong. The status for each code is fixed.
 | <span id="unknown_field">`unknown_field`</span> | 400 | `invalid_request_error` | The body has a field the endpoint does not define. Unknown fields are rejected, never ignored. `param` names it. |
 | <span id="unknown_parameter">`unknown_parameter`</span> | 400 | `invalid_request_error` | The query string has a parameter the endpoint does not define. `param` names it. |
 | <span id="type_mismatch">`type_mismatch`</span> | 400 | `invalid_request_error` | A field has the wrong JSON type. `param` names it. |
-| <span id="invalid_id">`invalid_id`</span> | 400 | `invalid_request_error` | A path ID does not have the shape of an ID for this resource (wrong prefix or characters). The request cannot name any resource. See `not_found` for a well-formed ID that does not exist. |
+| <span id="resource_id_invalid">`resource_id_invalid`</span> | 400 | `invalid_request_error` | A path ID does not have the shape of an ID for this resource (wrong prefix or characters). `param` names it. The request cannot name any resource. See `resource_missing` for a well-formed ID that does not exist. |
 | <span id="invalid_limit">`invalid_limit`</span> | 400 | `invalid_request_error` | `limit` is not an integer from 1 to 100. |
-| <span id="invalid_cursor">`invalid_cursor`</span> | 400 | `invalid_request_error` | `cursor` is not one this endpoint issued, or has been altered. Start again from the first page. |
+| <span id="cursor_invalid">`cursor_invalid`</span> | 400 | `invalid_request_error` | `cursor` is not one this endpoint issued, has expired, or has been altered. Start again from the first page. |
 | <span id="invalid_api_version">`invalid_api_version`</span> | 400 | `invalid_request_error` | The `Anton-Version` header is not a version Anton knows. Send one of the versions in the [changelog](/changelog) or omit the header. |
 | <span id="missing_idempotency_key">`missing_idempotency_key`</span> | 400 | `idempotency_error` | A `POST` that needs an `Idempotency-Key` header was sent without one. See [Idempotency](/api-reference/idempotency). |
 | <span id="ids_required">`ids_required`</span> | 400 | `invalid_request_error` | A bulk action was sent with an empty `ids` list. |
@@ -124,7 +134,6 @@ Codes group below by what went wrong. The status for each code is fixed.
 | <span id="file_hash_mismatch">`file_hash_mismatch`</span> | 400 | `invalid_request_error` | The `file_hash` you sent does not match the uploaded file. Re-upload the file. |
 | <span id="invalid_template_type">`invalid_template_type`</span> | 400 | `invalid_request_error` | The template `type` is not one the endpoint offers. |
 | <span id="invalid_template_format">`invalid_template_format`</span> | 400 | `invalid_request_error` | The template `format` is not one the endpoint offers. |
-| <span id="invalid_import_id">`invalid_import_id`</span> | 400 | `invalid_request_error` | The import ID is not well formed. |
 
 ### Authentication and access
 
@@ -146,17 +155,7 @@ Codes group below by what went wrong. The status for each code is fixed.
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
 | <span id="not_found">`not_found`</span> | 404 | `invalid_request_error` | No such resource for your account. A resource that belongs to another account looks the same. |
-| <span id="payout_not_found">`payout_not_found`</span> | 404 | `invalid_request_error` | No payout with this ID. |
-| <span id="beneficiary_not_found">`beneficiary_not_found`</span> | 404 | `invalid_request_error` | No beneficiary with this ID. |
-| <span id="account_not_found">`account_not_found`</span> | 404 | `invalid_request_error` | You have no account in this currency. |
-| <span id="balance_not_found">`balance_not_found`</span> | 404 | `invalid_request_error` | You have no balance in this currency. |
-| <span id="transaction_not_found">`transaction_not_found`</span> | 404 | `invalid_request_error` | No transaction with this ID. |
-| <span id="exchange_not_found">`exchange_not_found`</span> | 404 | `invalid_request_error` | No FX exchange with this ID. |
-| <span id="quote_not_found">`quote_not_found`</span> | 404 | `invalid_request_error` | No quote with this ID. |
-| <span id="import_not_found">`import_not_found`</span> | 404 | `invalid_request_error` | No beneficiary import with this ID. |
-| <span id="template_not_found">`template_not_found`</span> | 404 | `invalid_request_error` | No template for the type and format you asked for. |
-| <span id="webhook_subscription_not_found">`webhook_subscription_not_found`</span> | 404 | `invalid_request_error` | No webhook subscription with this ID. |
-| <span id="webhook_event_not_found">`webhook_event_not_found`</span> | 404 | `invalid_request_error` | No webhook event with this ID. |
+| <span id="resource_missing">`resource_missing`</span> | 404 | `invalid_request_error` | A well-formed ID, or a currency, names nothing for your account: it does not exist, or it belongs to another account. The two cases are not told apart. |
 
 ### Conflicts
 

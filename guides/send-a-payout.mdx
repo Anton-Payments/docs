@@ -156,7 +156,7 @@ users outside that purpose.
 Idempotency-Key: payout-{invoice_id}-{beneficiary_id}
 ```
 
-If you retry with the same key, Anton returns the original response and sets `X-Idempotent-Replayed: true`. Different bodies with the same key return `409 idempotency_conflict`. See [Idempotency](/api-reference/idempotency) for details.
+If you retry with the same key, Anton returns the original response and sets `Idempotent-Replayed: true`. Different bodies with the same key return `409 idempotency_conflict`. See [Idempotency](/api-reference/idempotency) for details.
 
 ## The state machine
 
@@ -216,7 +216,7 @@ On successful cancellation, the debited funds (source amount, fee, and any FX bu
   <Accordion title="422 corridor_not_enabled">
     The requested `(source_currency, destination_currency, country, method)` isn't active on your account. Call `GET /v1/corridors` to see active ones, or contact support to enable a new corridor.
   </Accordion>
-  <Accordion title="404 beneficiary_not_found / instrument_not_found">
+  <Accordion title="404 resource_missing">
     The ID doesn't exist or belongs to a different merchant. Double-check the ID, including prefix (`ben_...`, `ins_...`).
   </Accordion>
   <Accordion title="422 invalid_instrument">

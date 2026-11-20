@@ -43,7 +43,7 @@ The URL must be:
 - **HTTPS** — `http://` is rejected in all non-development environments.
 - **Publicly reachable** — private IP ranges, loopback, and cloud metadata endpoints (e.g. `169.254.169.254`) are rejected server-side.
 
-The response includes the subscription `id` (`wbh_...`) and a one-time `secret` (`whsec_...`). **Store the secret in your secrets manager immediately** — Anton doesn't retain the plaintext, and you cannot retrieve it later without calling `GET /v1/webhooks/{id}/secret` (which you can, but rotating is cleaner).
+The response includes the subscription `id` (`wbh_...`) and a one-time `secret` (`whsec_...`). **Store the secret in your secrets manager immediately** — it is shown once, on create and on rotate, and can't be read back later. If you lose it, rotate it.
 
 Use `["*"]` as the `events` array to subscribe to everything.
 
@@ -156,7 +156,7 @@ curl https://api.antonpayments.dev/v1/webhooks/$WBH_ID/secret/rotate \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
-The response contains the new secret — again, shown once. **Rotation has no overlap window** — the old secret is invalidated immediately. Plan rotations for low-traffic periods, and update your receiver's secret in lockstep.
+The response contains the new secret — again, shown once. The previous secret keeps signing for 24 hours, so deliveries carry both signatures while you deploy the new one. See [webhook signing](/api-reference/webhook-signing).
 
 ## Deactivation vs deletion
 

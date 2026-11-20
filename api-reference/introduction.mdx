@@ -31,7 +31,7 @@ Access is additionally governed by **account capabilities** and **credential sco
 - **Amounts.** Monetary values are decimal strings with a currency: `"1234.56"`, not `1234.56`. Parse them as decimals, not floats. Responses always render the currency's full precision (`"10.50"`, never `"10.5"`). `GET /v1/currencies` lists each currency's precision.
 - **Timestamps.** RFC 3339 in UTC with milliseconds and a `Z` suffix: `"2026-11-19T14:03:22.104Z"`. Fields that hold a time end in `_at`. A calendar date with no time ends in `_date` and is `YYYY-MM-DD`.
 - **Resources.** Every object has `id`, `object` (its type name), `livemode` (`false` in sandbox), and, where you create it, `metadata`: up to 50 string keys. Do not put personal data in metadata.
-- **Identifiers.** Prefixed opaque strings: `pay_...`, `ben_...`, `ins_...`, `bat_...`, `whk_...`. A path ID with the wrong shape is `400 invalid_id`; a well-formed ID that does not exist for your account is `404`. Treat IDs as opaque.
+- **Identifiers.** Prefixed opaque strings: `pay_...`, `ben_...`, `ins_...`, `bat_...`, `whk_...`. A path ID with the wrong prefix or shape is `400 resource_id_invalid`, with `param` set; a well-formed ID that does not exist for your account, or belongs to another account, is `404 resource_missing`. Treat IDs as opaque.
 - **Lists.** Every list is `{"object": "list", "data": [...], "has_more": ..., "next_cursor": ...}` with cursor pagination. See [Pagination](/api-reference/pagination).
 - **Errors.** Every error has `type`, `code`, `message` and `request_id`. See [Errors](/api-reference/errors).
 - **Download the spec.** The full OpenAPI description is at [openapi-merchant.yaml](/openapi-merchant.yaml). Use it to generate a client or import the API into a tool such as Postman.
@@ -44,7 +44,8 @@ Access is additionally governed by **account capabilities** and **credential sco
 | `Anton-Version` | Every `/v1` response | The API version the response was served at. |
 | `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | Every authenticated response | Your current rate limit window. See [Rate limits](/api-reference/rate-limits). |
 | `Retry-After` | `429` | Seconds to wait before retrying. |
-| `X-Idempotent-Replayed` | Replayed responses | `true` when the response is a replay of an earlier request with the same `Idempotency-Key`. See [Idempotency](/api-reference/idempotency). |
+| `WWW-Authenticate` | `401` | The authentication challenge: `DPoP realm="anton", algs="ES256 EdDSA"`, plus `error="invalid_token"` or `error="invalid_dpop_proof"` when a credential was sent and refused. See [Errors](/api-reference/errors#authentication-challenge). |
+| `Idempotent-Replayed` | Replayed responses | `true` when the response is a replay of an earlier request with the same `Idempotency-Key`. See [Idempotency](/api-reference/idempotency). |
 
 To correlate a call with your own systems, send `X-Client-Request-Id` (up to 128 characters from `A-Z a-z 0-9 . _ : -`; anything else is ignored). We log it next to ours and never use it as ours.
 
