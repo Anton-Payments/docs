@@ -1,0 +1,80 @@
+name: spec-sync
+
+# openapi-merchant.yaml is generated from the API source and synced here by an
+# automated pull request from the `docs/openapi-sync` branch. Nobody edits it
+# by hand: the next sync would overwrite the edit, and a hand edit can drift
+# from what the API serves.
+#
+# This check is read-only and has two parts.
+#   1. Integrity: the file's first line records the SHA-256 of the rest of the
+#      file. A hand edit to the body no longer matches it.
+#   2. Provenance: a pull request that changes the file must come from the sync
+#      branch in this repository, be opened by a bot, and change nothing else.
+#
+# Until the first sync lands the file has no integrity line; that is reported
+# and allowed, but any pull request that changes the file still has to be the
+# sync.
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spec-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: spec-sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SPEC: openapi-merchant.yaml
+      SYNC_BRANCH: docs/openapi-sync
+      # Passed through the environment, never interpolated into the script.
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      THIS_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Integrity — the file matches its recorded checksum
+        run: |
+          set -euo pipefail
+          first="$(head -n 1 "${SPEC}")"
+          if [[ "${first}" != "# anton-spec-sync sha256="* ]]; then
+            echo "::notice::${SPEC} has no sync integrity line yet (the first sync has not landed); skipping the checksum."
+            exit 0
+          fi
+          recorded="${first#\# anton-spec-sync sha256=}"
+          actual="$(tail -n +2 "${SPEC}" | sha256sum | cut -d' ' -f1)"
+          if [ "${recorded}" != "${actual}" ]; then
+            echo "::error file=${SPEC}::${SPEC} does not match its recorded checksum, so it was edited by hand. It is generated from the API source: revert the edit and let the sync pull request update it."
+            exit 1
+          fi
+          echo "Checksum matches."
+
+      - name: Provenance — only the sync changes the file
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+          if ! grep -qxF "${SPEC}" <<< "${changed}"; then
+            echo "This pull request does not touch ${SPEC}."
+            exit 0
+          fi
+          fail() { echo "::error file=${SPEC}::$1"; exit 1; }
+          [ "${HEAD_REPO}" = "${THIS_REPO}" ] || fail "${SPEC} changed from a fork. Only the sync from this repository may change it."
+          [ "${HEAD_REF}" = "${SYNC_BRANCH}" ] || fail "${SPEC} changed on branch '${HEAD_REF}'. It is generated; only the '${SYNC_BRANCH}' sync branch may change it."
+          [ "${AUTHOR_TYPE}" = "Bot" ] || fail "${SPEC} changed in a pull request not opened by the sync bot."
+          [ "${changed}" = "${SPEC}" ] || fail "The sync pull request must change only ${SPEC}; it also changes: $(grep -vxF "${SPEC}" <<< "${changed}" | tr '\n' ' ')"
+          [[ "$(head -n 1 "${SPEC}")" == "# anton-spec-sync sha256="* ]] || fail "${SPEC} in the sync pull request has no integrity line."
+          echo "Sync pull request: provenance OK."

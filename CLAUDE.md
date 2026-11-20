@@ -81,6 +81,9 @@ fails there is nothing to read on GitHub. The local run and the CI job are where
 - `openapi-merchant.yaml` is the merchant-facing contract. It must match what `api` actually
   serves — the API's own `api/docs/openapi-public.yaml` and `api/docs/path-map.md` are the
   upstream truth.
+- `openapi-merchant.yaml` is **generated**: never edit it here. It is synced from the API source
+  by an automated pull request from the `docs/openapi-sync` branch, and the `spec-sync` check
+  fails any other change to it.
 - A documented request/response shape that drifts from the API is worse than an undocumented
   one: an integrator builds against it and fails in production.
 - `changelog.mdx` is merchant-facing. It is fed by issues labelled `customer-visible` in
