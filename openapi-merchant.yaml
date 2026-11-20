@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=bd105696f0575d5ea183260b893d763fb277f0b83702ca231def080685ee8bf5
+# anton-spec-sync sha256=53aabe6da2631ff1074f7b3b90c274a38453f6c87f8133d4f3f32bf924b68d53
 openapi: 3.1.0
 
 info:
@@ -3560,7 +3560,7 @@ paths:
         its own (`imp_…`, status `preview`) and expires 24 hours after it is created.
 
         After reviewing the per-row errors, call
-        `POST /v1/beneficiaries/import/{importID}/confirm` to create the beneficiaries
+        `POST /v1/beneficiaries/import/{import_id}/confirm` to create the beneficiaries
         for the rows that passed validation.
 
         Distinct from the `POST /v1/batches` flow, which creates beneficiaries,
@@ -3635,10 +3635,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /v1/beneficiaries/import/{importID}/confirm:
+  /v1/beneficiaries/import/{import_id}/confirm:
     parameters:
       - $ref: '#/components/parameters/AntonVersion'
-      - name: importID
+      - name: import_id
         in: path
         required: true
         description: Import ID (prefixed `imp_`), from the preview.
@@ -8680,6 +8680,21 @@ components:
       schema:
         type: string
         example: '2026-12-01'
+    Deprecation:
+      description: |
+        Present only on a route or API version scheduled for removal. An RFC 9745 date: `@` followed by
+        the Unix time in seconds at which it was or will be deprecated, for example `@1799971200`.
+      schema:
+        type: string
+        example: '@1799971200'
+    Sunset:
+      description: |
+        Present only on a route or API version scheduled for removal, together with `Deprecation`. The
+        date from which it may stop working, as an HTTP-date (RFC 8594), for example
+        `Thu, 01 Jul 2027 00:00:00 GMT`.
+      schema:
+        type: string
+        example: Thu, 01 Jul 2027 00:00:00 GMT
     X-RateLimit-Limit:
       description: Maximum requests permitted in the current window.
       schema:
