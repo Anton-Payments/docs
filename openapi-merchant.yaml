@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=53aabe6da2631ff1074f7b3b90c274a38453f6c87f8133d4f3f32bf924b68d53
+# anton-spec-sync sha256=805e8fe10d95f5d2484f78ac9bd38adb2dcec88b4fc7e71d691e5d7bb5227193
 openapi: 3.1.0
 
 info:
@@ -10,10 +10,12 @@ info:
 
     - **Authentication**: OAuth 2.0 client_credentials with DPoP proof-of-possession (RFC 6749 §4.4 + RFC 9449). Programmatic clients exchange `(client_id, client_secret)` for a short-lived access token at `POST /oauth/token`, then send each request with `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. Static API keys are not accepted on v1.
     - Base URLs: `https://api.antonpayments.com` (production), `https://api.antonpayments.dev` (sandbox).
-    - **Versioning**: the API is versioned by date (`Anton-Version: 2026-12-01`). Your account is pinned to the latest version when you create your first OAuth client; send `Anton-Version` to try another version on one request. Every `/v1` response carries an `Anton-Version` header with the version it was produced at, including idempotent replays (which keep the original's). An unknown version is `400 invalid_api_version`.
+    - **Versioning**: the API is versioned by date (`Anton-Version: 2026-12-01`). Your account is pinned to the latest version when you create your first OAuth client; send `Anton-Version` to try another version on one request. Every `/v1` response carries an `Anton-Version` header with the version it was produced at, including idempotent replays (which keep the original's) and a `401` (where the merchant is not yet known, the launch version). An unknown version is `400 invalid_api_version`.
+    - **Responses.** A single resource is the object itself at the top level, with no `data` wrapper. A delete returns `{"id", "object", "deleted": true}`. Lists are the list object below. A field is either always present (`null` when empty) or documented as conditional.
+    - **Requests.** A request with a body must send `Content-Type: application/json` (an upload route takes `multipart/form-data`), otherwise `400 invalid_content_type`. A route that takes no body rejects a non-empty one; an unknown query parameter is `400 unknown_parameter`.
     - Monetary amounts are decimal strings. Never floats.
     - Timestamps are RFC 3339 UTC.
-    - All mutating endpoints support the `Idempotency-Key` header.
+    - Every `POST` that creates or changes something requires the `Idempotency-Key` header. `PATCH` and `DELETE` accept one but do not require it. A `POST` that is a pure calculation and stores nothing (`POST /v1/intelligence/evaluations/validate`) is exempt.
     - Anton's OAuth public signing key is published at `GET /.well-known/jwks.json` (5-minute cache; RFC 8615).
 
     **Capabilities and scopes.** Every account carries a capability set (`payouts`, `intelligence`) and every
@@ -33,8 +35,9 @@ info:
     `{"error": {"type", "code", "message", "param"?, "doc_url", "request_id", "details"?}}`. Branch on `code`
     (each code is documented at its `doc_url` anchor on the errors page), not on `message`. `type` follows the
     status: `authentication_error` 401, `permission_error` 403, `invalid_request_error` 400/404/409/422,
-    `idempotency_error` (the three `Idempotency-Key` failures: 409 `idempotency_in_flight`, 422
-    `idempotency_key_reused`, 400 `missing_idempotency_key`), `rate_limit_error` 429, `api_error` 500/502/503.
+    `idempotency_error` (the two `Idempotency-Key` failures that are a 409 or a 422: `idempotency_in_flight`,
+    `idempotency_key_reused`; a missing key is a 400 `invalid_request_error` `missing_idempotency_key`),
+    `rate_limit_error` 429, `api_error` 500/502/503. A `429` and a `503` carry `Retry-After`.
     A `401` carries `WWW-Authenticate`. An ID in a path with the wrong prefix or shape is `400
     resource_id_invalid` with `param` set; a well-formed ID that names nothing of yours (or belongs to another
     merchant) is `404 resource_missing`; a bad or expired `cursor` is `400 cursor_invalid`.
@@ -216,12 +219,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/IntelligenceEvaluation'
-              example: {"data":{"id":"eval_01JD3XB7Q2","object":"evaluation","livemode":false,"status":"completed","use_case":"payee_registration","coverage":"complete","decision":"approve","score":80,"tier":"low","reasons":[],"required_actions":[],"metadata":{"crm_id":"42"},"created_at":"2026-11-19T20:31:51.681Z","updated_at":"2026-11-19T20:31:51.681Z"}}
+                $ref: '#/components/schemas/IntelligenceEvaluation'
+              example: {"id":"eval_01JD3XB7Q2","object":"evaluation","livemode":false,"status":"completed","use_case":"payee_registration","coverage":"complete","decision":"approve","score":80,"tier":"low","reasons":[],"required_actions":[],"metadata":{"crm_id":"42"},"created_at":"2026-11-19T20:31:51.681Z","updated_at":"2026-11-19T20:31:51.681Z"}
         '202':
           description: |
             The evaluation, accepted for asynchronous processing (`payout_screening`): `status` is `pending` and
@@ -234,12 +233,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/IntelligenceEvaluation'
-              example: {"data":{"id":"eval_01JD3XB7Q3","object":"evaluation","livemode":false,"status":"pending","use_case":"payout_screening","metadata":{},"created_at":"2026-11-19T20:31:52.000Z","updated_at":"2026-11-19T20:31:52.026Z"}}
+                $ref: '#/components/schemas/IntelligenceEvaluation'
+              example: {"id":"eval_01JD3XB7Q3","object":"evaluation","livemode":false,"status":"pending","use_case":"payout_screening","metadata":{},"created_at":"2026-11-19T20:31:52.000Z","updated_at":"2026-11-19T20:31:52.026Z"}
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -291,13 +286,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: Inclusive lower bound on when the evaluation was decided, RFC 3339. `evaluated_after` is the same filter; send one.
+          description: Inclusive lower bound on when the evaluation was decided, RFC 3339. `evaluated_after` is the same filter; send one. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
           required: false
-          description: Exclusive upper bound, RFC 3339. `evaluated_before` is the same filter; send one.
+          description: Exclusive upper bound, RFC 3339. `evaluated_before` is the same filter; send one. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: evaluated_after
@@ -352,7 +347,7 @@ paths:
       tags: [Intelligence]
       summary: Validate an intelligence evaluation request
       operationId: validateIntelligenceEvaluation
-      description: Validates the strict request contract without creating or persisting an evaluation. Requires OAuth+DPoP credentials, like every evaluation route. The answer is a dry-run result, not a stored resource, so it has no `id`.
+      description: Validates the strict request contract without creating or persisting an evaluation. This is a calculation that stores nothing, so it is exempt from `Idempotency-Key` (the header is not required). Requires OAuth+DPoP credentials, like every evaluation route. The answer is a dry-run result, not a stored resource, so it has no `id`.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -368,13 +363,9 @@ paths:
           description: Request is valid and can be mapped to an evaluation.
           content:
             application/json:
-              example: {"data":{"object":"evaluation_validation","livemode":false,"valid":true,"event_type":"payee.create","use_case":"payee_registration"}}
+              example: {"object":"evaluation_validation","livemode":false,"valid":true,"event_type":"payee.create","use_case":"payee_registration"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/IntelligenceEvaluationValidation'
+                $ref: '#/components/schemas/IntelligenceEvaluationValidation'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -410,13 +401,9 @@ paths:
           description: The evaluation.
           content:
             application/json:
-              example: {"data":{"id":"eval_dbvqroqukoh470i09qa0","object":"evaluation","livemode":false,"status":"completed","use_case":"payee_registration","coverage":"complete","decision":"approve","score":0,"tier":"low","reasons":[],"required_actions":[],"metadata":{"crm_id":"42"},"created_at":"2026-11-20T02:18:11.739Z","updated_at":"2026-11-20T02:18:11.739Z"}}
+              example: {"id":"eval_dbvqroqukoh470i09qa0","object":"evaluation","livemode":false,"status":"completed","use_case":"payee_registration","coverage":"complete","decision":"approve","score":0,"tier":"low","reasons":[],"required_actions":[],"metadata":{"crm_id":"42"},"created_at":"2026-11-20T02:18:11.739Z","updated_at":"2026-11-20T02:18:11.739Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/IntelligenceEvaluation'
+                $ref: '#/components/schemas/IntelligenceEvaluation'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -463,13 +450,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: RFC 3339 timestamp, inclusive.
+          description: RFC 3339 timestamp, inclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: created_before
           in: query
           required: false
-          description: RFC 3339 timestamp, exclusive.
+          description: RFC 3339 timestamp, exclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - $ref: '#/components/parameters/Limit'
@@ -525,13 +512,9 @@ paths:
           description: The settings (the defaults until your team saves them).
           content:
             application/json:
-              example: {"data":{"object":"review_settings","livemode":false,"second_approver":"sanctions_pep","cleared_list_enabled":true,"cleared_list_min_decisions":3,"cleared_list_months":12,"target_high_minutes":240,"target_medium_minutes":480,"target_low_minutes":1440,"business_day_start_minute":540,"business_day_end_minute":1020,"business_days":[1,2,3,4,5],"timezone":"UTC","auto_open":true,"retention_years":7,"min_retention_years":7,"api_clearance_requires_approval":true}}
+              example: {"object":"review_settings","livemode":false,"second_approver":"sanctions_pep","cleared_list_enabled":true,"cleared_list_min_decisions":3,"cleared_list_months":12,"target_high_minutes":240,"target_medium_minutes":480,"target_low_minutes":1440,"business_day_start_minute":540,"business_day_end_minute":1020,"business_days":[1,2,3,4,5],"timezone":"UTC","auto_open":true,"retention_years":7,"min_retention_years":7,"api_clearance_requires_approval":true}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ReviewSettings'
+                $ref: '#/components/schemas/ReviewSettings'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -563,13 +546,13 @@ paths:
         - name: created_after
           in: query
           required: true
-          description: RFC 3339 timestamp, inclusive.
+          description: RFC 3339 timestamp, inclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: created_before
           in: query
           required: true
-          description: RFC 3339 timestamp, exclusive. At most 366 days after `created_after`.
+          description: RFC 3339 timestamp, exclusive. At most 366 days after `created_after`. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: status
@@ -627,13 +610,9 @@ paths:
           description: The review.
           content:
             application/json:
-              example: {"data":{"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z","matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}]}}
+              example: {"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z","matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}]}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ReviewDetail'
+                $ref: '#/components/schemas/ReviewDetail'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -736,13 +715,9 @@ paths:
           description: The decision.
           content:
             application/json:
-              example: {"data":{"id":"ird_dbvqsbiukoh4g0rnekg0","object":"review_decision","livemode":false,"review_id":"irv_dbvqsbiukoh4g0rnek30","decision":"not_a_match","reason_code":"dob_differs","note_recorded":true,"proposed_by":{"type":"api_client","id":"ant_oc_test_xdbvqsbiukoh4g0rnek10"},"requires_approval":true,"approval_rule":"api_clearance","approval":null,"created_at":"2026-11-20T02:19:26.940Z","updated_at":"2026-11-20T02:19:26.940Z"}}
+              example: {"id":"ird_dbvqsbiukoh4g0rnekg0","object":"review_decision","livemode":false,"review_id":"irv_dbvqsbiukoh4g0rnek30","decision":"not_a_match","reason_code":"dob_differs","note_recorded":true,"proposed_by":{"type":"api_client","id":"ant_oc_test_xdbvqsbiukoh4g0rnek10"},"requires_approval":true,"approval_rule":"api_clearance","approval":null,"created_at":"2026-11-20T02:19:26.940Z","updated_at":"2026-11-20T02:19:26.940Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ReviewDecision'
+                $ref: '#/components/schemas/ReviewDecision'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -790,12 +765,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Review'
-              example: {"data":{"id":"irv_01JB8QK2","object":"review","livemode":false,"status":"open","number":"RV-0002","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"eval_01JD3XB7Q2","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"B*** O***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.002Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-19T20:29:59.344Z","updated_at":"2026-11-19T20:29:59.715Z"}}
+                $ref: '#/components/schemas/Review'
+              example: {"id":"irv_01JB8QK2","object":"review","livemode":false,"status":"open","number":"RV-0002","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"eval_01JD3XB7Q2","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"B*** O***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.002Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-19T20:29:59.344Z","updated_at":"2026-11-19T20:29:59.715Z"}
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -850,13 +821,9 @@ paths:
           description: The note (without its text).
           content:
             application/json:
-              example: {"data":{"id":"irn_dbvqsbiukoh4g0rnekp0","object":"review_note","livemode":false,"review_id":"irv_dbvqsbiukoh4g0rnek4g","author":{"type":"api_client","id":"ant_oc_test_xdbvqsbiukoh4g0rnek10"},"created_at":"2026-11-20T02:19:26.953Z","updated_at":"2026-11-20T02:19:26.953Z"}}
+              example: {"id":"irn_dbvqsbiukoh4g0rnekp0","object":"review_note","livemode":false,"review_id":"irv_dbvqsbiukoh4g0rnek4g","author":{"type":"api_client","id":"ant_oc_test_xdbvqsbiukoh4g0rnek10"},"created_at":"2026-11-20T02:19:26.953Z","updated_at":"2026-11-20T02:19:26.953Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ReviewNote'
+                $ref: '#/components/schemas/ReviewNote'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -926,13 +893,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: Inclusive lower bound on `created_at`, RFC 3339.
+          description: Inclusive lower bound on `created_at`, RFC 3339. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
           required: false
-          description: Exclusive upper bound on `created_at`, RFC 3339.
+          description: Exclusive upper bound on `created_at`, RFC 3339. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - $ref: '#/components/parameters/Limit'
@@ -1029,12 +996,8 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/VerificationSubject'
-              example: {"data":{"id":"vsub_01JD3XB7Q2","object":"verification_subject","livemode":false,"status":"created","type":"person","display_name":"A•• L••••••","email":"ada@example.com","external_ref":"customer_8841","country":"CA","current_verification_id":"vrf_01JD3XB7Q3","verifications":[{"id":"vrf_01JD3XB7Q3","object":"verification","livemode":false,"status":"created","subject_id":"vsub_01JD3XB7Q2","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-26T20:26:03.152Z","completed_at":null,"hosted_link":"https://verify.example.com/v/example","created_at":"2026-11-19T20:26:03.152Z","updated_at":"2026-11-19T20:26:03.152Z"}],"metadata":{"crm_id":"42"},"created_at":"2026-11-19T20:26:03.152Z","updated_at":"2026-11-19T20:26:03.152Z"}}
+                $ref: '#/components/schemas/VerificationSubject'
+              example: {"id":"vsub_01JD3XB7Q2","object":"verification_subject","livemode":false,"status":"created","type":"person","display_name":"A•• L••••••","email":"ada@example.com","external_ref":"customer_8841","country":"CA","current_verification_id":"vrf_01JD3XB7Q3","verifications":[{"id":"vrf_01JD3XB7Q3","object":"verification","livemode":false,"status":"created","subject_id":"vsub_01JD3XB7Q2","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-26T20:26:03.152Z","completed_at":null,"hosted_link":"https://verify.example.com/v/example","metadata":{},"created_at":"2026-11-19T20:26:03.152Z","updated_at":"2026-11-19T20:26:03.152Z"}],"metadata":{"crm_id":"42"},"created_at":"2026-11-19T20:26:03.152Z","updated_at":"2026-11-19T20:26:03.152Z"}
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1055,6 +1018,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: The verification provider is not configured on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1078,13 +1044,9 @@ paths:
           description: The subject.
           content:
             application/json:
-              example: {"data":{"id":"vsub_dbvqrpqukoh470i0be60","object":"verification_subject","livemode":false,"status":"created","type":"person","display_name":"A•• L••••••","email":"a***@example.com","external_ref":"customer_8841","country":"CA","current_verification_id":"vrf_dbvqrpqukoh470i0be6g","verifications":[{"id":"vrf_dbvqrpqukoh470i0be6g","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.255Z","completed_at":null,"created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}],"metadata":{"crm_id":"42"},"created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}}
+              example: {"id":"vsub_dbvqrpqukoh470i0be60","object":"verification_subject","livemode":false,"status":"created","type":"person","display_name":"A•• L••••••","email":"a***@example.com","external_ref":"customer_8841","country":"CA","current_verification_id":"vrf_dbvqrpqukoh470i0be6g","verifications":[{"id":"vrf_dbvqrpqukoh470i0be6g","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.255Z","completed_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}],"metadata":{"crm_id":"42"},"created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/VerificationSubject'
+                $ref: '#/components/schemas/VerificationSubject'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1117,18 +1079,25 @@ paths:
       parameters:
         - $ref: '#/components/parameters/VerificationSubjectID'
         - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            example: {"metadata":{"order_ref":"A-1042"}}
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                metadata:
+                  $ref: '#/components/schemas/Metadata'
       responses:
         '201':
           description: New verification opened.
           content:
             application/json:
-              example: {"data":{"id":"vrf_dbvqrpqukoh470i0bef0","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"reverification","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.256Z","completed_at":null,"hosted_link":"https://verify.example.com/v/conf","created_at":"2026-11-20T02:18:15.256Z","updated_at":"2026-11-20T02:18:15.256Z"}}
+              example: {"id":"vrf_dbvqrpqukoh470i0bef0","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"reverification","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.256Z","completed_at":null,"hosted_link":"https://verify.example.com/v/conf","metadata":{},"created_at":"2026-11-20T02:18:15.256Z","updated_at":"2026-11-20T02:18:15.256Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Verification'
+                $ref: '#/components/schemas/Verification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1147,6 +1116,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: The verification provider is not configured on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1175,13 +1147,9 @@ paths:
           description: Fresh link minted (secret-once, in `hosted_link`).
           content:
             application/json:
-              example: {"data":{"id":"vrf_dbvqrpqukoh470i0be6g","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.255Z","completed_at":null,"hosted_link":"https://verify.example.com/v/fresh","created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}}
+              example: {"id":"vrf_dbvqrpqukoh470i0be6g","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"initial","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.255Z","completed_at":null,"hosted_link":"https://verify.example.com/v/fresh","metadata":{},"created_at":"2026-11-20T02:18:15.255Z","updated_at":"2026-11-20T02:18:15.255Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Verification'
+                $ref: '#/components/schemas/Verification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1204,6 +1172,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: The verification provider is not configured on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1232,13 +1203,9 @@ paths:
           description: Fresh verification opened; prior link invalidated.
           content:
             application/json:
-              example: {"data":{"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"hosted_link":"https://verify.example.com/v/conf","created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}}
+              example: {"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"hosted_link":"https://verify.example.com/v/conf","metadata":{},"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Verification'
+                $ref: '#/components/schemas/Verification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1257,6 +1224,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: The verification provider is not configured on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1284,13 +1254,9 @@ paths:
           description: Verification revoked.
           content:
             application/json:
-              example: {"data":{"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"revoked","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":{"status":"clear","evaluation_id":"eval_new","score":140,"tier":"low","reasons":[]},"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}}
+              example: {"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"revoked","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":{"status":"clear","evaluation_id":"eval_new","score":140,"tier":"low","reasons":[]},"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Verification'
+                $ref: '#/components/schemas/Verification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1341,13 +1307,9 @@ paths:
           description: Screening re-run; the verification carries the refreshed `screening` block.
           content:
             application/json:
-              example: {"data":{"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"review","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":{"status":"clear","evaluation_id":"eval_new","score":140,"tier":"low","reasons":[]},"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}}
+              example: {"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"review","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":{"status":"clear","evaluation_id":"eval_new","score":140,"tier":"low","reasons":[]},"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Verification'
+                $ref: '#/components/schemas/Verification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1370,6 +1332,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: Screening is not available on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1414,13 +1379,9 @@ paths:
           description: Fresh owner link minted.
           content:
             application/json:
-              example: {"data":{"object":"verification_owner_link","livemode":false,"hosted_link":"https://verify.example.com/v/fresh","delivered":false}}
+              example: {"object":"verification_owner_link","livemode":false,"hosted_link":"https://verify.example.com/v/fresh","delivered":false}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/VerificationOwnerLink'
+                $ref: '#/components/schemas/VerificationOwnerLink'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1443,6 +1404,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: The verification provider is not configured on this environment.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -1464,13 +1428,9 @@ paths:
           description: Aggregates.
           content:
             application/json:
-              example: {"data":{"object":"verification_stats","livemode":false,"totals":{"started":4,"approved":2,"declined":1,"review":1,"in_flight":1},"pass_rate":0.67,"median_completion_minutes":12,"weekly":[{"label":"Nov 10","count":3},{"label":"Nov 17","count":1}],"period":{"days":30,"started":4,"approved":2,"declined":1,"completed":3,"pass_rate":0.67,"median_completion_minutes":12},"queues":{"review":1,"in_flight":1}}}
+              example: {"object":"verification_stats","livemode":false,"totals":{"started":4,"approved":2,"declined":1,"review":1,"in_flight":1},"pass_rate":0.67,"median_completion_minutes":12,"weekly":[{"label":"Nov 10","count":3},{"label":"Nov 17","count":1}],"period":{"days":30,"started":4,"approved":2,"declined":1,"completed":3,"pass_rate":0.67,"median_completion_minutes":12},"queues":{"review":1,"in_flight":1}}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/VerificationStats'
+                $ref: '#/components/schemas/VerificationStats'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2475,16 +2435,12 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
               examples:
                 created:
                   summary: A new individual beneficiary
                   value:
-                    data: {"id": "ben_dbvlj5qukohfu54jblu0", "object": "beneficiary", "livemode": false, "status": "active", "type": "individual", "display_name": "Jane Smith", "country": "GB", "external_ref": "contractor-1042", "risk_score": null, "risk_tier": null, "risk_signals": [], "created_via": "api", "source_batch_id": null, "metadata": {"department": "engineering"}, "created_at": "2026-11-19T20:18:31.415Z", "updated_at": "2026-11-19T20:18:31.415Z"}
+                    {"id": "ben_dbvlj5qukohfu54jblu0", "object": "beneficiary", "livemode": false, "status": "active", "type": "individual", "display_name": "Jane Smith", "country": "GB", "external_ref": "contractor-1042", "risk_score": null, "risk_tier": null, "risk_signals": [], "created_via": "api", "source_batch_id": null, "metadata": {"department": "engineering"}, "created_at": "2026-11-19T20:18:31.415Z", "updated_at": "2026-11-19T20:18:31.415Z"}
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2523,7 +2479,7 @@ paths:
         Filters are exact-match and validated: an unknown query parameter, a filter
         value outside its allowed set, an out-of-range `limit` or a bad `cursor` is a
         `400`, never an empty list. `created_after` is inclusive and `created_before`
-        exclusive; both are RFC 3339 UTC timestamps such as `2026-11-01T00:00:00.000Z`.
+        exclusive; both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -2632,13 +2588,9 @@ paths:
           description: Beneficiary.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":"contractor-1042","risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{"department":"engineering"},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.220Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":"contractor-1042","risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{"department":"engineering"},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.220Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2683,13 +2635,9 @@ paths:
           description: Beneficiary updated.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane A. Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.222Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane A. Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.222Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2734,13 +2682,9 @@ paths:
           description: Beneficiary deleted.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","deleted":true}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","deleted":true}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/BeneficiaryDeleted'
+                $ref: '#/components/schemas/BeneficiaryDeleted'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2782,13 +2726,9 @@ paths:
           description: The beneficiary's personal details.
           content:
             application/json:
-              example: {"data":{"object":"beneficiary_pii","livemode":false,"beneficiary_id":"ben_dbvqrpqukoh470i0a2j0","type":"individual","individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","date_of_birth":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}},"business":null}}
+              example: {"object":"beneficiary_pii","livemode":false,"beneficiary_id":"ben_dbvqrpqukoh470i0a2j0","type":"individual","individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","date_of_birth":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}},"business":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/BeneficiaryPII'
+                $ref: '#/components/schemas/BeneficiaryPII'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2832,13 +2772,9 @@ paths:
           description: Personal details replaced. Returns the beneficiary.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2891,13 +2827,9 @@ paths:
           description: Beneficiary archived. Returns the updated record.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"archived","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"archived","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2957,13 +2889,9 @@ paths:
           description: Beneficiary restored.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3016,13 +2944,9 @@ paths:
           description: Re-screen queued. The beneficiary, in its current state.
           content:
             application/json:
-              example: {"data":{"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":null,"risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{},"created_at":"2026-11-20T02:18:15.220Z","updated_at":"2026-11-20T02:18:15.223Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Beneficiary'
+                $ref: '#/components/schemas/Beneficiary'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3045,6 +2969,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: Re-screening is temporarily unavailable (`service_unavailable`). Safe to retry.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -3143,25 +3070,9 @@ paths:
               $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
-              example: {"data":{"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null}}
+              example: {"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    allOf:
-                      - $ref: '#/components/schemas/Payout'
-                      - type: object
-                        properties:
-                          session_quality:
-                            type: array
-                            items:
-                              type: string
-                              enum: [non_public_ip, invalid_started_at, future_started_at, unknown_timezone]
-                            description: |
-                              Present only when the request's `session` object carried degraded data.
-                              Non-blocking: the payout was created; fix the flagged fields in your
-                              integration to improve risk-signal quality.
+                $ref: '#/components/schemas/Payout'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3270,12 +3181,12 @@ paths:
             type: string
         - name: created_after
           in: query
-          description: RFC 3339 timestamp. Returns payouts with `created_at` at or after it.
+          description: RFC 3339 timestamp. Returns payouts with `created_at` at or after it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
-          description: RFC 3339 timestamp. Returns payouts with `created_at` before it.
+          description: RFC 3339 timestamp. Returns payouts with `created_at` before it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
       responses:
@@ -3283,7 +3194,7 @@ paths:
           description: A page of payouts.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3335,13 +3246,9 @@ paths:
           description: The outcome for each ID.
           content:
             application/json:
-              example: {"data":{"object":"payout_cancellation_result","livemode":false,"cancelled":[],"failed":[{"id":"pay_dbvqrpqukoh470i0a7tg","code":"payout_not_cancellable","message":"payout could not be cancelled"},{"id":"pay_missing","code":"resource_missing","message":"payout not found"}]}}
+              example: {"object":"payout_cancellation_result","livemode":false,"cancelled":[],"failed":[{"id":"pay_dbvqrpqukoh470i0a7tg","code":"payout_not_cancellable","message":"payout could not be cancelled"},{"id":"pay_missing","code":"resource_missing","message":"payout not found"}]}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/PayoutCancelResult'
+                $ref: '#/components/schemas/PayoutCancelResult'
         '400':
           description: '`ids_required`, `too_many_ids`, `resource_id_invalid` (an ID is not a payout ID; `param` names it), or the request body is malformed.'
           content:
@@ -3378,40 +3285,17 @@ paths:
       operationId: getPayout
       description: |
         Return a payout. `404` if it does not exist or belongs to another merchant; `400 resource_id_invalid` if the ID
-        is not a payout ID. The response adds `risk` (the payout's score and tier) and `delivery` (corridor timing,
-        when known and the payout is neither on hold nor finished) to the payout object. `risk` is omitted for a
-        payout that is on hold or `failed` with `cannot_be_processed`.
+        is not a payout ID. The response is the same payout object a `payout.*` webhook event carries. `risk` (the
+        payout's score and tier) and `delivery` (corridor timing, when known and the payout is in flight) are always
+        present and `null` when they do not apply; both are `null` for a payout that is `on_hold` or `failed`.
       responses:
         '200':
           description: The payout.
           content:
             application/json:
-              example: {"data":{"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"100.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null}}
+              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"100.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    allOf:
-                      - $ref: '#/components/schemas/Payout'
-                      - type: object
-                        properties:
-                          risk:
-                            type: object
-                            required: [score, tier]
-                            properties:
-                              score:
-                                type: [integer, 'null']
-                                minimum: 0
-                                maximum: 1000
-                                description: The payout's risk score, 0 to 1000, higher is worse; `null` until scored.
-                              tier:
-                                type: [string, 'null']
-                                description: The score's tier (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`); `null` until scored.
-                            description: |
-                              The payout's risk score and tier, and nothing else: no reasons or signals.
-                          delivery:
-                            $ref: '#/components/schemas/PayoutDelivery'
+                $ref: '#/components/schemas/Payout'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3506,13 +3390,9 @@ paths:
           description: The cancelled payout.
           content:
             application/json:
-              example: {"data":{"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z"}}
+              example: {"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z","risk":null,"delivery":null,"session_quality":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Payout'
+                $ref: '#/components/schemas/Payout'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3582,18 +3462,21 @@ paths:
                   type: string
                   format: binary
                   description: CSV file matching the individual or business template.
+                metadata:
+                  type: string
+                  description: >-
+                    Optional. Your own key/value pairs for the import as a JSON object string, such as
+                    `{"order_ref":"A-1042"}`. Strings only, at most 50 keys, keys up to 40 characters and values
+                    up to 500; never personal data. Not JSON is `400 malformed_json`, not an object of strings is
+                    `400 type_mismatch`, both with `param` `metadata`; breaking the caps is `422`.
       responses:
         '201':
           description: Import created, with per-row validation results.
           content:
             application/json:
-              example: {"data":{"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":null,"expires_at":"2026-11-21T02:18:15.231Z"}}
+              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"metadata":{},"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":null,"expires_at":"2026-11-21T02:18:15.231Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/BeneficiaryImport'
+                $ref: '#/components/schemas/BeneficiaryImport'
         '400':
           description: |
             Malformed upload. One of:
@@ -3630,6 +3513,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: '`service_unavailable` — the vault could not take the rows; nothing was stored. Upload the file again.'
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -3666,13 +3552,9 @@ paths:
           description: Confirm completed.
           content:
             application/json:
-              example: {"data":{"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"confirmed","summary":{"total":2,"valid":2,"invalid":0},"rows":null,"result":{"created":2,"skipped":0,"failed":0,"beneficiary_ids":["ben_0000000000000000000c","ben_0000000000000000000b"],"errors":[]},"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":"2026-11-20T02:18:15.232Z","expires_at":"2026-11-21T02:18:15.231Z"}}
+              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"confirmed","summary":{"total":2,"valid":2,"invalid":0},"rows":null,"result":{"created":2,"skipped":0,"failed":0,"beneficiary_ids":["ben_0000000000000000000c","ben_0000000000000000000b"],"errors":[]},"metadata":{},"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":"2026-11-20T02:18:15.232Z","expires_at":"2026-11-21T02:18:15.231Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/BeneficiaryImport'
+                $ref: '#/components/schemas/BeneficiaryImport'
         '400':
           description: |
             `resource_id_invalid` — the path parameter does not look like an `imp_` ID — or
@@ -3707,6 +3589,9 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           description: '`service_unavailable` — the vault could not answer. Nothing was discarded and the import is open again: confirm again.'
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -3849,18 +3734,21 @@ paths:
                 file_hash:
                   type: string
                   description: Optional `sha256:`-prefixed hash of the file; the upload is refused if it does not match.
+                metadata:
+                  type: string
+                  description: >-
+                    Optional. Your own key/value pairs for the batch as a JSON object string, such as
+                    `{"payroll_run":"2026-11"}`. Strings only, at most 50 keys, keys up to 40 characters and values
+                    up to 500; never personal data. Not JSON is `400 malformed_json`, not an object of strings is
+                    `400 type_mismatch`, both with `param` `metadata`; breaking the caps is `422`.
       responses:
         '201':
           description: Batch accepted and queued for validation.
           content:
             application/json:
-              example: {"data":{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_timestamp":"2026-11-19T14:00:00Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"pending_batches":[]}}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"pending_batches":[]}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/BatchUpload'
+                $ref: '#/components/schemas/BatchUpload'
         '400':
           description: |
             Malformed upload: `invalid_multipart_form`, `invalid_file` (the `file` field is missing),
@@ -3912,12 +3800,12 @@ paths:
           description: Only batches in this status.
         - name: created_after
           in: query
-          description: RFC 3339 timestamp. Returns batches with `created_at` at or after it.
+          description: RFC 3339 timestamp. Returns batches with `created_at` at or after it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
-          description: RFC 3339 timestamp. Returns batches with `created_at` before it.
+          description: RFC 3339 timestamp. Returns batches with `created_at` before it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
       responses:
@@ -3925,7 +3813,7 @@ paths:
           description: A page of batches.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_timestamp":"2026-11-19T14:00:00Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3966,13 +3854,9 @@ paths:
           description: The batch.
           content:
             application/json:
-              example: {"data":{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_timestamp":"2026-11-19T14:00:00Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Batch'
+                $ref: '#/components/schemas/Batch'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4026,13 +3910,9 @@ paths:
           description: The batch, confirmed and queued for processing.
           content:
             application/json:
-              example: {"data":{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"confirmed","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_timestamp":"2026-11-19T14:00:00Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":"2026-11-19T14:05:00.000Z","processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"confirmed","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":"2026-11-19T14:05:00.000Z","processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Batch'
+                $ref: '#/components/schemas/Batch'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4087,13 +3967,9 @@ paths:
           description: The cancelled batch.
           content:
             application/json:
-              example: {"data":{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"cancelled","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_timestamp":"2026-11-19T14:00:00Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":"2026-11-19T14:05:00.000Z","expires_at":null}}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"cancelled","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":"2026-11-19T14:05:00.000Z","expires_at":null}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Batch'
+                $ref: '#/components/schemas/Batch'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4212,6 +4088,15 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          description: Batch beneficiary listing is not available on this API (`service_unavailable`).
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /v1/batches/{id}/errors:
     parameters:
@@ -4349,7 +4234,7 @@ paths:
                   method: iban
                   currency: EUR
                   label: Primary EUR account
-                  is_default: true
+                  default: true
                   credentials:
                     iban: DE89370400440532013000
       responses:
@@ -4362,13 +4247,9 @@ paths:
               $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
-              example: {"data":{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","is_default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}}
+              example: {"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Instrument'
+                $ref: '#/components/schemas/Instrument'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4413,7 +4294,7 @@ paths:
         outside its allowed set, an out-of-range `limit` or a bad `cursor` is a `400`,
         never an empty list. A `beneficiary_id` that names no beneficiary of yours is
         `404 resource_missing`. `created_after` is inclusive and `created_before`
-        exclusive; both are RFC 3339 UTC timestamps.
+        exclusive; both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -4469,7 +4350,7 @@ paths:
           description: Paginated list of instruments.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","is_default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -4602,13 +4483,9 @@ paths:
           description: Instrument.
           content:
             application/json:
-              example: {"data":{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","is_default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}}
+              example: {"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.225Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Instrument'
+                $ref: '#/components/schemas/Instrument'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4626,9 +4503,9 @@ paths:
       summary: Update an instrument
       operationId: updateInstrument
       description: |
-        Partially update an instrument: `label`, `is_default`, `status` and `metadata`.
+        Partially update an instrument: `label`, `default`, `status` and `metadata`.
         A field you leave out is left unchanged; `null` clears `label` and `metadata`
-        and sets `is_default` to `false`. `status` cannot be cleared. `metadata`, when
+        and sets `default` to `false`. `status` cannot be cleared. `metadata`, when
         sent, replaces the whole map. Making an instrument the default unflags the
         beneficiary's previous default. Credentials cannot be updated: create a new
         instrument and delete the old one.
@@ -4640,7 +4517,7 @@ paths:
         required: true
         content:
           application/json:
-            example: {"label":"Payroll account","is_default":true}
+            example: {"label":"Payroll account","default":true}
             schema:
               $ref: '#/components/schemas/InstrumentUpdateRequest'
       responses:
@@ -4648,13 +4525,9 @@ paths:
           description: Instrument updated.
           content:
             application/json:
-              example: {"data":{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"disabled","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":null,"is_default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.226Z"}}
+              example: {"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","livemode":false,"status":"disabled","beneficiary_id":"ben_dbvqrpqukoh470i0a3ag","method":"iban","currency":"EUR","country":null,"label":null,"default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-20T02:18:15.225Z","updated_at":"2026-11-20T02:18:15.226Z"}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Instrument'
+                $ref: '#/components/schemas/Instrument'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4694,13 +4567,9 @@ paths:
           description: Instrument deleted.
           content:
             application/json:
-              example: {"data":{"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","deleted":true}}
+              example: {"id":"ins_dbvqrpqukoh470i0a3d0","object":"instrument","deleted":true}
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/InstrumentDeleted'
+                $ref: '#/components/schemas/InstrumentDeleted'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4800,26 +4669,20 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Balance'
+                $ref: '#/components/schemas/Balance'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "bal_01",
-                        "object": "balance",
-                        "livemode": false,
-                        "currency": "USD",
-                        "available": "950.00",
-                        "pending": "50.00",
-                        "total": "1000.00",
-                        "updated_at": "2026-11-19T14:03:22.104Z"
-                      }
+                      "id": "bal_01",
+                      "object": "balance",
+                      "livemode": false,
+                      "currency": "USD",
+                      "available": "950.00",
+                      "pending": "50.00",
+                      "total": "1000.00",
+                      "updated_at": "2026-11-19T14:03:22.104Z"
                     }
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -4875,26 +4738,20 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/SandboxDeposit'
+                $ref: '#/components/schemas/SandboxDeposit'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "sdp_dbvm07aukoh6sl1ll1b0",
-                        "object": "sandbox_deposit",
-                        "livemode": false,
-                        "currency": "USD",
-                        "amount": "1000.00",
-                        "available": "1000.00",
-                        "created_at": "2026-11-19T20:46:21.205Z",
-                        "updated_at": "2026-11-19T20:46:21.205Z"
-                      }
+                      "id": "sdp_dbvm07aukoh6sl1ll1b0",
+                      "object": "sandbox_deposit",
+                      "livemode": false,
+                      "currency": "USD",
+                      "amount": "1000.00",
+                      "available": "1000.00",
+                      "created_at": "2026-11-19T20:46:21.205Z",
+                      "updated_at": "2026-11-19T20:46:21.205Z"
                     }
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -5023,29 +4880,23 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/MerchantAccount'
+                $ref: '#/components/schemas/MerchantAccount'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "acc_usd",
-                        "object": "account",
-                        "livemode": false,
-                        "status": "active",
-                        "currency": "USD",
-                        "country": "US",
-                        "available": "950.00",
-                        "pending": "50.00",
-                        "total": "1000.00",
-                        "created_at": "2026-01-02T09:00:00.000Z",
-                        "updated_at": "2026-11-19T14:03:22.104Z"
-                      }
+                      "id": "acc_usd",
+                      "object": "account",
+                      "livemode": false,
+                      "status": "active",
+                      "currency": "USD",
+                      "country": "US",
+                      "available": "950.00",
+                      "pending": "50.00",
+                      "total": "1000.00",
+                      "created_at": "2026-01-02T09:00:00.000Z",
+                      "updated_at": "2026-11-19T14:03:22.104Z"
                     }
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -5085,175 +4936,27 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AccountDetails'
+                $ref: '#/components/schemas/AccountDetails'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "acc_usd",
-                        "object": "account_details",
-                        "livemode": false,
-                        "currency": "USD",
-                        "country": "US",
-                        "holder_name": "Example Ltd",
-                        "bank_name": null,
-                        "iban": "GB00TEST00000000000000",
-                        "bic": "TESTGB2L",
-                        "account_number": null,
-                        "sort_code": null,
-                        "routing_codes": {}
-                      }
+                      "id": "acc_usd",
+                      "object": "account_details",
+                      "livemode": false,
+                      "currency": "USD",
+                      "country": "US",
+                      "holder_name": "Example Ltd",
+                      "bank_name": null,
+                      "iban": "GB00TEST00000000000000",
+                      "bic": "TESTGB2L",
+                      "account_number": null,
+                      "sort_code": null,
+                      "routing_codes": {}
                     }
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: You have no account in this currency (`resource_missing`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /v1/accounts/{currency}/transactions:
-    parameters:
-      - $ref: '#/components/parameters/AntonVersion'
-      - name: currency
-        in: path
-        required: true
-        description: Currency code, 3 to 5 letters. A malformed one is `400 invalid_request`.
-        schema:
-          $ref: '#/components/schemas/CurrencyCode'
-    get:
-      tags: [Accounts]
-      summary: List an account's transactions
-      operationId: listAccountTransactions
-      description: |
-        Movements on one account, newest first. Takes the same filters as `GET /v1/transactions`, except `currency`, which the path sets.
-      parameters:
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Cursor'
-        - name: type
-          in: query
-          required: false
-          description: Only this kind of movement.
-          schema:
-            type: string
-            enum: [payin, payout, fee, exchange, transfer, return]
-        - name: direction
-          in: query
-          required: false
-          description: Only money in (`credit`) or out (`debit`).
-          schema:
-            type: string
-            enum: [credit, debit]
-        - name: status
-          in: query
-          required: false
-          description: Only this status.
-          schema:
-            type: string
-            enum: [completed, pending, failed, returned]
-        - name: created_after
-          in: query
-          required: false
-          description: >-
-            Only objects created at or after this RFC 3339 timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
-          schema:
-            type: string
-            format: date-time
-        - name: created_before
-          in: query
-          required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive).
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          description: A page of transactions.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [object, data, has_more, next_cursor]
-                properties:
-                  object:
-                    type: string
-                    enum: [list]
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/MerchantTransaction'
-                  has_more:
-                    type: boolean
-                    description: Whether more results exist beyond this page.
-                  next_cursor:
-                    type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
-              examples:
-                response:
-                  summary: Response
-                  value:
-                    {
-                      "object": "list",
-                      "data": [
-                        {
-                          "id": "stx_01",
-                          "object": "transaction",
-                          "livemode": false,
-                          "type": "payout",
-                          "status": "completed",
-                          "direction": "debit",
-                          "account_id": "acc_usd",
-                          "amount": "40.00",
-                          "currency": "USD",
-                          "reference": "INV-1042",
-                          "counterparty_name": null,
-                          "payout_id": "pay_01",
-                          "exchange_id": null,
-                          "created_at": "2026-01-02T09:00:00.000Z",
-                          "updated_at": "2026-01-02T09:00:00.000Z"
-                        }
-                      ],
-                      "has_more": false,
-                      "next_cursor": null
-                    }
-        '400':
-          description: >-
-            An unknown query parameter, a filter value that is not valid, a timestamp that does not parse, a
-            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`cursor_invalid`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-              examples:
-                error:
-                  summary: Example
-                  value:
-                    {
-                      "error": {
-                        "type": "invalid_request_error",
-                        "code": "invalid_request",
-                        "message": "type must be one of: payin, payout, fee, exchange, transfer, return",
-                        "param": "type",
-                        "doc_url": "https://docs.antonpayments.com/api-reference/errors#invalid_request",
-                        "request_id": "req_01JD3XB7Q2"
-                      }
-                    }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5312,15 +5015,15 @@ paths:
           in: query
           required: false
           description: >-
-            Only objects created at or after this RFC 3339 timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
+            Only objects created at or after this timestamp (inclusive), such as
+            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive).
+          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -5446,15 +5149,15 @@ paths:
           in: query
           required: false
           description: >-
-            Only objects created at or after this RFC 3339 timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
+            Only objects created at or after this timestamp (inclusive), such as
+            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive).
+          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -5526,33 +5229,27 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/MerchantTransaction'
+                $ref: '#/components/schemas/MerchantTransaction'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "stx_01",
-                        "object": "transaction",
-                        "livemode": false,
-                        "type": "payout",
-                        "status": "completed",
-                        "direction": "debit",
-                        "account_id": "acc_usd",
-                        "amount": "40.00",
-                        "currency": "USD",
-                        "reference": "INV-1042",
-                        "counterparty_name": null,
-                        "payout_id": "pay_01",
-                        "exchange_id": null,
-                        "created_at": "2026-01-02T09:00:00.000Z",
-                        "updated_at": "2026-01-02T09:00:00.000Z"
-                      }
+                      "id": "stx_01",
+                      "object": "transaction",
+                      "livemode": false,
+                      "type": "payout",
+                      "status": "completed",
+                      "direction": "debit",
+                      "account_id": "acc_usd",
+                      "amount": "40.00",
+                      "currency": "USD",
+                      "reference": "INV-1042",
+                      "counterparty_name": null,
+                      "payout_id": "pay_01",
+                      "exchange_id": null,
+                      "created_at": "2026-01-02T09:00:00.000Z",
+                      "updated_at": "2026-01-02T09:00:00.000Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -5700,41 +5397,35 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/PricingQuote'
+                $ref: '#/components/schemas/PricingQuote'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "pq_dbvm07aukoh6sl1ll18g",
-                        "object": "pricing_quote",
-                        "livemode": false,
-                        "status": "active",
-                        "pricing_plan_id": "prc_dbvm07aukoh6sl1ll180",
-                        "fee_type": "hybrid",
-                        "source_currency": "USD",
-                        "destination_currency": "USD",
-                        "source_amount": "100.00",
-                        "destination_amount": "100.00",
-                        "fee": "2.00",
-                        "fee_currency": "USD",
-                        "rate": "1",
-                        "rail_type": null,
-                        "method": "bank_transfer",
-                        "total_cost": "102.00",
-                        "total_cost_currency": "USD",
-                        "expires_at": "2026-11-19T20:51:21.201Z",
-                        "metadata": {
-                          "order_ref": "A-1042"
-                        },
-                        "created_at": "2026-11-19T20:46:21.201Z",
-                        "updated_at": "2026-11-19T20:46:21.201Z"
-                      }
+                      "id": "pq_dbvm07aukoh6sl1ll18g",
+                      "object": "pricing_quote",
+                      "livemode": false,
+                      "status": "active",
+                      "pricing_plan_id": "prc_dbvm07aukoh6sl1ll180",
+                      "fee_type": "hybrid",
+                      "source_currency": "USD",
+                      "destination_currency": "USD",
+                      "source_amount": "100.00",
+                      "destination_amount": "100.00",
+                      "fee": "2.00",
+                      "fee_currency": "USD",
+                      "rate": "1",
+                      "rail_type": null,
+                      "method": "bank_transfer",
+                      "total_cost": "102.00",
+                      "total_cost_currency": "USD",
+                      "expires_at": "2026-11-19T20:51:21.201Z",
+                      "metadata": {
+                        "order_ref": "A-1042"
+                      },
+                      "created_at": "2026-11-19T20:46:21.201Z",
+                      "updated_at": "2026-11-19T20:46:21.201Z"
                     }
         '400':
           description: >-
@@ -5957,32 +5648,26 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscriptionCreated'
+                $ref: '#/components/schemas/WebhookSubscriptionCreated'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_dbvm07aukoh6sl1ll190",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "active",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {
-                          "team": "payments"
-                        },
-                        "created_at": "2026-11-19T20:46:21.202Z",
-                        "updated_at": "2026-11-19T20:46:21.202Z",
-                        "secret": "whsec_0a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef"
-                      }
+                      "id": "whk_dbvm07aukoh6sl1ll190",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "active",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {
+                        "team": "payments"
+                      },
+                      "created_at": "2026-11-19T20:46:21.202Z",
+                      "updated_at": "2026-11-19T20:46:21.202Z",
+                      "secret": "whsec_0a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef"
                     }
         '400':
           description: >-
@@ -6139,31 +5824,25 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscription'
+                $ref: '#/components/schemas/WebhookSubscription'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "active",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {
-                          "team": "payments"
-                        },
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "updated_at": "2026-11-19T14:03:22.104Z"
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "active",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {
+                        "team": "payments"
+                      },
+                      "created_at": "2026-11-19T14:03:22.104Z",
+                      "updated_at": "2026-11-19T14:03:22.104Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -6205,7 +5884,7 @@ paths:
       summary: Update a webhook subscription
       operationId: updateWebhookSubscription
       description: |
-        Change the URL, the events or the metadata. Only fields you send change; `metadata` replaces the whole map and `null` clears it. `url` and `events` cannot be cleared. Status and secret have their own actions. Accepts an `Idempotency-Key`.
+        Change the URL, the events or the metadata. Only fields you send change; `metadata` replaces the whole map and `null` clears it. `url` and `events` cannot be cleared. Status and secret have their own actions. Accepts an `Idempotency-Key` but does not require one.
       requestBody:
         required: true
         content:
@@ -6222,29 +5901,23 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscription'
+                $ref: '#/components/schemas/WebhookSubscription'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "active",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {},
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "updated_at": "2026-11-19T20:46:21.202Z"
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "active",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {},
+                      "created_at": "2026-11-19T14:03:22.104Z",
+                      "updated_at": "2026-11-19T20:46:21.202Z"
                     }
         '400':
           description: >-
@@ -6280,28 +5953,22 @@ paths:
       summary: Delete a webhook subscription
       operationId: deleteWebhookSubscription
       description: |
-        Stop deliveries and remove the subscription. Deliveries already recorded stay readable.
+        Stop deliveries and remove the subscription. Deliveries already recorded stay readable. Takes no request body. Accepts an `Idempotency-Key` but does not require one.
       responses:
         '200':
           description: The subscription was deleted.
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/DeletedObject'
+                $ref: '#/components/schemas/DeletedObject'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "deleted": true
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "deleted": true
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -6368,31 +6035,25 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscriptionRotated'
+                $ref: '#/components/schemas/WebhookSubscriptionRotated'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "active",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {},
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "updated_at": "2026-11-19T20:46:21.203Z",
-                        "secret": "whsec_0a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef",
-                        "previous_secret_expires_at": "2026-11-20T20:46:21.203Z"
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "active",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {},
+                      "created_at": "2026-11-19T14:03:22.104Z",
+                      "updated_at": "2026-11-19T20:46:21.203Z",
+                      "secret": "whsec_0a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef",
+                      "previous_secret_expires_at": "2026-11-20T20:46:21.203Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -6453,36 +6114,30 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookEvent'
+                $ref: '#/components/schemas/WebhookEvent'
               examples:
                 response:
                   summary: Response
                   value:
                     {
+                      "id": "evt_dbvogfaukoh082juenrg",
+                      "object": "event",
+                      "type": "test",
+                      "api_version": "2026-12-01",
+                      "livemode": false,
+                      "created_at": "2026-11-19T23:37:33.944Z",
                       "data": {
-                        "id": "evt_dbvogfaukoh082juenrg",
-                        "object": "event",
-                        "type": "test",
-                        "api_version": "2026-12-01",
-                        "livemode": false,
-                        "created_at": "2026-11-19T23:37:33.944Z",
-                        "data": {
-                          "object": {
-                            "created_at": "2026-11-19T23:37:33.944Z",
-                            "destination_amount": "85.00",
-                            "destination_currency": "EUR",
-                            "id": "pay_test000000000000001",
-                            "livemode": false,
-                            "object": "payout",
-                            "source_amount": "100.00",
-                            "source_currency": "USD",
-                            "status": "completed",
-                            "test": true
-                          }
+                        "object": {
+                          "created_at": "2026-11-19T23:37:33.944Z",
+                          "destination_amount": "85.00",
+                          "destination_currency": "EUR",
+                          "id": "pay_test000000000000001",
+                          "livemode": false,
+                          "object": "payout",
+                          "source_amount": "100.00",
+                          "source_currency": "USD",
+                          "status": "completed",
+                          "test": true
                         }
                       }
                     }
@@ -6551,29 +6206,23 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscription'
+                $ref: '#/components/schemas/WebhookSubscription'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "inactive",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {},
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "updated_at": "2026-11-19T20:46:21.203Z"
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "inactive",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {},
+                      "created_at": "2026-11-19T14:03:22.104Z",
+                      "updated_at": "2026-11-19T20:46:21.203Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -6635,29 +6284,23 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookSubscription'
+                $ref: '#/components/schemas/WebhookSubscription'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "whk_01",
-                        "object": "webhook_subscription",
-                        "livemode": false,
-                        "status": "active",
-                        "url": "https://example.com/hooks",
-                        "events": [
-                          "payout.completed"
-                        ],
-                        "metadata": {},
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "updated_at": "2026-11-19T20:46:21.203Z"
-                      }
+                      "id": "whk_01",
+                      "object": "webhook_subscription",
+                      "livemode": false,
+                      "status": "active",
+                      "url": "https://example.com/hooks",
+                      "events": [
+                        "payout.completed"
+                      ],
+                      "metadata": {},
+                      "created_at": "2026-11-19T14:03:22.104Z",
+                      "updated_at": "2026-11-19T20:46:21.203Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -6716,15 +6359,15 @@ paths:
           in: query
           required: false
           description: >-
-            Only objects created at or after this RFC 3339 timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
+            Only objects created at or after this timestamp (inclusive), such as
+            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive).
+          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -6817,7 +6460,9 @@ paths:
                               "total_debited_currency": "USD",
                               "transaction_hash": null,
                               "updated_at": "2026-11-19T14:03:22.104Z",
-                              "wallet_address": null
+                              "wallet_address": null,
+                              "delivery": null,
+                              "session_quality": null
                             }
                           }
                         }
@@ -6878,78 +6523,74 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookEvent'
+                $ref: '#/components/schemas/WebhookEvent'
               examples:
                 response:
                   summary: Response
                   value:
                     {
+                      "id": "evt_01",
+                      "object": "event",
+                      "type": "payout.completed",
+                      "api_version": "2026-12-01",
+                      "livemode": false,
+                      "created_at": "2026-11-19T14:03:22.104Z",
                       "data": {
-                        "id": "evt_01",
-                        "object": "event",
-                        "type": "payout.completed",
-                        "api_version": "2026-12-01",
-                        "livemode": false,
-                        "created_at": "2026-11-19T14:03:22.104Z",
-                        "data": {
-                          "object": {
-                            "approved_at": null,
-                            "batch_id": null,
-                            "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
-                            "beneficiary_name": null,
-                            "block_confirmations": null,
-                            "buffer_amount": "0.00",
-                            "buffer_currency": null,
-                            "cancelled_at": null,
-                            "completed_at": null,
-                            "created_at": "2026-11-19T14:03:22.104Z",
-                            "created_by": null,
-                            "destination_amount": "500.00",
-                            "destination_currency": "EUR",
-                            "exchange_rate": "0.9091",
-                            "failed_at": null,
-                            "failure_code": null,
-                            "fee": "5.00",
-                            "fee_bearer": "merchant",
-                            "fee_currency": "USD",
-                            "fee_finalized": false,
-                            "fixed_side": "fixed_destination",
-                            "id": "pay_dbvogfaukoh082juenq0",
-                            "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
-                            "livemode": false,
-                            "metadata": {
-                              "order_ref": "A-1042"
-                            },
-                            "method": "sepa",
-                            "network": "sepa",
-                            "network_fee": null,
-                            "network_fee_currency": null,
-                            "object": "payout",
-                            "processed_at": null,
-                            "purpose": "supplier_payment",
-                            "rail_type": "fiat",
-                            "reference": "PO-8821",
-                            "required_confirmations": null,
-                            "risk": {
-                              "score": 640,
-                              "tier": "HIGH"
-                            },
-                            "source_amount": "550.00",
-                            "source_currency": "USD",
-                            "status": "completed",
-                            "status_message": null,
-                            "token_contract": null,
-                            "token_symbol": null,
-                            "total_debited": "557.50",
-                            "total_debited_currency": "USD",
-                            "transaction_hash": null,
-                            "updated_at": "2026-11-19T14:03:22.104Z",
-                            "wallet_address": null
-                          }
+                        "object": {
+                          "approved_at": null,
+                          "batch_id": null,
+                          "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+                          "beneficiary_name": null,
+                          "block_confirmations": null,
+                          "buffer_amount": "0.00",
+                          "buffer_currency": null,
+                          "cancelled_at": null,
+                          "completed_at": null,
+                          "created_at": "2026-11-19T14:03:22.104Z",
+                          "created_by": null,
+                          "destination_amount": "500.00",
+                          "destination_currency": "EUR",
+                          "exchange_rate": "0.9091",
+                          "failed_at": null,
+                          "failure_code": null,
+                          "fee": "5.00",
+                          "fee_bearer": "merchant",
+                          "fee_currency": "USD",
+                          "fee_finalized": false,
+                          "fixed_side": "fixed_destination",
+                          "id": "pay_dbvogfaukoh082juenq0",
+                          "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+                          "livemode": false,
+                          "metadata": {
+                            "order_ref": "A-1042"
+                          },
+                          "method": "sepa",
+                          "network": "sepa",
+                          "network_fee": null,
+                          "network_fee_currency": null,
+                          "object": "payout",
+                          "processed_at": null,
+                          "purpose": "supplier_payment",
+                          "rail_type": "fiat",
+                          "reference": "PO-8821",
+                          "required_confirmations": null,
+                          "risk": {
+                            "score": 640,
+                            "tier": "HIGH"
+                          },
+                          "source_amount": "550.00",
+                          "source_currency": "USD",
+                          "status": "completed",
+                          "status_message": null,
+                          "token_contract": null,
+                          "token_symbol": null,
+                          "total_debited": "557.50",
+                          "total_debited_currency": "USD",
+                          "transaction_hash": null,
+                          "updated_at": "2026-11-19T14:03:22.104Z",
+                          "wallet_address": null,
+                          "delivery": null,
+                          "session_quality": null
                         }
                       }
                     }
@@ -7233,36 +6874,30 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/WebhookDeliverySummary'
+                $ref: '#/components/schemas/WebhookDeliverySummary'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "object": "webhook_delivery_summary",
-                        "livemode": false,
-                        "subscription_id": null,
-                        "since": "2026-10-20T20:46:21.204Z",
-                        "until": "2026-11-19T20:46:21.204Z",
-                        "delivered": 3,
-                        "retrying": 0,
-                        "abandoned": 0,
-                        "pending": 0,
-                        "last_delivered_at": "2026-11-19T14:03:22.104Z",
-                        "retry_policy": {
-                          "max_attempts": 5,
-                          "retry_after_seconds": [
-                            30,
-                            120,
-                            480,
-                            1920
-                          ]
-                        }
+                      "object": "webhook_delivery_summary",
+                      "livemode": false,
+                      "subscription_id": null,
+                      "since": "2026-10-20T20:46:21.204Z",
+                      "until": "2026-11-19T20:46:21.204Z",
+                      "delivered": 3,
+                      "retrying": 0,
+                      "abandoned": 0,
+                      "pending": 0,
+                      "last_delivered_at": "2026-11-19T14:03:22.104Z",
+                      "retry_policy": {
+                        "max_attempts": 5,
+                        "retry_after_seconds": [
+                          30,
+                          120,
+                          480,
+                          1920
+                        ]
                       }
                     }
         '400':
@@ -7942,39 +7577,33 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/FXQuote'
+                $ref: '#/components/schemas/FXQuote'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "fxq_dbvm07aukoh6sl1ll14g",
-                        "object": "fx_quote",
-                        "livemode": false,
-                        "status": "active",
-                        "locked": true,
-                        "source_currency": "USD",
-                        "destination_currency": "EUR",
-                        "source_amount": "540.00",
-                        "destination_amount": "500.00",
-                        "mid_market_rate": "0.925924",
-                        "customer_rate": "0.925924",
-                        "inverse_rate": "1.080002",
-                        "markup_basis_points": 0,
-                        "fee": "0.00",
-                        "fee_currency": "USD",
-                        "expires_at": "2026-11-19T20:47:51.199Z",
-                        "metadata": {
-                          "order_ref": "A-1042"
-                        },
-                        "created_at": "2026-11-19T20:46:21.199Z",
-                        "updated_at": "2026-11-19T20:46:21.199Z"
-                      }
+                      "id": "fxq_dbvm07aukoh6sl1ll14g",
+                      "object": "fx_quote",
+                      "livemode": false,
+                      "status": "active",
+                      "locked": true,
+                      "source_currency": "USD",
+                      "destination_currency": "EUR",
+                      "source_amount": "540.00",
+                      "destination_amount": "500.00",
+                      "mid_market_rate": "0.925924",
+                      "customer_rate": "0.925924",
+                      "inverse_rate": "1.080002",
+                      "markup_basis_points": 0,
+                      "fee": "0.00",
+                      "fee_currency": "USD",
+                      "expires_at": "2026-11-19T20:47:51.199Z",
+                      "metadata": {
+                        "order_ref": "A-1042"
+                      },
+                      "created_at": "2026-11-19T20:46:21.199Z",
+                      "updated_at": "2026-11-19T20:46:21.199Z"
                     }
         '400':
           description: >-
@@ -8035,6 +7664,9 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '503':
           description: A locked rate is not available right now (`locked_rate_unavailable`). Retry.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -8082,37 +7714,31 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/FXQuote'
+                $ref: '#/components/schemas/FXQuote'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "fxq_dbvm07aukoh6sl1ll16g",
-                        "object": "fx_quote",
-                        "livemode": false,
-                        "status": "active",
-                        "locked": false,
-                        "source_currency": "USD",
-                        "destination_currency": "EUR",
-                        "source_amount": "108.01",
-                        "destination_amount": "100.00",
-                        "mid_market_rate": "0.925847",
-                        "customer_rate": "0.925847",
-                        "inverse_rate": "1.080092",
-                        "markup_basis_points": 0,
-                        "fee": "0.00",
-                        "fee_currency": "USD",
-                        "expires_at": "2026-11-19T20:46:51.200Z",
-                        "metadata": {},
-                        "created_at": "2026-11-19T20:46:21.200Z",
-                        "updated_at": "2026-11-19T20:46:21.200Z"
-                      }
+                      "id": "fxq_dbvm07aukoh6sl1ll16g",
+                      "object": "fx_quote",
+                      "livemode": false,
+                      "status": "active",
+                      "locked": false,
+                      "source_currency": "USD",
+                      "destination_currency": "EUR",
+                      "source_amount": "108.01",
+                      "destination_amount": "100.00",
+                      "mid_market_rate": "0.925847",
+                      "customer_rate": "0.925847",
+                      "inverse_rate": "1.080092",
+                      "markup_basis_points": 0,
+                      "fee": "0.00",
+                      "fee_currency": "USD",
+                      "expires_at": "2026-11-19T20:46:51.200Z",
+                      "metadata": {},
+                      "created_at": "2026-11-19T20:46:21.200Z",
+                      "updated_at": "2026-11-19T20:46:21.200Z"
                     }
         '400':
           description: A missing or unknown query parameter.
@@ -8185,38 +7811,32 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/FXExchange'
+                $ref: '#/components/schemas/FXExchange'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "fxx_dbvm07aukoh6sl1ll170",
-                        "object": "fx_exchange",
-                        "livemode": false,
-                        "status": "completed",
-                        "quote_id": "fxq_dbvm07aukoh6sl1ll14g",
-                        "payout_id": null,
-                        "source_currency": "USD",
-                        "destination_currency": "EUR",
-                        "source_amount": "0.00",
-                        "destination_amount": "0.00",
-                        "mid_market_rate": "0.925924",
-                        "customer_rate": "0.925924",
-                        "markup_basis_points": 0,
-                        "fee": "0.00",
-                        "fee_currency": "USD",
-                        "metadata": {
-                          "batch": "nov"
-                        },
-                        "created_at": "2026-11-19T20:46:21.200Z",
-                        "updated_at": "2026-11-19T20:46:21.200Z"
-                      }
+                      "id": "fxx_dbvm07aukoh6sl1ll170",
+                      "object": "fx_exchange",
+                      "livemode": false,
+                      "status": "completed",
+                      "quote_id": "fxq_dbvm07aukoh6sl1ll14g",
+                      "payout_id": null,
+                      "source_currency": "USD",
+                      "destination_currency": "EUR",
+                      "source_amount": "0.00",
+                      "destination_amount": "0.00",
+                      "mid_market_rate": "0.925924",
+                      "customer_rate": "0.925924",
+                      "markup_basis_points": 0,
+                      "fee": "0.00",
+                      "fee_currency": "USD",
+                      "metadata": {
+                        "batch": "nov"
+                      },
+                      "created_at": "2026-11-19T20:46:21.200Z",
+                      "updated_at": "2026-11-19T20:46:21.200Z"
                     }
         '400':
           description: Malformed JSON, an unknown field, a missing field or a missing `Idempotency-Key`.
@@ -8275,6 +7895,9 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '503':
           description: A locked rate is not available right now (`locked_rate_unavailable`). Retry.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
           content:
             application/json:
               schema:
@@ -8308,15 +7931,15 @@ paths:
           in: query
           required: false
           description: >-
-            Only objects created at or after this RFC 3339 timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
+            Only objects created at or after this timestamp (inclusive), such as
+            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive).
+          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -8428,38 +8051,32 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/FXExchange'
+                $ref: '#/components/schemas/FXExchange'
               examples:
                 response:
                   summary: Response
                   value:
                     {
-                      "data": {
-                        "id": "fxx_dbvm07aukoh6sl1ll170",
-                        "object": "fx_exchange",
-                        "livemode": false,
-                        "status": "completed",
-                        "quote_id": "fxq_dbvm07aukoh6sl1ll14g",
-                        "payout_id": null,
-                        "source_currency": "USD",
-                        "destination_currency": "EUR",
-                        "source_amount": "0.00",
-                        "destination_amount": "0.00",
-                        "mid_market_rate": "0.925924",
-                        "customer_rate": "0.925924",
-                        "markup_basis_points": 0,
-                        "fee": "0.00",
-                        "fee_currency": "USD",
-                        "metadata": {
-                          "batch": "nov"
-                        },
-                        "created_at": "2026-11-19T20:46:21.200Z",
-                        "updated_at": "2026-11-19T20:46:21.200Z"
-                      }
+                      "id": "fxx_dbvm07aukoh6sl1ll170",
+                      "object": "fx_exchange",
+                      "livemode": false,
+                      "status": "completed",
+                      "quote_id": "fxq_dbvm07aukoh6sl1ll14g",
+                      "payout_id": null,
+                      "source_currency": "USD",
+                      "destination_currency": "EUR",
+                      "source_amount": "0.00",
+                      "destination_amount": "0.00",
+                      "mid_market_rate": "0.925924",
+                      "customer_rate": "0.925924",
+                      "markup_basis_points": 0,
+                      "fee": "0.00",
+                      "fee_currency": "USD",
+                      "metadata": {
+                        "batch": "nov"
+                      },
+                      "created_at": "2026-11-19T20:46:21.200Z",
+                      "updated_at": "2026-11-19T20:46:21.200Z"
                     }
         '400':
           description: A malformed id (`resource_id_invalid`).
@@ -8708,7 +8325,7 @@ components:
       schema:
         type: integer
     Retry-After:
-      description: Seconds to wait before retrying. Included on 429 responses.
+      description: Seconds to wait before retrying. Included on every 429 and 503 response (a 503 carries `1` unless a longer wait is known).
       schema:
         type: integer
     WWW-Authenticate:
@@ -8728,7 +8345,7 @@ components:
 
   responses:
     BadRequest:
-      description: The request body could not be parsed or contains unknown fields, or the `Anton-Version` header is not a known version (`invalid_api_version`).
+      description: The request body could not be parsed or contains unknown fields, its `Content-Type` is not `application/json` (`invalid_content_type`), or the `Anton-Version` header is not a known version (`invalid_api_version`).
       content:
         application/json:
           schema:
@@ -8874,7 +8491,7 @@ components:
             missing_idempotency_key:
               value:
                 error:
-                  type: idempotency_error
+                  type: invalid_request_error
                   code: missing_idempotency_key
                   message: Idempotency-Key header is required for this endpoint
                   doc_url: https://docs.antonpayments.com/api-reference/errors#missing_idempotency_key
@@ -8911,7 +8528,10 @@ components:
       description: >-
         Something went wrong on our end (`api_error`: 500 `internal_error`, 502 `upstream_error`, 503
         `service_unavailable`). The message is always generic. Safe to retry with the same
-        `Idempotency-Key`; quote `Request-Id` to support.
+        `Idempotency-Key`; quote `Request-Id` to support. A 503 carries `Retry-After`.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
       content:
         application/json:
           schema:
@@ -8961,8 +8581,8 @@ components:
         type:
           type: string
           description: >-
-            The kind of error; it follows the HTTP status. `idempotency_error` covers the three
-            `Idempotency-Key` failures.
+            The kind of error; it follows the HTTP status. `idempotency_error` is used only for the two
+            `Idempotency-Key` failures that are a 409 or a 422 (`idempotency_in_flight`, `idempotency_key_reused`).
           enum:
             - authentication_error
             - permission_error
@@ -8975,6 +8595,169 @@ components:
           type: string
           description: Machine-readable error code. Branch on this, not on `message`. Each code is documented at its `doc_url`.
           example: amount_precision_invalid
+          x-anton-error-codes:
+            # BEGIN GENERATED: error codes
+            - already_exists
+            - already_monitored
+            - amount_invalid
+            - amount_precision_invalid
+            - api_version_downgrade
+            - approval_ended
+            - approver_not_independent
+            - approver_required
+            - auth_unavailable
+            - bad_request
+            - batch_cancel_failed
+            - batch_confirm_failed
+            - batch_confirmation_expired
+            - batch_not_cancellable
+            - batch_not_validated
+            - batch_upload_failed
+            - beneficiary_archive_failed
+            - beneficiary_delete_failed
+            - beneficiary_not_active
+            - beneficiary_pii_update_failed
+            - beneficiary_restore_failed
+            - beneficiary_update_failed
+            - cannot_be_processed
+            - capability_required
+            - case_file_too_large
+            - case_lookup_unavailable
+            - conflict
+            - country_not_supported
+            - currency_not_supported
+            - cursor_invalid
+            - decision_not_pending
+            - decision_pending
+            - deprecated_endpoint
+            - duplicate_beneficiary
+            - duplicate_file
+            - duplicate_instrument
+            - empty_body
+            - export_busy
+            - export_too_large
+            - export_unavailable
+            - file_hash_mismatch
+            - file_too_large
+            - forbidden
+            - fx_execution_failed
+            - fx_rates_unavailable
+            - fx_unavailable
+            - idempotency_in_flight
+            - idempotency_key_reused
+            - idempotency_unavailable
+            - ids_required
+            - import_already_confirmed
+            - import_confirm_failed
+            - import_expired
+            - import_preview_failed
+            - import_too_large
+            - instrument_delete_failed
+            - instrument_update_failed
+            - insufficient_balance
+            - insufficient_permissions
+            - insufficient_scope
+            - internal_error
+            - invalid_api_key
+            - invalid_api_version
+            - invalid_content_type
+            - invalid_country_code
+            - invalid_credentials
+            - invalid_csv
+            - invalid_days
+            - invalid_decision
+            - invalid_display_name
+            - invalid_document_id
+            - invalid_dpop_proof
+            - invalid_email
+            - invalid_export_range
+            - invalid_file
+            - invalid_file_format
+            - invalid_limit
+            - invalid_link_expiry
+            - invalid_message
+            - invalid_multipart_form
+            - invalid_owner_id
+            - invalid_query_param
+            - invalid_reason_code
+            - invalid_request
+            - invalid_subject_type
+            - invalid_template_format
+            - invalid_template_type
+            - invalid_token
+            - invalid_verification_state
+            - key_environment_mismatch
+            - link_not_found
+            - locked_rate_unavailable
+            - malformed_json
+            - merchant_context_required
+            - merchant_not_active
+            - merchant_not_found
+            - merchant_suspended
+            - merchant_terminated
+            - method_not_allowed
+            - method_not_supported
+            - missing_idempotency_key
+            - missing_required_field
+            - module_not_enabled
+            - monitoring_limit_reached
+            - no_buy_account
+            - no_funding_account
+            - not_authenticated
+            - not_configured
+            - not_found
+            - not_proposer
+            - note_limit_reached
+            - note_too_long
+            - notes_unavailable
+            - oauth_unavailable
+            - owner_not_eligible
+            - payload_too_large
+            - payout_not_cancellable
+            - payout_on_hold
+            - payout_rejected
+            - policy_blocked
+            - pricing_plan_not_found
+            - quote_already_used
+            - quote_expired
+            - quote_mismatch
+            - quote_not_locked
+            - rate_limit_exceeded
+            - rate_limited
+            - rate_limited_sandbox_deposit
+            - reference_not_allowed
+            - rescreen_not_configured
+            - resource_id_invalid
+            - resource_missing
+            - retention_cannot_decrease
+            - review_closed
+            - review_not_waiting
+            - sandbox_deposit_failed
+            - sandbox_only
+            - sandbox_seeder_unavailable
+            - screening_unavailable
+            - second_approver_unavailable
+            - self_approval_forbidden
+            - service_unavailable
+            - static_api_keys_disabled
+            - stats_unavailable
+            - subject_details_not_stored
+            - subject_storage_unavailable
+            - temporarily_unavailable
+            - too_many_ids
+            - type_mismatch
+            - unauthorized
+            - unknown_field
+            - unknown_parameter
+            - unsupported_sandbox_currency
+            - upstream_error
+            - validation_error
+            - verification_not_configured
+            - webhook_url_invalid
+            - webhook_url_not_https
+            - webhook_url_private_address
+            - webhook_url_required
+            # END GENERATED: error codes
         message:
           type: string
           description: Human-readable description for a developer. Never includes personal data or internal detail; a 5xx message is always generic.
@@ -9625,7 +9408,7 @@ components:
           type: object
           description: Method-specific credential fields. Tokenized on receipt.
           additionalProperties: true
-        is_default:
+        default:
           type: boolean
           description: Make this the default instrument for the beneficiary. The previous default (if any) is unflagged.
           default: false
@@ -9639,13 +9422,13 @@ components:
       type: object
       description: |
         Mutable fields on an instrument. A field left out is left unchanged; `null` clears
-        `label` and `metadata` and sets `is_default` to `false`.
+        `label` and `metadata` and sets `default` to `false`.
       additionalProperties: false
       properties:
         label:
           type: [string, 'null']
           maxLength: 255
-        is_default:
+        default:
           type: [boolean, 'null']
         status:
           type: string
@@ -9665,7 +9448,7 @@ components:
         A payment destination attached to a beneficiary. Credentials (account numbers,
         wallet addresses, card PANs) are tokenized in a secure vault and never returned
         by the API; only masked display fields are.
-      required: [id, object, livemode, status, beneficiary_id, method, currency, country, label, is_default, display_last4, display_bank, display_network, masked_account, created_via, source_batch_id, metadata, created_at, updated_at]
+      required: [id, object, livemode, status, beneficiary_id, method, currency, country, label, default, display_last4, display_bank, display_network, masked_account, created_via, source_batch_id, metadata, created_at, updated_at]
       properties:
         id:
           type: string
@@ -9694,7 +9477,7 @@ components:
         label:
           type: [string, 'null']
           description: Your label for the instrument.
-        is_default:
+        default:
           type: boolean
           description: Whether this is the beneficiary's default instrument for payouts.
         display_last4:
@@ -9723,7 +9506,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
-      example: {"id": "ins_dbvlj5qukohfu54jbmlg", "object": "instrument", "livemode": false, "status": "active", "beneficiary_id": "ben_dbvlj5qukohfu54jbmjg", "method": "iban", "currency": "EUR", "country": null, "label": "Primary EUR account", "is_default": true, "display_last4": "3000", "display_bank": null, "display_network": "IBAN", "masked_account": "IBAN ****3000", "created_via": "api", "source_batch_id": null, "metadata": {"cost_center": "4421"}, "created_at": "2026-11-19T20:18:31.832Z", "updated_at": "2026-11-19T20:18:31.832Z"}
+      example: {"id": "ins_dbvlj5qukohfu54jbmlg", "object": "instrument", "livemode": false, "status": "active", "beneficiary_id": "ben_dbvlj5qukohfu54jbmjg", "method": "iban", "currency": "EUR", "country": null, "label": "Primary EUR account", "default": true, "display_last4": "3000", "display_bank": null, "display_network": "IBAN", "masked_account": "IBAN ****3000", "created_via": "api", "source_batch_id": null, "metadata": {"cost_center": "4421"}, "created_at": "2026-11-19T20:18:31.832Z", "updated_at": "2026-11-19T20:18:31.832Z"}
 
     InstrumentDeleted:
       type: object
@@ -10085,6 +9868,9 @@ components:
         - completed_at
         - failed_at
         - cancelled_at
+        - risk
+        - delivery
+        - session_quality
       properties:
         id:
           type: string
@@ -10229,6 +10015,43 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+        risk:
+          oneOf:
+            - type: object
+              required: [score, tier]
+              properties:
+                score:
+                  type: [integer, 'null']
+                  minimum: 0
+                  maximum: 1000
+                  description: The payout's risk score, 0 to 1000, higher is worse; `null` until scored.
+                tier:
+                  type: [string, 'null']
+                  description: The score's tier (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`); `null` until scored.
+              description: The payout's risk score and tier, and nothing else (no reasons or signals).
+            - type: 'null'
+          description: |
+            The payout's risk score and tier. Always present: `null` while the payout has no score, and `null` for a
+            payout that is `on_hold` or `failed`.
+        delivery:
+          oneOf:
+            - $ref: '#/components/schemas/PayoutDelivery'
+            - type: 'null'
+          description: |
+            Delivery-time context for the payout. Always present: `null` when the corridor has no estimate, when the
+            payout is not in flight, and for a payout that is `on_hold` or `failed`. It is populated on retrieve
+            (`GET /v1/payouts/{id}`), on create and cancel, and in webhook events (the same object, computed at that moment); it is `null` in lists, where computing it per payout would cost a query each.
+        session_quality:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+            enum: [non_public_ip, invalid_started_at, future_started_at, unknown_timezone]
+          description: |
+            Always present. On `POST /v1/payouts`, the data-quality flags found in the request's `session` object
+            (non-blocking: the payout was created; fix the flagged fields to improve risk-signal quality); `null`
+            when there are none and on every other response and event.
       example:
         {
           "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
@@ -10278,7 +10101,10 @@ components:
           "processed_at": null,
           "completed_at": null,
           "failed_at": null,
-          "cancelled_at": null
+          "cancelled_at": null,
+          "risk": null,
+          "delivery": null,
+          "session_quality": null
         }
 
     PayoutEvent:
@@ -10464,7 +10290,7 @@ components:
           type: array
           items:
             type: object
-            required: [currency, amount, fx_rows, same_currency_rows, rate_timestamp]
+            required: [currency, amount, fx_rows, same_currency_rows, rate_at]
             properties:
               currency:
                 $ref: '#/components/schemas/CurrencyCode'
@@ -10474,9 +10300,10 @@ components:
                 type: integer
               same_currency_rows:
                 type: integer
-              rate_timestamp:
-                type: string
-                description: When the FX rates behind the estimate were taken (RFC 3339).
+              rate_at:
+                type: [string, 'null']
+                format: date-time
+                description: When the FX rates behind the estimate were taken; `null` when no rate was needed or recorded.
         fx_markup_basis_points:
           type: integer
           description: FX markup applied to cross-currency rows, in basis points.
@@ -10556,6 +10383,7 @@ components:
         - uploaded_by
         - confirmed_by
         - cancelled_by
+        - metadata
         - created_at
         - updated_at
         - confirmed_at
@@ -10623,6 +10451,10 @@ components:
           type: [string, 'null']
         cancelled_by:
           type: [string, 'null']
+        metadata:
+          allOf:
+            - $ref: '#/components/schemas/Metadata'
+          description: Your own key/value pairs for this batch, set with the `metadata` form field on upload. Returned as-is, never read by Anton.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -10677,7 +10509,7 @@ components:
                 "amount": "1200.50",
                 "fx_rows": 0,
                 "same_currency_rows": 2,
-                "rate_timestamp": "2026-11-19T14:00:00Z"
+                "rate_at": "2026-11-19T14:00:00.000Z"
               }
             ],
             "fx_markup_basis_points": 50,
@@ -10729,7 +10561,7 @@ components:
         A bulk beneficiary import. Created by `POST /v1/beneficiaries/import` as a preview
         (`status` `preview`, `rows` set, `result` `null`); once confirmed it is `confirmed`
         with `result` set and `rows` `null`. A preview expires 24 hours after it is created and is deleted then.
-      required: [id, object, livemode, status, summary, rows, result, created_at, confirmed_at, expires_at]
+      required: [id, object, livemode, status, summary, rows, result, metadata, created_at, confirmed_at, expires_at]
       properties:
         id:
           type: string
@@ -10764,6 +10596,10 @@ components:
             - $ref: '#/components/schemas/BeneficiaryImportResult'
             - type: 'null'
           description: The outcome of the confirm. `null` until confirmed.
+        metadata:
+          allOf:
+            - $ref: '#/components/schemas/Metadata'
+          description: Your own key/value pairs for this import, set with the `metadata` form field on upload. Returned as-is, never read by Anton.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         confirmed_at:
@@ -10771,7 +10607,7 @@ components:
           format: date-time
         expires_at:
           $ref: '#/components/schemas/Timestamp'
-      example: {"id": "imp_dbvlj5qukohfu54jbn2g", "object": "beneficiary_import", "livemode": false, "status": "preview", "summary": {"total": 2, "valid": 2, "invalid": 0}, "rows": [{"row_number": 1, "type": "individual", "valid": true, "errors": [], "external_ref": "R-001", "country": "GB", "masked": {"display_name": "A**** L**", "email": "***@example.com", "phone": "**********11"}}, {"row_number": 2, "type": "individual", "valid": true, "errors": [], "external_ref": "R-002", "country": "US", "masked": {"display_name": "B** S****", "email": "***@example.com", "phone": "*********01"}}], "result": null, "created_at": "2026-11-19T20:18:31.834Z", "confirmed_at": null, "expires_at": "2026-11-20T20:18:31.834Z"}
+      example: {"id":"imp_dbvlj5qukohfu54jbn2g","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"metadata":{},"created_at":"2026-11-19T20:18:31.834Z","confirmed_at":null,"expires_at":"2026-11-20T20:18:31.834Z"}
 
     BeneficiaryImportRow:
       type: object
@@ -12939,7 +12775,7 @@ components:
         A controlling owner on a business verification. Each owner completes an individual
         KYC flow; the business cannot reach `approved` until every controlling owner has.
         `display_name` is masked.
-      required: [id, object, livemode, display_name, email, ownership_pct, status, completed_at]
+      required: [id, object, livemode, display_name, email, ownership_percentage, status, completed_at]
       properties:
         id:
           type: string
@@ -12955,7 +12791,7 @@ components:
         email:
           type: string
           description: Masked (`m***@example.com`). The full address is available only to people with the identity-details permission, in the portal.
-        ownership_pct:
+        ownership_percentage:
           type: integer
           description: Declared ownership percentage.
         status:
@@ -12970,7 +12806,7 @@ components:
       description: |
         One verification of a subject. `hosted_link` is **secret-once**: present only on the response
         that minted it (create / resend / regenerate / re-verify) and never on a read.
-      required: [id, object, livemode, status, subject_id, reason, screening, owners, link_expires_at, completed_at, created_at, updated_at]
+      required: [id, object, livemode, status, subject_id, reason, screening, owners, link_expires_at, completed_at, metadata, created_at, updated_at]
       properties:
         id:
           type: string
@@ -13013,6 +12849,10 @@ components:
             Secret-once hosted verification link. Present only on the response that minted it. A replay of that
             request (same `Idempotency-Key`) returns the same resource with `hosted_link` `null`: the link is
             returned once and never stored. Call regenerate to get a new link.
+        metadata:
+          allOf:
+            - $ref: '#/components/schemas/Metadata'
+          description: Your own key/value pairs for this verification, set in the body when you re-verify a subject. Returned as-is, never read by Anton. The first verification of a subject carries none, so see the subject's own `metadata` is set when you create the subject.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:

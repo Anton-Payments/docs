@@ -243,7 +243,6 @@
               "api-reference/accounts/list-accounts",
               "api-reference/accounts/get-account",
               "api-reference/accounts/get-account-details",
-              "api-reference/accounts/list-account-transactions",
               "api-reference/accounts/list-transactions",
               "api-reference/accounts/export-transactions",
               "api-reference/accounts/get-transaction"

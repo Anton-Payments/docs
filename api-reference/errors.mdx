@@ -62,10 +62,10 @@ The type follows the status, so you can handle a class of error without knowing 
 | --- | --- | --- |
 | `authentication_error` | 401 | No credentials, or credentials that do not verify. |
 | `permission_error` | 403 | Valid credentials that lack the permission, scope or capability. |
-| `invalid_request_error` | 400, 404, 409, 413, 422 | The request cannot be completed as sent: malformed (400), no such resource (404), conflicts with current state (409), too large (413), or fails a business rule (422). |
-| `idempotency_error` | 400, 409, 422 | An `Idempotency-Key` problem: missing (400), in flight (409), reused with a different body (422). |
+| `invalid_request_error` | 400, 404, 405, 409, 410, 413, 422 | The request cannot be completed as sent: malformed (400), no such resource (404), wrong method (405), conflicts with current state (409), retired endpoint (410), too large (413), or fails a business rule (422). |
+| `idempotency_error` | 409, 422 | An `Idempotency-Key` problem: still in flight (409) or reused with a different body (422). A missing key is a `400 invalid_request_error` with the code `missing_idempotency_key`. |
 | `rate_limit_error` | 429 | You are over a rate limit. |
-| `api_error` | 500, 502, 503 | Something failed on our side or at a provider. Retrying with the same `Idempotency-Key` is safe. |
+| `api_error` | 500, 501, 502, 503 | Something failed on our side or at a provider. Retrying with the same `Idempotency-Key` is safe. |
 
 ## Statuses
 
@@ -74,7 +74,7 @@ The type follows the status, so you can handle a class of error without knowing 
 | `200` | Success: read, update, state change. A delete returns the deleted object's `id`, its `object` name and `"deleted": true`. |
 | `201` | A new resource was created. |
 | `202` | Accepted for asynchronous work. The body is the resource in its pending state. |
-| `400` | The request is malformed: JSON, an unknown field or parameter, a type, an ID's shape, a missing `Idempotency-Key`. |
+| `400` | The request is malformed: JSON, an unknown field or parameter, a type, an ID's shape, a body that is not `application/json` (`invalid_content_type`), a missing `Idempotency-Key`. |
 | `401` | No credentials, or credentials that do not verify. Carries `WWW-Authenticate`, see [Authentication challenge](#authentication-challenge). |
 | `403` | Valid credentials without the permission, scope or capability. |
 | `404` | The resource does not exist for your account. |
@@ -82,7 +82,7 @@ The type follows the status, so you can handle a class of error without knowing 
 | `413` | The body or upload is larger than the endpoint accepts. |
 | `422` | The request is well formed but fails a business rule. |
 | `429` | Rate limited. Carries `Retry-After`. |
-| `500`, `502`, `503` | Our failure, a provider's failure, or temporary unavailability. |
+| `500`, `501`, `502`, `503` | Our failure, a capability not available to your account, a provider's failure, or temporary unavailability. A `503` carries `Retry-After`. |
 
 ## Authentication challenge
 
@@ -106,132 +106,198 @@ When you sent a credential and it was refused, the header also names the reason:
 
 ## Error codes
 
-Codes group below by what went wrong. The status for each code is fixed.
+Codes group below by what went wrong, then run in order of status. The status for each code is fixed. The list is generated from the API specification, so it matches the `code` values the API can return.
 
 ### Request
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="invalid_request">`invalid_request`</span> | 400 | `invalid_request_error` | The request is malformed in a way no more specific code covers. |
-| <span id="malformed_json">`malformed_json`</span> | 400 | `invalid_request_error` | The body is not valid JSON. |
-| <span id="empty_body">`empty_body`</span> | 400 | `invalid_request_error` | The endpoint needs a JSON body and none was sent. |
-| <span id="unknown_field">`unknown_field`</span> | 400 | `invalid_request_error` | The body has a field the endpoint does not define. Unknown fields are rejected, never ignored. `param` names it. |
-| <span id="unknown_parameter">`unknown_parameter`</span> | 400 | `invalid_request_error` | The query string has a parameter the endpoint does not define. `param` names it. |
-| <span id="type_mismatch">`type_mismatch`</span> | 400 | `invalid_request_error` | A field has the wrong JSON type. `param` names it. |
-| <span id="resource_id_invalid">`resource_id_invalid`</span> | 400 | `invalid_request_error` | A path ID does not have the shape of an ID for this resource (wrong prefix or characters). `param` names it. The request cannot name any resource. See `resource_missing` for a well-formed ID that does not exist. |
-| <span id="invalid_limit">`invalid_limit`</span> | 400 | `invalid_request_error` | `limit` is not an integer from 1 to 100. |
+| <span id="amount_invalid">`amount_invalid`</span> | 400 | `invalid_request_error` | An amount is not a valid decimal string. Send amounts as quoted decimal strings, for example `"100.50"`. |
+| <span id="bad_request">`bad_request`</span> | 400 | `invalid_request_error` | The request body could not be read. |
 | <span id="cursor_invalid">`cursor_invalid`</span> | 400 | `invalid_request_error` | `cursor` is not one this endpoint issued, has expired, or has been altered. Start again from the first page. |
-| <span id="invalid_api_version">`invalid_api_version`</span> | 400 | `invalid_request_error` | The `Anton-Version` header is not a version Anton knows. Send one of the versions in the [changelog](/changelog) or omit the header. |
-| <span id="missing_idempotency_key">`missing_idempotency_key`</span> | 400 | `idempotency_error` | A `POST` that needs an `Idempotency-Key` header was sent without one. See [Idempotency](/api-reference/idempotency). |
+| <span id="empty_body">`empty_body`</span> | 400 | `invalid_request_error` | The endpoint needs a JSON body and none was sent. |
+| <span id="file_hash_mismatch">`file_hash_mismatch`</span> | 400 | `invalid_request_error` | The `file_hash` you sent does not match the uploaded file. Re-upload the file. |
 | <span id="ids_required">`ids_required`</span> | 400 | `invalid_request_error` | A bulk action was sent with an empty `ids` list. |
-| <span id="too_many_ids">`too_many_ids`</span> | 400 | `invalid_request_error` | A bulk action named more IDs than one request may carry. |
-| <span id="payload_too_large">`payload_too_large`</span> | 413 | `invalid_request_error` | The body is larger than the endpoint accepts (1 MB for JSON). |
-| <span id="file_too_large">`file_too_large`</span> | 413 | `invalid_request_error` | The uploaded file is larger than the endpoint accepts. |
-| <span id="invalid_multipart_form">`invalid_multipart_form`</span> | 400 | `invalid_request_error` | The upload is not a well-formed `multipart/form-data` request with a `file` part. |
+| <span id="invalid_api_version">`invalid_api_version`</span> | 400 | `invalid_request_error` | The `Anton-Version` header is not a version Anton knows. Send one of the versions in the [changelog](/changelog) or omit the header. |
+| <span id="invalid_content_type">`invalid_content_type`</span> | 400 | `invalid_request_error` | The request has a body but its `Content-Type` is not `application/json`. Upload endpoints (batch upload and beneficiary import) take `multipart/form-data` instead. |
+| <span id="invalid_csv">`invalid_csv`</span> | 400 | `invalid_request_error` | The CSV could not be parsed. Check the header row and quoting against the template. |
+| <span id="invalid_days">`invalid_days`</span> | 400 | `invalid_request_error` | `days` is not an integer in the range the endpoint accepts. |
+| <span id="invalid_document_id">`invalid_document_id`</span> | 400 | `invalid_request_error` | The document ID is missing. |
 | <span id="invalid_file">`invalid_file`</span> | 400 | `invalid_request_error` | The uploaded file is empty or could not be read. |
 | <span id="invalid_file_format">`invalid_file_format`</span> | 400 | `invalid_request_error` | The uploaded file is not a supported format. Use CSV or XLSX as the endpoint documents. |
-| <span id="invalid_csv">`invalid_csv`</span> | 400 | `invalid_request_error` | The CSV could not be parsed. Check the header row and quoting against the template. |
-| <span id="file_hash_mismatch">`file_hash_mismatch`</span> | 400 | `invalid_request_error` | The `file_hash` you sent does not match the uploaded file. Re-upload the file. |
-| <span id="invalid_template_type">`invalid_template_type`</span> | 400 | `invalid_request_error` | The template `type` is not one the endpoint offers. |
+| <span id="invalid_limit">`invalid_limit`</span> | 400 | `invalid_request_error` | `limit` is not an integer from 1 to 100. |
+| <span id="invalid_multipart_form">`invalid_multipart_form`</span> | 400 | `invalid_request_error` | The upload is not a well-formed `multipart/form-data` request with a `file` part. |
+| <span id="invalid_owner_id">`invalid_owner_id`</span> | 400 | `invalid_request_error` | The owner ID is missing. |
+| <span id="invalid_query_param">`invalid_query_param`</span> | 400 | `invalid_request_error` | A query parameter has a value the endpoint does not accept. `param` names it. |
+| <span id="invalid_request">`invalid_request`</span> | 400 | `invalid_request_error` | The request is malformed in a way no more specific code covers. |
 | <span id="invalid_template_format">`invalid_template_format`</span> | 400 | `invalid_request_error` | The template `format` is not one the endpoint offers. |
+| <span id="invalid_template_type">`invalid_template_type`</span> | 400 | `invalid_request_error` | The template `type` is not one the endpoint offers. |
+| <span id="malformed_json">`malformed_json`</span> | 400 | `invalid_request_error` | The body is not valid JSON. |
+| <span id="missing_idempotency_key">`missing_idempotency_key`</span> | 400 | `invalid_request_error` | A `POST` that needs an `Idempotency-Key` header was sent without one. `PATCH` and `DELETE` do not need one. See [Idempotency](/api-reference/idempotency). |
+| <span id="missing_required_field">`missing_required_field`</span> | 400 | `invalid_request_error` | A required field is missing. `param` names it. |
+| <span id="resource_id_invalid">`resource_id_invalid`</span> | 400 | `invalid_request_error` | A path ID does not have the shape of an ID for this resource (wrong prefix or characters). `param` names it. The request cannot name any resource. See `resource_missing` for a well-formed ID that does not exist. |
+| <span id="too_many_ids">`too_many_ids`</span> | 400 | `invalid_request_error` | A bulk action named more IDs than one request may carry. |
+| <span id="type_mismatch">`type_mismatch`</span> | 400 | `invalid_request_error` | A field has the wrong JSON type. `param` names it. |
+| <span id="unknown_field">`unknown_field`</span> | 400 | `invalid_request_error` | The body has a field the endpoint does not define. Unknown fields are rejected, never ignored. `param` names it. |
+| <span id="unknown_parameter">`unknown_parameter`</span> | 400 | `invalid_request_error` | The query string has a parameter the endpoint does not define. `param` names it. |
+| <span id="method_not_allowed">`method_not_allowed`</span> | 405 | `invalid_request_error` | The path exists but does not support this HTTP method. |
+| <span id="deprecated_endpoint">`deprecated_endpoint`</span> | 410 | `invalid_request_error` | The endpoint has been retired. Migrate to its replacement; the `Sunset` header gave the date. |
+| <span id="file_too_large">`file_too_large`</span> | 413 | `invalid_request_error` | The uploaded file is larger than the endpoint accepts. |
+| <span id="payload_too_large">`payload_too_large`</span> | 413 | `invalid_request_error` | The body is larger than the endpoint accepts (1 MB for JSON). |
 
 ### Authentication and access
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="unauthorized">`unauthorized`</span> | 401 | `authentication_error` | No credentials, or credentials that do not verify (expired, malformed or revoked). Get a fresh token; see [Authentication](/authentication). |
-| <span id="invalid_token">`invalid_token`</span> | 401 | `authentication_error` | The access token is expired, malformed, or not bound to the DPoP proof you sent. |
+| <span id="invalid_api_key">`invalid_api_key`</span> | 401 | `authentication_error` | The credential you sent is not a valid API credential. Use OAuth client credentials with DPoP. |
 | <span id="invalid_dpop_proof">`invalid_dpop_proof`</span> | 401 | `authentication_error` | The DPoP proof is missing or failed verification (method, URL, `iat`, `jti` or key). See [Authentication](/authentication#troubleshooting). |
+| <span id="invalid_token">`invalid_token`</span> | 401 | `authentication_error` | The access token is expired, malformed, or not bound to the DPoP proof you sent. |
+| <span id="merchant_context_required">`merchant_context_required`</span> | 401 | `authentication_error` | The endpoint needs a credential tied to a merchant account, and the one you sent is not. |
+| <span id="not_authenticated">`not_authenticated`</span> | 401 | `authentication_error` | You are not signed in. Same meaning as `unauthorized`. |
 | <span id="static_api_keys_disabled">`static_api_keys_disabled`</span> | 401 | `authentication_error` | A static API key was sent. Keys are not accepted; use OAuth client credentials with DPoP. |
-| <span id="key_environment_mismatch">`key_environment_mismatch`</span> | 403 | `permission_error` | A sandbox credential was used against production, or the reverse. |
-| <span id="insufficient_permissions">`insufficient_permissions`</span> | 403 | `permission_error` | The credential or signed-in user is not allowed to perform this action. |
+| <span id="unauthorized">`unauthorized`</span> | 401 | `authentication_error` | No credentials, or credentials that do not verify (expired, malformed or revoked). Get a fresh token; see [Authentication](/authentication). |
+| <span id="approver_not_independent">`approver_not_independent`</span> | 403 | `permission_error` | The approver is not independent of the person who proposed the action. |
+| <span id="approver_required">`approver_required`</span> | 403 | `permission_error` | The action needs an approver, and the credential does not carry that permission. |
 | <span id="capability_required">`capability_required`</span> | 403 | `permission_error` | Your account does not hold the capability (`payouts` or `intelligence`) this endpoint needs. |
-| <span id="insufficient_scope">`insufficient_scope`</span> | 403 | `permission_error` | The credential was created without the scope this endpoint needs. Create a credential with the right scope. |
-| <span id="module_not_enabled">`module_not_enabled`</span> | 403 | `permission_error` | Your account does not have the add-on this endpoint needs. |
 | <span id="forbidden">`forbidden`</span> | 403 | `permission_error` | Authenticated, but not permitted to do this. |
+| <span id="insufficient_permissions">`insufficient_permissions`</span> | 403 | `permission_error` | The credential or signed-in user is not allowed to perform this action. |
+| <span id="insufficient_scope">`insufficient_scope`</span> | 403 | `permission_error` | The credential was created without the scope this endpoint needs. Create a credential with the right scope. |
+| <span id="key_environment_mismatch">`key_environment_mismatch`</span> | 403 | `permission_error` | A sandbox credential was used against production, or the reverse. |
+| <span id="merchant_not_active">`merchant_not_active`</span> | 403 | `permission_error` | Your account is not yet active. |
+| <span id="merchant_suspended">`merchant_suspended`</span> | 403 | `permission_error` | Your account is suspended and cannot perform this action. Contact support. |
+| <span id="merchant_terminated">`merchant_terminated`</span> | 403 | `permission_error` | Your account is closed and cannot perform this action. |
+| <span id="module_not_enabled">`module_not_enabled`</span> | 403 | `permission_error` | Your account does not have the add-on this endpoint needs. |
+| <span id="not_proposer">`not_proposer`</span> | 403 | `permission_error` | Only the person who proposed the action may do this. |
+| <span id="sandbox_only">`sandbox_only`</span> | 403 | `permission_error` | The endpoint is available only in the sandbox. |
+| <span id="self_approval_forbidden">`self_approval_forbidden`</span> | 403 | `permission_error` | A person cannot approve their own proposal. |
 
 ### Not found
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
+| <span id="merchant_not_found">`merchant_not_found`</span> | 404 | `invalid_request_error` | The addressed account does not exist. |
 | <span id="not_found">`not_found`</span> | 404 | `invalid_request_error` | No such resource for your account. A resource that belongs to another account looks the same. |
 | <span id="resource_missing">`resource_missing`</span> | 404 | `invalid_request_error` | A well-formed ID, or a currency, names nothing for your account: it does not exist, or it belongs to another account. The two cases are not told apart. |
+| <span id="subject_details_not_stored">`subject_details_not_stored`</span> | 404 | `invalid_request_error` | No details were kept for this subject. |
 
 ### Conflicts
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="conflict">`conflict`</span> | 409 | `invalid_request_error` | The request conflicts with the resource's current state. |
-| <span id="idempotency_in_flight">`idempotency_in_flight`</span> | 409 | `idempotency_error` | Another request with the same `Idempotency-Key` is still being processed. Retry after it completes; the completed response is then replayed. |
-| <span id="payout_not_cancellable">`payout_not_cancellable`</span> | 409 | `invalid_request_error` | The payout is past the point where it can be cancelled. |
-| <span id="payout_on_hold">`payout_on_hold`</span> | 409 | `invalid_request_error` | The payout is on hold, so it cannot be cancelled until the hold ends. |
-| <span id="beneficiary_not_active">`beneficiary_not_active`</span> | 409 | `invalid_request_error` | The beneficiary is archived or otherwise not active, so it cannot receive payouts or instruments. |
-| <span id="duplicate_beneficiary">`duplicate_beneficiary`</span> | 409 | `invalid_request_error` | An active beneficiary with the same identifying details already exists. |
-| <span id="duplicate_instrument">`duplicate_instrument`</span> | 409 | `invalid_request_error` | The beneficiary already has this instrument. |
-| <span id="duplicate_file">`duplicate_file`</span> | 409 | `invalid_request_error` | A batch with this exact file is still being processed. |
-| <span id="batch_not_validated">`batch_not_validated`</span> | 409 | `invalid_request_error` | The batch has not finished validating, or failed validation, so it cannot be confirmed. |
-| <span id="batch_not_cancellable">`batch_not_cancellable`</span> | 409 | `invalid_request_error` | The batch is finished or already processing; cancel its payouts individually. |
+| <span id="already_exists">`already_exists`</span> | 409 | `invalid_request_error` | A create conflicted with a resource that already exists. |
+| <span id="already_monitored">`already_monitored`</span> | 409 | `invalid_request_error` | The subject is already being monitored. |
+| <span id="approval_ended">`approval_ended`</span> | 409 | `invalid_request_error` | The approval has already ended. |
 | <span id="batch_confirmation_expired">`batch_confirmation_expired`</span> | 409 | `invalid_request_error` | The validated batch was not confirmed in time. Upload the file again. |
+| <span id="batch_not_cancellable">`batch_not_cancellable`</span> | 409 | `invalid_request_error` | The batch is finished or already processing; cancel its payouts individually. |
+| <span id="batch_not_validated">`batch_not_validated`</span> | 409 | `invalid_request_error` | The batch has not finished validating, or failed validation, so it cannot be confirmed. |
+| <span id="beneficiary_not_active">`beneficiary_not_active`</span> | 409 | `invalid_request_error` | The beneficiary is archived or otherwise not active, so it cannot receive payouts or instruments. |
+| <span id="conflict">`conflict`</span> | 409 | `invalid_request_error` | The request conflicts with the resource's current state. |
+| <span id="decision_not_pending">`decision_not_pending`</span> | 409 | `invalid_request_error` | The decision is no longer pending. |
+| <span id="decision_pending">`decision_pending`</span> | 409 | `invalid_request_error` | The review already has a decision waiting to be applied. |
+| <span id="duplicate_beneficiary">`duplicate_beneficiary`</span> | 409 | `invalid_request_error` | An active beneficiary with the same identifying details already exists. |
+| <span id="duplicate_file">`duplicate_file`</span> | 409 | `invalid_request_error` | A batch with this exact file is still being processed. |
+| <span id="duplicate_instrument">`duplicate_instrument`</span> | 409 | `invalid_request_error` | The beneficiary already has this instrument. |
+| <span id="idempotency_in_flight">`idempotency_in_flight`</span> | 409 | `idempotency_error` | Another request with the same `Idempotency-Key` is still being processed. Retry after it completes; the completed response is then replayed. |
 | <span id="import_already_confirmed">`import_already_confirmed`</span> | 409 | `invalid_request_error` | This beneficiary import has already been confirmed. |
 | <span id="import_expired">`import_expired`</span> | 409 | `invalid_request_error` | This beneficiary import was not confirmed in time. Upload the file again. |
+| <span id="monitoring_limit_reached">`monitoring_limit_reached`</span> | 409 | `invalid_request_error` | Your account has reached its limit of monitored subjects. |
+| <span id="note_limit_reached">`note_limit_reached`</span> | 409 | `invalid_request_error` | The review already has the most notes it can hold. |
+| <span id="payout_not_cancellable">`payout_not_cancellable`</span> | 409 | `invalid_request_error` | The payout is past the point where it can be cancelled. |
+| <span id="payout_on_hold">`payout_on_hold`</span> | 409 | `invalid_request_error` | The payout is on hold, so it cannot be cancelled until the hold ends. |
 | <span id="quote_already_used">`quote_already_used`</span> | 409 | `invalid_request_error` | The quote has already been used for an exchange. Request a new quote. |
-| <span id="decision_pending">`decision_pending`</span> | 409 | `invalid_request_error` | The review already has a decision waiting to be applied. |
+| <span id="retention_cannot_decrease">`retention_cannot_decrease`</span> | 409 | `invalid_request_error` | Retention can only grow, never shrink. |
 | <span id="review_closed">`review_closed`</span> | 409 | `invalid_request_error` | The review is closed and takes no further changes. |
 | <span id="review_not_waiting">`review_not_waiting`</span> | 409 | `invalid_request_error` | The review is not paused, so it cannot be resumed. |
-| <span id="note_limit_reached">`note_limit_reached`</span> | 409 | `invalid_request_error` | The review already has the most notes it can hold. |
 | <span id="second_approver_unavailable">`second_approver_unavailable`</span> | 409 | `invalid_request_error` | The decision needs a second approver and none is available. |
 
 ### Business rules
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="validation_error">`validation_error`</span> | 422 | `invalid_request_error` | One or more fields failed validation. `details` lists every failing field. |
-| <span id="idempotency_key_reused">`idempotency_key_reused`</span> | 422 | `idempotency_error` | The `Idempotency-Key` was already used with a different request body. Send a new key for a new request. |
 | <span id="amount_precision_invalid">`amount_precision_invalid`</span> | 422 | `invalid_request_error` | The amount has more decimal places than the currency allows. `GET /v1/currencies` lists each currency's precision. |
+| <span id="api_version_downgrade">`api_version_downgrade`</span> | 422 | `invalid_request_error` | The `Anton-Version` you asked for is older than the version your account is pinned to. Pinned versions only move forward. |
+| <span id="batch_cancel_failed">`batch_cancel_failed`</span> | 422 | `invalid_request_error` | The batch could not be cancelled. Safe to retry. |
+| <span id="batch_confirm_failed">`batch_confirm_failed`</span> | 422 | `invalid_request_error` | The batch could not be confirmed. Safe to retry with the same key. |
+| <span id="batch_upload_failed">`batch_upload_failed`</span> | 422 | `invalid_request_error` | The upload could not be stored. Safe to retry with a new key. |
+| <span id="beneficiary_archive_failed">`beneficiary_archive_failed`</span> | 422 | `invalid_request_error` | The beneficiary could not be archived. Retry, and contact support with the `request_id` if it persists. |
+| <span id="beneficiary_delete_failed">`beneficiary_delete_failed`</span> | 422 | `invalid_request_error` | The beneficiary could not be deleted. Retry, and contact support with the `request_id` if it persists. |
+| <span id="beneficiary_pii_update_failed">`beneficiary_pii_update_failed`</span> | 422 | `invalid_request_error` | The beneficiary's personal details could not be updated. Retry, and contact support with the `request_id` if it persists. |
+| <span id="beneficiary_restore_failed">`beneficiary_restore_failed`</span> | 422 | `invalid_request_error` | The beneficiary could not be restored. Retry, and contact support with the `request_id` if it persists. |
+| <span id="beneficiary_update_failed">`beneficiary_update_failed`</span> | 422 | `invalid_request_error` | The beneficiary could not be updated. Retry, and contact support with the `request_id` if it persists. |
+| <span id="cannot_be_processed">`cannot_be_processed`</span> | 422 | `invalid_request_error` | We could not process this request. Contact support with the `request_id`. |
+| <span id="case_file_too_large">`case_file_too_large`</span> | 422 | `invalid_request_error` | The case file is too large to export. |
+| <span id="country_not_supported">`country_not_supported`</span> | 422 | `invalid_request_error` | The destination country is not enabled for your account or for this payment method. |
 | <span id="currency_not_supported">`currency_not_supported`</span> | 422 | `invalid_request_error` | The currency or asset is not supported for this operation. |
-| <span id="invalid_country_code">`invalid_country_code`</span> | 422 | `invalid_request_error` | The country is not a supported ISO 3166-1 alpha-2 code. |
-| <span id="method_not_supported">`method_not_supported`</span> | 422 | `invalid_request_error` | The payment method is not available for this destination. |
+| <span id="export_too_large">`export_too_large`</span> | 422 | `invalid_request_error` | The export would exceed the row limit. Narrow the date range. |
+| <span id="idempotency_key_reused">`idempotency_key_reused`</span> | 422 | `idempotency_error` | The `Idempotency-Key` was already used with a different request body. Send a new key for a new request. |
+| <span id="import_confirm_failed">`import_confirm_failed`</span> | 422 | `invalid_request_error` | The beneficiary import could not be confirmed. Safe to retry with the same key. |
+| <span id="import_preview_failed">`import_preview_failed`</span> | 422 | `invalid_request_error` | The beneficiary import could not be previewed. Upload the file again. |
+| <span id="import_too_large">`import_too_large`</span> | 422 | `invalid_request_error` | The import file has more rows than one import may hold. |
+| <span id="instrument_delete_failed">`instrument_delete_failed`</span> | 422 | `invalid_request_error` | The instrument could not be deleted. Retry, and contact support with the `request_id` if it persists. |
+| <span id="instrument_update_failed">`instrument_update_failed`</span> | 422 | `invalid_request_error` | The instrument could not be updated. Retry, and contact support with the `request_id` if it persists. |
 | <span id="insufficient_balance">`insufficient_balance`</span> | 422 | `invalid_request_error` | Your available balance cannot cover the amount. Fund the account and retry with a new key. |
-| <span id="no_funding_account">`no_funding_account`</span> | 422 | `invalid_request_error` | You have no account in the funding currency. |
+| <span id="invalid_country_code">`invalid_country_code`</span> | 422 | `invalid_request_error` | The country is not a supported ISO 3166-1 alpha-2 code. |
+| <span id="invalid_credentials">`invalid_credentials`</span> | 422 | `invalid_request_error` | The credentials supplied for this operation were not accepted. |
+| <span id="invalid_decision">`invalid_decision`</span> | 422 | `invalid_request_error` | The review decision is not allowed in the review's current state. |
+| <span id="invalid_display_name">`invalid_display_name`</span> | 422 | `invalid_request_error` | `display_name` is missing. |
+| <span id="invalid_email">`invalid_email`</span> | 422 | `invalid_request_error` | `email` is missing or malformed. |
+| <span id="invalid_export_range">`invalid_export_range`</span> | 422 | `invalid_request_error` | The export date range is invalid or too wide. |
+| <span id="invalid_link_expiry">`invalid_link_expiry`</span> | 422 | `invalid_request_error` | `link_expires_in_days` must be 7, 14 or 30. |
+| <span id="invalid_message">`invalid_message`</span> | 422 | `invalid_request_error` | `message` is too long. |
+| <span id="invalid_reason_code">`invalid_reason_code`</span> | 422 | `invalid_request_error` | The reason code is not accepted with this decision. |
+| <span id="invalid_subject_type">`invalid_subject_type`</span> | 422 | `invalid_request_error` | `type` must be `person` or `business`. |
+| <span id="invalid_verification_state">`invalid_verification_state`</span> | 422 | `invalid_request_error` | The verification is not in a state where this action applies. |
+| <span id="link_not_found">`link_not_found`</span> | 422 | `invalid_request_error` | The linked evaluation or review does not exist. |
+| <span id="method_not_supported">`method_not_supported`</span> | 422 | `invalid_request_error` | The payment method is not available for this destination. |
 | <span id="no_buy_account">`no_buy_account`</span> | 422 | `invalid_request_error` | You have no account in the currency you are buying. |
-| <span id="pricing_plan_not_found">`pricing_plan_not_found`</span> | 422 | `invalid_request_error` | No pricing plan applies to this request. |
+| <span id="no_funding_account">`no_funding_account`</span> | 422 | `invalid_request_error` | You have no account in the funding currency. |
+| <span id="note_too_long">`note_too_long`</span> | 422 | `invalid_request_error` | The note is longer than 2,000 characters. |
+| <span id="owner_not_eligible">`owner_not_eligible`</span> | 422 | `invalid_request_error` | The owner is not able to decide reviews. |
 | <span id="payout_rejected">`payout_rejected`</span> | 422 | `invalid_request_error` | The payout was refused. The payout's `status_message` says what to correct. |
 | <span id="policy_blocked">`policy_blocked`</span> | 422 | `invalid_request_error` | A rule on your account stopped this request. |
-| <span id="cannot_be_processed">`cannot_be_processed`</span> | 422 | `invalid_request_error` | We could not process this request. Contact support with the `request_id`. |
+| <span id="pricing_plan_not_found">`pricing_plan_not_found`</span> | 422 | `invalid_request_error` | No pricing plan applies to this request. |
 | <span id="quote_expired">`quote_expired`</span> | 422 | `invalid_request_error` | The quote has expired. Request a new one. |
 | <span id="quote_mismatch">`quote_mismatch`</span> | 422 | `invalid_request_error` | The request does not match the quote it names. |
 | <span id="quote_not_locked">`quote_not_locked`</span> | 422 | `invalid_request_error` | The quote is an indicative one and cannot be executed. Request a locked quote. |
+| <span id="reference_not_allowed">`reference_not_allowed`</span> | 422 | `invalid_request_error` | The reference holds content it must not, such as a card number. |
 | <span id="unsupported_sandbox_currency">`unsupported_sandbox_currency`</span> | 422 | `invalid_request_error` | Sandbox deposits are available only for the currencies the endpoint lists. |
-| <span id="invalid_decision">`invalid_decision`</span> | 422 | `invalid_request_error` | The review decision is not allowed in the review's current state. |
-| <span id="invalid_reason_code">`invalid_reason_code`</span> | 422 | `invalid_request_error` | The reason code is not accepted with this decision. |
-| <span id="invalid_verification_state">`invalid_verification_state`</span> | 422 | `invalid_request_error` | The verification is not in a state where this action applies. |
-| <span id="invalid_credentials">`invalid_credentials`</span> | 422 | `invalid_request_error` | The credentials supplied for this operation were not accepted. |
-| <span id="note_too_long">`note_too_long`</span> | 422 | `invalid_request_error` | The note is longer than 2,000 characters. |
-| <span id="export_too_large">`export_too_large`</span> | 422 | `invalid_request_error` | The export would exceed the row limit. Narrow the date range. |
-| <span id="invalid_export_range">`invalid_export_range`</span> | 422 | `invalid_request_error` | The export date range is invalid or too wide. |
-| <span id="case_file_too_large">`case_file_too_large`</span> | 422 | `invalid_request_error` | The case file is too large to export. |
-| <span id="import_too_large">`import_too_large`</span> | 422 | `invalid_request_error` | The import file has more rows than one import may hold. |
-| <span id="batch_upload_failed">`batch_upload_failed`</span> | 422 | `invalid_request_error` | The upload could not be stored. Safe to retry with a new key. |
-| <span id="batch_confirm_failed">`batch_confirm_failed`</span> | 422 | `invalid_request_error` | The batch could not be confirmed. Safe to retry with the same key. |
-| <span id="batch_cancel_failed">`batch_cancel_failed`</span> | 422 | `invalid_request_error` | The batch could not be cancelled. Safe to retry. |
+| <span id="validation_error">`validation_error`</span> | 422 | `invalid_request_error` | One or more fields failed validation. `details` lists every failing field. |
 
 ### Rate limits
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
+| <span id="export_busy">`export_busy`</span> | 429 | `rate_limit_error` | Another export is already running. Retry shortly. `Retry-After` says how many seconds to wait. |
 | <span id="rate_limit_exceeded">`rate_limit_exceeded`</span> | 429 | `rate_limit_error` | You exceeded a rate limit. `Retry-After` says how many seconds to wait. See [Rate limits](/api-reference/rate-limits). |
+| <span id="rate_limited">`rate_limited`</span> | 429 | `rate_limit_error` | You exceeded a rate limit. Same meaning as `rate_limit_exceeded`; `Retry-After` says how many seconds to wait. |
+| <span id="rate_limited_sandbox_deposit">`rate_limited_sandbox_deposit`</span> | 429 | `rate_limit_error` | Too many sandbox deposits this hour. `Retry-After` says how many seconds to wait. |
 
 ### Server and upstream
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
+| <span id="fx_execution_failed">`fx_execution_failed`</span> | 500 | `api_error` | The exchange could not be executed. Retry with the same `Idempotency-Key`, and quote the `request_id` if it persists. |
 | <span id="internal_error">`internal_error`</span> | 500 | `api_error` | Something failed on our side. The message is generic. Retry with the same `Idempotency-Key`, and quote the `request_id` if it persists. |
-| <span id="service_unavailable">`service_unavailable`</span> | 503 | `api_error` | The service is temporarily unavailable. Retry with backoff. |
-| <span id="unavailable">`unavailable`</span> | 503 | `api_error` | A dependency of this endpoint is temporarily unavailable. Retry with backoff. |
-| <span id="idempotency_unavailable">`idempotency_unavailable`</span> | 503 | `api_error` | The idempotency check is temporarily unavailable. Retry with the same key. |
-| <span id="upstream_error">`upstream_error`</span> | 502 | `api_error` | A provider we depend on failed. Retry with the same `Idempotency-Key`. |
+| <span id="sandbox_deposit_failed">`sandbox_deposit_failed`</span> | 500 | `api_error` | The sandbox credit could not be applied. Retry with a new key. |
+| <span id="not_configured">`not_configured`</span> | 501 | `api_error` | This capability is not configured for your account. |
+| <span id="rescreen_not_configured">`rescreen_not_configured`</span> | 501 | `api_error` | Re-screening is not configured for your account. |
+| <span id="stats_unavailable">`stats_unavailable`</span> | 501 | `api_error` | Statistics are not available for your account. |
 | <span id="fx_rates_unavailable">`fx_rates_unavailable`</span> | 502 | `api_error` | FX rates are temporarily unavailable. Retry shortly. |
+| <span id="upstream_error">`upstream_error`</span> | 502 | `api_error` | A provider we depend on failed. Retry with the same `Idempotency-Key`. |
+| <span id="auth_unavailable">`auth_unavailable`</span> | 503 | `api_error` | Authentication is temporarily unavailable. Retry with backoff. |
+| <span id="case_lookup_unavailable">`case_lookup_unavailable`</span> | 503 | `api_error` | The lookup for this beneficiary's review cases is temporarily unavailable. Retry with backoff. |
+| <span id="export_unavailable">`export_unavailable`</span> | 503 | `api_error` | Exports are temporarily unavailable. Retry with backoff. |
+| <span id="fx_unavailable">`fx_unavailable`</span> | 503 | `api_error` | Exchanges are temporarily unavailable. Retry with backoff. |
+| <span id="idempotency_unavailable">`idempotency_unavailable`</span> | 503 | `api_error` | The idempotency check is temporarily unavailable. Retry with the same key. |
 | <span id="locked_rate_unavailable">`locked_rate_unavailable`</span> | 503 | `api_error` | A locked rate could not be provided right now. Retry shortly. |
+| <span id="notes_unavailable">`notes_unavailable`</span> | 503 | `api_error` | Notes cannot be stored right now. Retry with backoff. |
+| <span id="oauth_unavailable">`oauth_unavailable`</span> | 503 | `api_error` | OAuth authentication is temporarily unavailable. Retry with backoff. |
+| <span id="sandbox_seeder_unavailable">`sandbox_seeder_unavailable`</span> | 503 | `api_error` | Sandbox funding is not available right now. Retry with backoff. |
+| <span id="screening_unavailable">`screening_unavailable`</span> | 503 | `api_error` | Screening is temporarily unavailable. Retry with backoff. |
+| <span id="service_unavailable">`service_unavailable`</span> | 503 | `api_error` | The service is temporarily unavailable. Retry with backoff. |
+| <span id="subject_storage_unavailable">`subject_storage_unavailable`</span> | 503 | `api_error` | Subject details cannot be stored right now. Retry with backoff. |
+| <span id="temporarily_unavailable">`temporarily_unavailable`</span> | 503 | `api_error` | This could not be completed right now. Retry in a moment. |
+| <span id="verification_not_configured">`verification_not_configured`</span> | 503 | `api_error` | Verification is not available for your account. |
 
 ### Webhook URL checks
 
@@ -239,7 +305,7 @@ A webhook subscription's `url` is checked when you create or update it. These co
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="webhook_url_required">`webhook_url_required`</span> | 400 | `invalid_request_error` | The `url` is missing. |
 | <span id="webhook_url_invalid">`webhook_url_invalid`</span> | 400 | `invalid_request_error` | The `url` is not a valid URL. |
 | <span id="webhook_url_not_https">`webhook_url_not_https`</span> | 400 | `invalid_request_error` | The `url` does not use `https`. |
 | <span id="webhook_url_private_address">`webhook_url_private_address`</span> | 400 | `invalid_request_error` | The `url` is not publicly reachable. Use an HTTPS endpoint on the public internet. |
+| <span id="webhook_url_required">`webhook_url_required`</span> | 400 | `invalid_request_error` | The `url` is missing. |

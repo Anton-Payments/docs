@@ -146,7 +146,7 @@ curl "https://api.antonpayments.dev/v1/fx/exchanges?source_currency=USD&limit=50
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
 ```
 
-Filters: `source_currency`, `destination_currency`, `created_after`, `created_before`. Cursor-paginated.
+Filters: `source_currency`, `destination_currency`, `created_after`, `created_before` (RFC 3339 UTC with milliseconds, such as `2026-11-01T00:00:00.000Z`). Cursor-paginated.
 
 Each exchange has a `status` (`pending` / `completed` / `failed`) and, if it was created to fund a cross-currency payout, a `payout_id`.
 

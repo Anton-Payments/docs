@@ -124,10 +124,9 @@ anything failing in production:
 
 ```json
 {
-  "data": {
-    "id": "pay_...",
-    "session_quality": ["non_public_ip"]
-  }
+  "id": "pay_...",
+  "object": "payout",
+  "session_quality": ["non_public_ip"]
 }
 ```
 
@@ -156,7 +155,7 @@ users outside that purpose.
 Idempotency-Key: payout-{invoice_id}-{beneficiary_id}
 ```
 
-If you retry with the same key, Anton returns the original response and sets `Idempotent-Replayed: true`. Different bodies with the same key return `409 idempotency_conflict`. See [Idempotency](/api-reference/idempotency) for details.
+If you retry with the same key, Anton returns the original response and sets the `Idempotent-Replayed: true` response header. A different body with the same key returns `422 idempotency_key_reused`. See [Idempotency](/api-reference/idempotency) for details.
 
 ## The state machine
 

@@ -239,7 +239,7 @@ curl https://api.antonpayments.dev/v1/beneficiaries/$BENEFICIARY_ID/instruments 
     "currency": "GBP",
     "country": "GB",
     "label": "Primary GBP account",
-    "is_default": true,
+    "default": true,
     "credentials": {
       "account_number": "12345678",
       "sort_code": "123456"
@@ -263,7 +263,7 @@ const res = await fetch(
       currency: "GBP",
       country: "GB",
       label: "Primary GBP account",
-      is_default: true,
+      default: true,
       credentials: {
         account_number: "12345678",
         sort_code: "123456",
@@ -291,7 +291,7 @@ curl_setopt_array($ch, [
         "currency" => "GBP",
         "country" => "GB",
         "label" => "Primary GBP account",
-        "is_default" => true,
+        "default" => true,
         "credentials" => [
             "account_number" => "12345678",
             "sort_code" => "123456",
@@ -310,7 +310,7 @@ body := map[string]any{
     "currency":   "GBP",
     "country":    "GB",
     "label":      "Primary GBP account",
-    "is_default": true,
+    "default": true,
     "credentials": map[string]any{
         "account_number": "12345678",
         "sort_code":      "123456",

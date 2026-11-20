@@ -12,10 +12,10 @@ Every `GET` endpoint that returns a collection is a list, and every list is pagi
 | --- | --- | --- | --- | --- |
 | `limit` | integer | 25 | 1 to 100 | Items per page. A value outside the range, or not an integer, is `400 invalid_limit`. |
 | `cursor` | string | none | | The `next_cursor` from the previous response. Omit it to start from the first page. A cursor that is malformed, has expired, or that the endpoint did not issue is `400 cursor_invalid`. |
-| `created_after` | RFC 3339 timestamp | none | | Only items created at or after this time (inclusive). Offered where the endpoint documents it. |
-| `created_before` | RFC 3339 timestamp | none | | Only items created before this time (exclusive). Offered where the endpoint documents it. |
+| `created_after` | RFC 3339 UTC timestamp, such as `2026-11-01T00:00:00.000Z` | none | | Only items created at or after this time (inclusive). Offered where the endpoint documents it. |
+| `created_before` | RFC 3339 UTC timestamp, such as `2026-11-01T00:00:00.000Z` | none | | Only items created before this time (exclusive). Offered where the endpoint documents it. |
 
-Other filters (`status` and so on) match exactly and are documented with their allowed values on each endpoint. An unknown filter value or an unknown query parameter is a `400`, never an empty list. Timestamps are RFC 3339 in UTC with a `Z` suffix, for example `2026-11-19T14:03:22.104Z`.
+Other filters (`status` and so on) match exactly and are documented with their allowed values on each endpoint. An unknown filter value or an unknown query parameter is a `400`, never an empty list. A timestamp filter accepts only RFC 3339 in UTC with milliseconds and a `Z` suffix, for example `2026-11-01T00:00:00.000Z`. Any other form (an offset such as `+02:00`, no milliseconds) is a `400` with `param` set to the filter.
 
 Lists are ordered newest first. The order is stable: items created at the same instant are ordered by `id`, so paging never skips or repeats an item.
 

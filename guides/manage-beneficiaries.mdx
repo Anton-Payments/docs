@@ -28,26 +28,26 @@ curl https://api.antonpayments.dev/v1/beneficiaries \
   -d @beneficiary.json
 ```
 
-The `Idempotency-Key` header is required. Use a value derived from your own business data so a network failure doesn't cause a duplicate record. See [Idempotency](/api-reference/idempotency).
+The `Idempotency-Key` header is required on `POST`. `PATCH` and `DELETE` accept one but do not need it. Use a value derived from your own business data so a network failure doesn't cause a duplicate record. See [Idempotency](/api-reference/idempotency).
 
 `external_ref` is your own reference — stored as-is, indexed for search. Use your HRIS ID, contractor ID, or vendor number.
 
-`metadata` is an arbitrary string-to-string map also stored as-is. Use it for tags like `department: engineering` or `cost_center: 4421`.
+`metadata` is a string-to-string map, up to 50 keys, also stored as-is. Never put personal data in it. Use it for tags like `department: engineering` or `cost_center: 4421`.
 
 ## Deduplication across merchants
 
 Anton computes a content fingerprint from beneficiary PII and uses it internally to link the same real person across merchants for risk signals. You never see the fingerprint, but its existence means:
 
-- Within your own merchant: attempting to create a beneficiary with identical PII returns `422 duplicate_beneficiary`. Handle it by searching for an existing record with matching `external_ref` or PII and reusing that ID.
+- Within your own merchant: attempting to create a beneficiary with identical PII returns `409 duplicate_beneficiary`. Handle it by searching for an existing record with matching `external_ref` or PII and reusing that ID.
 - Across merchants: cross-merchant trust signals feed Anton's risk scoring on future payouts. You do not see this directly; it's a platform feature.
 
 ## Updating non-PII fields
 
-`PUT /v1/beneficiaries/{id}` updates the mutable fields on a beneficiary: `display_name`, `country`, `external_ref`, and `metadata`. Fields omitted from the request body are left unchanged. Set `external_ref` to `null` to clear it.
+`PATCH /v1/beneficiaries/{id}` updates the mutable fields on a beneficiary: `display_name`, `country`, `external_ref`, and `metadata`. Fields omitted from the request body are left unchanged. Set `external_ref` to `null` to clear it.
 
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID \
-  -X PUT \
+  -X PATCH \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -67,13 +67,13 @@ Vault tokens are immutable. Updating PII replaces the entire token — you send 
 
 ```bash
 curl https://api.antonpayments.dev/v1/beneficiaries/$BEN_ID/pii \
-  -X PUT \
+  -X PATCH \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d @updated-pii.json
 ```
 
-Supply the detail block matching the beneficiary's `type` (`individual` or `business`). The `display_name` on the beneficiary record is re-derived from the new PII. The change is audit-logged (SOC 2 CC8.1).
+Supply the detail block matching the beneficiary's `type` (`individual` or `business`). The `display_name` on the beneficiary record is re-derived from the new PII. Every change is recorded in your audit trail.
 
 Common reasons to update PII:
 
@@ -138,8 +138,8 @@ See [Webhook Events](/api-reference/webhook-events) for payload schemas.
 
 | Code                            | HTTP | Meaning                                                            | Action                                                              |
 | ------------------------------- | ---- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `duplicate_beneficiary`         | 422  | Exact PII match already exists under your merchant.                | Search by `external_ref` or PII; reuse the existing ID.             |
-| `missing_beneficiary_details`   | 400  | `individual` / `business` block missing or mismatched with `type`. | Include the block that matches `type`.                              |
+| `duplicate_beneficiary`         | 409  | Exact PII match already exists under your merchant.                | Search by `external_ref` or PII; reuse the existing ID.             |
+| `validation_error`              | 422  | The `individual` / `business` block is missing or does not match `type`. | Include the block that matches `type`; `details` lists each field. |
 | `invalid_display_name`          | 422  | Name fields empty or invalid characters.                           | Fix name; a minimum of first + last is required for individuals.    |
 | `resource_missing`              | 404  | ID doesn't exist or belongs to a different merchant.               | Check the ID and prefix.                                            |
 | `beneficiary_pii_update_failed` | 422  | PII update hit a validation or tokenization error.                 | Fix fields; check date format (YYYY-MM-DD) and ISO-2 country codes. |

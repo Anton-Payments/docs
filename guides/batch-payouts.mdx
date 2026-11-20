@@ -43,8 +43,13 @@ Consult the downloaded template for the exact schema; do not reorder columns.
 curl "https://api.antonpayments.dev/v1/batches" \
   -X POST \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
-  -F "file=@payroll-2026-04-30.csv"
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Idempotency-Key: payroll-2026-04-30" \
+  -F "file=@payroll-2026-04-30.csv" \
+  -F 'metadata={"payroll_run":"2026-04-30"}'
 ```
+
+The upload is `multipart/form-data`; curl sets that `Content-Type` for you with `-F`. A body of any other type is `400 invalid_content_type`. The optional `metadata` field is a JSON object of string values, up to 50 keys, and comes back on the batch. It is never a place for personal data.
 
 - Max file size: 32 MB
 - Max rows: contact support for current limits
