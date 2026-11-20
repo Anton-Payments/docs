@@ -167,11 +167,11 @@ Payouts move through the statuses below. The full detail is in [How Anton Evalua
 | `created` | Accepted; checks have not started. | No action. |
 | `pending_approval` | Waiting for a second person on your team to approve it, under your own approval policy. | No action. |
 | `processing` | Being checked and prepared, or submitted to the rail. | Show "in flight" in your UI. |
-| `on_hold` | Held for review. The payout's `status_message` is the only thing we say about it. A payout that waits much longer than usual for its checks also shows as `on_hold`. | Treat it as a normal "pending" state; do not show an error. It cannot be cancelled while held. |
+| `on_hold` | Held for review. The payout's `status_message` is the only thing we say about it. | Treat it as a normal "pending" state; do not show an error. It cannot be cancelled while held. |
 | `sent` | The rail confirmed dispatch. | Show "sent" in your UI. |
 | `completed` | The beneficiary received the funds. | Mark the payout done in your system. |
 | `returned` | Funds came back after being sent. The source amount is credited back to your balance in the source currency and any unused FX buffer is released. The fee is retained, because the payout was attempted. | Handle the return in your accounting. |
-| `failed` | The payout did not go through and will not change again. `failure_code` says what the rail reported, or is `cannot_be_processed` when we could not process the payout. We give no further detail for `cannot_be_processed`. | Review `failure_code`. Do not retry a `cannot_be_processed` payout to the same beneficiary; contact support. |
+| `failed` | The payout did not go through and will not change again. `failure_code` says what the rail reported, or is `cannot_be_processed` when we could not process the payout. We give no further detail for `cannot_be_processed`. | Review `failure_code`. For `cannot_be_processed`, contact support with the `request_id`. |
 | `cancelled` | Cancelled by you before submission. | Final. |
 
 `completed`, `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.

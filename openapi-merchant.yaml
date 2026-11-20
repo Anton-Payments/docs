@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=01a8d041aefde3da6d8779f3cc6f12d74ab751d5c0c7b487ede2c4cc0ab58595
+# anton-spec-sync sha256=86f58e915bf1fcddb1f9670aa8480da5b6337bcbe4c728795724c2b12863a485
 openapi: 3.1.0
 
 info:
@@ -1016,7 +1016,7 @@ paths:
                 value:
                   type: business
                   display_name: Maple Exports Inc.
-                  email: finance@mapleexports.example
+                  email: finance@example.com
                   country: CA
                   delivery: manual
                   link_expires_in_days: 30
@@ -2446,7 +2446,7 @@ paths:
                   business:
                     legal_name: Example GmbH
                     registration_number: HRB12345
-                    email: ap@example.de
+                    email: ap@example.com
                     phone: "+493012345678"
                     entity_type: llc
                     incorporation_country: DE
@@ -9788,8 +9788,7 @@ components:
         - `created`: accepted; checks have not started.
         - `pending_approval`: waiting for a second person in your team to approve it (your own approval policy).
         - `processing`: being checked and prepared, or submitted to the rail.
-        - `on_hold`: held for review. The `status_message` is the only thing we say about it. A payout that
-          waits much longer than usual for its checks is also shown as `on_hold`. It cannot be cancelled while held.
+        - `on_hold`: held for review. The `status_message` is the only thing we say about it. It cannot be cancelled while held.
         - `sent`: the rail confirmed dispatch.
         - `completed`: the beneficiary received the funds.
         - `returned`: the funds came back after being sent.
