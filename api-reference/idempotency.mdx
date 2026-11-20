@@ -1,116 +1,130 @@
 ---
 title: "Idempotency"
 sidebarTitle: "Idempotency"
-description: "Safely retry any mutating request without creating duplicates."
+description: "Retry any request safely without creating duplicates."
 ---
 
-Network failures happen. When you call `POST /v1/payouts` and the connection drops before you receive the response, you don't know whether the payout was created. Retrying naively could create a duplicate.
+Networks fail. When you call `POST /v1/payouts` and the connection drops before the response arrives, you do not know whether the payout was created. Retrying blindly could create a second one.
 
-**Idempotency keys** solve this. Include a unique key with your request, and Anton guarantees the operation happens at most once — even if you send the same request many times.
+An **idempotency key** solves this. Send a unique key with your request. If you send the same request with the same key again, Anton returns the original response instead of doing the work twice.
 
-## How to use
+## Using a key
 
-Add the `Idempotency-Key` header to any `POST`, `PUT`, or `PATCH` request:
+Add an `Idempotency-Key` header:
 
 ```bash
 curl https://api.antonpayments.dev/v1/payouts \
   -X POST \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: payout-inv-1042-2026-04-15" \
+  -H "Idempotency-Key: payout-inv-1042" \
   -d '{
     "beneficiary_id": "ben_cng3q8s6ek9kc5qg1h1g",
-    "amount": "500.00",
-    "currency": "USD",
-    "description": "Invoice #1042"
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "destination_amount": "500.00",
+    "destination_currency": "USD",
+    "purpose": "supplier_payment",
+    "reference": "INV-1042"
   }'
 ```
 
-If you send the same request with the same key again, Anton returns the original response instead of creating a duplicate. Replayed responses include `X-Idempotent-Replayed: true` so you can tell a replay from a fresh result.
+A replayed response carries `X-Idempotent-Replayed: true` so you can tell it from a fresh result. Its body is the original body, at the API version the original request was served at.
 
-## Required vs. optional
+## When a key is needed
 
-Some endpoints require an idempotency key and return `400 missing_idempotency_key` if you omit one — payout creation, beneficiary creation, batch confirmation, webhook subscription creation, authenticated intelligence evaluation creation, and a handful of others. The endpoint documentation lists the requirement explicitly.
+| Request | Key |
+| --- | --- |
+| `POST` that creates or changes something (payouts, beneficiaries, batches, quotes, exchanges, webhooks, evaluations, and so on) | **Required.** Without one the response is `400 missing_idempotency_key`. |
+| `PATCH` and `DELETE` | Accepted, not required. |
+| `POST` that only calculates and stores nothing (for example `POST /v1/intelligence/evaluations/validate`) | Not needed. |
+| `GET` | Not applicable. Reads are always safe to retry. |
 
-Endpoints that accept an optional key will still honor it — a good default is to send one on every mutation.
+Each operation's reference page says whether it requires a key.
 
-## Key requirements
+## Key rules
 
 | Rule | Detail |
-|---|---|
-| **Unique per operation** | Use a different key for each logically distinct operation. |
-| **Deterministic** | Use the same key when retrying the same operation. |
-| **Max length** | 255 characters. |
-| **Retention** | Keys are remembered for 24 hours, then discarded. |
+| --- | --- |
+| Unique per operation | Use a different key for each distinct operation. |
+| Same key to retry | Reuse the key when retrying the same operation. |
+| Length | Up to 255 characters. |
+| Retention | Keys are kept for 24 hours, then discarded. |
+| Scope | A key belongs to your account and to the path and query string it was used with. Another account's identical key does not collide with yours. |
 
-## Generating good keys
+## What happens
 
-The best idempotency keys are deterministic — derived from your own business data — so that a retry after a crash produces the same key without you having to remember whether the request succeeded.
+| Situation | Result |
+| --- | --- |
+| Same key, same request | The original response is replayed, with `X-Idempotent-Replayed: true`. |
+| Same key, different request body | `422 idempotency_key_reused`. Send a new key for a new request. |
+| Same key while the first request is still running | `409 idempotency_in_flight`. Wait a moment and send it again to get the settled response. |
+| Different key, same body | A new request. It creates a second resource. |
+| Missing key where one is required | `400 missing_idempotency_key`. |
+| The idempotency check is temporarily unavailable | `503 idempotency_unavailable`. Anton refuses rather than risk doing the work twice. Retry with the same key. |
+
+Only successful (`2xx`) responses are stored. If a request fails with a `4xx` or `5xx`, retrying with the same key runs the request again, so you can fix a validation error and reuse the key.
+
+A replay is its own request: its `Request-Id` is new. The replayed body keeps the original request's identifiers, and `X-Idempotent-Replayed: true` marks the difference. The API version is not part of the key.
+
+## Secrets are not replayed
+
+Some responses carry a secret that is shown only once: a webhook subscription's signing secret, and the hosted link in a verification response. Anton stores a copy of those responses with the secret removed. A replay returns the same resource, and the secret is `null`. Save the secret from the first response. If you lost it, rotate the webhook secret or regenerate the link.
+
+## Generating keys
+
+The best keys are derived from your own data, so a retry after a crash produces the same key without you remembering whether the request went through.
 
 <CodeGroup>
 
 ```bash cURL
-# Deterministic from your business data
 curl ... -H "Idempotency-Key: payout-${INVOICE_ID}-${BENEFICIARY_ID}"
 ```
 
 ```javascript JavaScript
 import { createHash, randomUUID } from "node:crypto";
 
-// Deterministic from your data — recommended
+// Derived from your data (recommended)
 const key = `payout-${invoiceId}-${beneficiaryId}`;
 
-// Hash of the request body — works when no natural key exists
-const bodyKey = createHash("sha256")
-  .update(JSON.stringify(payoutBody))
-  .digest("hex");
+// A hash of the request body, when there is no natural key
+const bodyKey = createHash("sha256").update(JSON.stringify(payoutBody)).digest("hex");
 
-// UUID — simplest, but requires you to persist it for safe retries
+// A random UUID. Simple, but you must store it to retry safely.
 const uuidKey = randomUUID();
 ```
 
 ```php PHP
-// Deterministic from your data — recommended
+// Derived from your data (recommended)
 $key = "payout-{$invoiceId}-{$beneficiaryId}";
 
-// Hash of the request body — works when no natural key exists
+// A hash of the request body, when there is no natural key
 $bodyKey = hash('sha256', json_encode($payoutBody));
 
-// UUID — simplest, but requires you to persist it for safe retries
+// A random UUID. Simple, but you must store it to retry safely.
 $uuidKey = bin2hex(random_bytes(16));
 ```
 
 ```go Go
-// Deterministic from your data — recommended
+// Derived from your data (recommended)
 key := fmt.Sprintf("payout-%s-%s", invoiceID, beneficiaryID)
 
-// Hash of the request body — works when no natural key exists
+// A hash of the request body, when there is no natural key
 sum := sha256.Sum256(body)
 bodyKey := hex.EncodeToString(sum[:])
 
-// UUID — simplest, but requires you to persist it for safe retries
+// A random UUID. Simple, but you must store it to retry safely.
 uuidKey := uuid.NewString()
 ```
 
 </CodeGroup>
 
 <Tip>
-  **Prefer deterministic keys.** If your process crashes between sending a request and persisting its response, a deterministic key lets you retry safely without needing to remember whether the request went through.
+  Prefer keys derived from your data. If your process crashes between sending a request and saving its result, the same key is produced on restart and the retry is safe.
 </Tip>
 
-## Behavior
+## What idempotency does not do
 
-| Scenario | Result |
-|---|---|
-| Same key + same body | Original response replayed with `X-Idempotent-Replayed: true`. |
-| Same key + different body | `409 idempotency_conflict` — Anton refuses to replay a different operation under an existing key. |
-| Same key while the first attempt is still processing | `409 idempotency_in_flight` — wait briefly and retry with the same key to replay the settled response. |
-| Different key + same body | Treated as a new request. Creates a new resource. |
-| No key on a required endpoint | `400 missing_idempotency_key`. |
-| Idempotency subsystem unavailable | `503 idempotency_unavailable` — Anton fails closed rather than risk double-processing. Retry with backoff, same key. |
-
-## What idempotency does not cover
-
-- **`GET` requests** — already safe to retry.
-- **Soft deletes** (archive/restore, cancel) — repeated calls converge on the same state, so they're naturally idempotent.
-- **Screening, routing, or rail outcomes** — idempotency guarantees Anton won't *create* the same payout twice. It does not guarantee the same downstream routing or settlement result if you submit two different payouts back-to-back.
+- It guarantees Anton will not create the same resource twice for one key. It does not make two different requests produce the same outcome.
+- It does not change a payout's later lifecycle. Settlement outcomes arrive through [webhooks](/api-reference/webhook-events).

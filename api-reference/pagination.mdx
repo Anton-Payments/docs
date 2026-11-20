@@ -4,53 +4,52 @@ sidebarTitle: "Pagination"
 description: "All list endpoints use cursor-based pagination."
 ---
 
-Every `GET` endpoint that returns a collection paginates with opaque cursors. There are no page numbers, no offsets, no totals — cursors are forward-only pointers into the result set.
+Every `GET` endpoint that returns a collection is a list, and every list is paginated the same way, with opaque cursors. There are no page numbers, no offsets and no totals. A cursor is a forward-only pointer into the result set.
 
 ## Parameters
 
-| Parameter | Type | Default | Max | Description |
-|---|---|---|---|---|
-| `limit` | integer | 20 | 100 | Items per page. See [Limit validation](#limit-validation) for how out-of-range values are handled. |
-| `cursor` | string | — | — | Opaque cursor from a previous response. Omit to start from the beginning. |
+| Parameter | Type | Default | Range | Description |
+| --- | --- | --- | --- | --- |
+| `limit` | integer | 25 | 1 to 100 | Items per page. A value outside the range, or not an integer, is `400 invalid_limit`. |
+| `cursor` | string | none | | The `next_cursor` from the previous response. Omit it to start from the first page. A cursor that is malformed or that the endpoint did not issue is `400 invalid_cursor`. |
+| `created_after` | RFC 3339 timestamp | none | | Only items created at or after this time (inclusive). Offered where the endpoint documents it. |
+| `created_before` | RFC 3339 timestamp | none | | Only items created before this time (exclusive). Offered where the endpoint documents it. |
 
-### Limit validation
+Other filters (`status` and so on) match exactly and are documented with their allowed values on each endpoint. An unknown filter value or an unknown query parameter is a `400`, never an empty list. Timestamps are RFC 3339 in UTC with a `Z` suffix, for example `2026-11-19T14:03:22.104Z`.
 
-Anton currently has two limit-handling paths across list endpoints. Both cap the page at 100 items, but they differ on how an overflow is surfaced:
+Lists are ordered newest first. The order is stable: items created at the same instant are ordered by `id`, so paging never skips or repeats an item.
 
-| Behavior | Endpoints | Response to `limit=200` |
-|---|---|---|
-| **Strict** | Newer list endpoints (for example, beneficiaries, instruments, webhook subscriptions, webhook events). | `400 invalid_limit` — the request is rejected outright. |
-| **Silent cap** | Older list endpoints (for example, payouts). | Request succeeds; server silently applies the 100-item ceiling (and falls back to the default of 20 when the input cannot be parsed). |
+## Response
 
-**Guidance for integrators:** treat the strict contract as authoritative. Always request `limit` values in the `1..100` range. Do not rely on the silent-cap behavior — Anton may migrate all endpoints to strict validation in a future release, at which point over-limit requests will uniformly return `400 invalid_limit`.
-
-## Response envelope
+Every list has the same envelope, including short ones such as currencies and corridors. A list is never a bare array.
 
 ```json
 {
+  "object": "list",
   "data": [
-    { "id": "pay_abc123", "status": "completed", "amount": "500.00" },
-    { "id": "pay_def456", "status": "processing", "amount": "1200.00" }
+    { "id": "pay_01JD3X9K2M7Q", "object": "payout", "status": "completed" },
+    { "id": "pay_01JD3X8H4N5R", "object": "payout", "status": "processing" }
   ],
   "has_more": true,
-  "next_cursor": "eyJpZCI6InBheV9kZWY0NTYifQ"
+  "next_cursor": "eyJpZCI6InBheV8wMUpEM1g4SDRONVIifQ"
 }
 ```
 
 | Field | Description |
-|---|---|
-| `data` | Array of results for this page. |
-| `has_more` | `true` if more results exist beyond this page. |
-| `next_cursor` | Cursor to pass in the next request. Present only when `has_more` is `true`. |
+| --- | --- |
+| `object` | Always `"list"`. |
+| `data` | The items on this page. An empty page is `[]`. |
+| `has_more` | `true` when more items exist after this page. |
+| `next_cursor` | The cursor for the next page, or `null` on the last page. The key is always present. |
 
-The last page omits `next_cursor` and sets `has_more` to `false`:
+The last page:
 
 ```json
 {
-  "data": [
-    { "id": "pay_xyz789", "status": "completed", "amount": "300.00" }
-  ],
-  "has_more": false
+  "object": "list",
+  "data": [{ "id": "pay_01JD3X7G3M4Q", "object": "payout", "status": "completed" }],
+  "has_more": false,
+  "next_cursor": null
 }
 ```
 
@@ -61,15 +60,17 @@ The last page omits `next_cursor` and sets `has_more` to `false`:
 ```bash cURL
 # First page
 curl "https://api.antonpayments.dev/v1/payouts?limit=100" \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
 
-# Subsequent page — pass next_cursor from the prior response as cursor
-curl "https://api.antonpayments.dev/v1/payouts?limit=100&cursor=eyJpZCI6InBheV9kZWY0NTYifQ" \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
+# Next page: pass the previous response's next_cursor as cursor
+curl "https://api.antonpayments.dev/v1/payouts?limit=100&cursor=eyJpZCI6InBheV8wMUpEM1g4SDRONVIifQ" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
 ```
 
 ```javascript JavaScript
-async function listAllPayouts(apiKey) {
+async function listAllPayouts(accessToken) {
   const payouts = [];
   let cursor;
 
@@ -93,7 +94,7 @@ async function listAllPayouts(apiKey) {
 ```
 
 ```php PHP
-function listAllPayouts(string $apiKey): array {
+function listAllPayouts(string $accessToken): array {
     $payouts = [];
     $cursor = null;
 
@@ -122,7 +123,7 @@ function listAllPayouts(string $apiKey): array {
 ```
 
 ```go Go
-func ListAllPayouts(apiKey string) ([]Payout, error) {
+func ListAllPayouts(accessToken string) ([]Payout, error) {
     var payouts []Payout
     cursor := ""
 
@@ -145,7 +146,7 @@ func ListAllPayouts(apiKey string) ([]Payout, error) {
         var page struct {
             Data       []Payout `json:"data"`
             HasMore    bool     `json:"has_more"`
-            NextCursor string   `json:"next_cursor"`
+            NextCursor *string  `json:"next_cursor"`
         }
         json.NewDecoder(resp.Body).Decode(&page)
         resp.Body.Close()
@@ -155,7 +156,10 @@ func ListAllPayouts(apiKey string) ([]Payout, error) {
         if !page.HasMore {
             break
         }
-        cursor = page.NextCursor
+        if page.NextCursor == nil {
+            break
+        }
+        cursor = *page.NextCursor
     }
 
     return payouts, nil
@@ -171,12 +175,15 @@ func ListAllPayouts(apiKey string) ([]Payout, error) {
     Set `limit=100` to minimize round trips when fetching large result sets.
   </Accordion>
   <Accordion title="Stop when has_more is false">
-    `has_more` is the only correct termination signal. Don't compare `len(data)` to `limit` — the last page may be full.
+    `has_more` (or a `null` `next_cursor`) is the only correct termination signal. Don't compare `len(data)` to `limit` — the last page may be full.
   </Accordion>
   <Accordion title="Cursors are opaque">
     Treat cursor values as opaque strings. Do not parse, modify, or construct them. Always pass the exact `next_cursor` value returned by the API.
   </Accordion>
-  <Accordion title="Cursors don't expire">
-    Cursor values remain valid indefinitely. You can store a cursor and resume pagination later — useful for long-running exports.
+  <Accordion title="Do not keep cursors for long">
+    A cursor is only meaningful to the endpoint and the filters that issued it. Reusing one with different filters, or after a long time, can return `400 invalid_cursor`. If you get that, start again from the first page.
+  </Accordion>
+  <Accordion title="Treat an unknown cursor as opaque">
+    The format of a cursor is not part of the API and can change. Never build one yourself.
   </Accordion>
 </AccordionGroup>

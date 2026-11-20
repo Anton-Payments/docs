@@ -1,7 +1,7 @@
 ---
 title: "Intelligence Quickstart"
 sidebarTitle: "Quickstart"
-description: "Evaluate a payee end to end with the authenticated Intelligence API — create an evaluation, read the decision, and retrieve evidence."
+description: "Evaluate a payee end to end with the authenticated Intelligence API — create an evaluation and read the decision."
 ---
 
 This walks you from credentials to a completed payee evaluation against the sandbox (`https://api.antonpayments.dev`). It works for every account tier — including [AI-compliance-only accounts](/capabilities), whose credentials carry the `intelligence` scope by default.
@@ -67,69 +67,40 @@ curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations" \
   }'
 ```
 
-The response is the full evaluation, persisted under **your** merchant account:
+The response is the evaluation, stored under **your** account:
 
 ```json
 {
   "data": {
-    "contract_version": "intelligence-public-v1",
-    "evaluation_id": "ieval_9f2c1a7e0b8d4e21",
-    "event_id": "ievt_5d11c0aa94f74c02",
-    "event_type": "payee.create",
-    "status": "complete",
+    "id": "eval_01JD3XB7Q2",
+    "object": "evaluation",
+    "livemode": false,
+    "status": "completed",
+    "use_case": "payee_registration",
+    "coverage": "complete",
     "decision": "approve",
-    "risk_level": "low",
-    "rationale": "no meaningful adverse evidence across configured peers",
-    "next_action": "none",
-    "summary": {
-      "screened": ["entity"],
-      "use_case": "payee_registration",
-      "findings_count": 0,
-      "identity_confidence": "none",
-      "missing_fields": []
+    "score": 80,
+    "tier": "low",
+    "reasons": [],
+    "required_actions": [],
+    "metadata": {
+      "crm_id": "42"
     },
-    "scoring": {
-      "model": "anton-scoring-v1",
-      "scale": { "min": 0, "max": 1000 },
-      "overall_score": 112,
-      "risk_level": "low",
-      "dimensions": [
-        { "code": "TRS", "name": "Transaction Risk", "score": 90, "risk_level": "low", "status": "complete" },
-        { "code": "ORS", "name": "Onboarding Risk", "score": 140, "risk_level": "low", "status": "complete" },
-        { "code": "TM",  "name": "Transaction Monitoring", "score": 0, "risk_level": "low", "status": "not_applicable" },
-        { "code": "AD",  "name": "Anomaly Detection", "score": 105, "risk_level": "low", "status": "complete" },
-        { "code": "GI",  "name": "Graph Intelligence", "score": 120, "risk_level": "low", "status": "complete" }
-      ]
-    },
-    "peer_statuses": [
-      { "peer": "sentinel", "status": "complete", "found": false },
-      { "peer": "engine", "status": "complete", "found": false },
-      { "peer": "brain", "status": "skipped", "found": false }
-    ],
-    "policy": {
-      "version": "triad-policy-v2",
-      "rule_fired": "no_peer_findings",
-      "reasons": []
-    },
-    "audit": {
-      "hash": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
-      "persisted": true
-    },
-    "evaluated_at": "2026-06-10T14:30:02Z",
-    "latency_ms": 412
+    "created_at": "2026-11-20T02:18:11.739Z",
+    "updated_at": "2026-11-20T02:18:11.739Z"
   }
 }
 ```
 
-Branch on `decision` (`approve`, `review_auto`, `review_manual`, `decline`) and `next_action` — see [Decisions and Next Actions](/guides/intelligence/decisions). The exact scores, peers, and identifiers you receive will differ; treat IDs as opaque.
+Branch on `decision` (`approve`, `review` or `decline`) and read `reasons` and `required_actions` for what to do next. `score` runs from 0 to 1000, higher is worse, and `tier` is its band. Some use cases finish asynchronously and answer `202` with `status: "pending"`: read the evaluation again, or subscribe to `intelligence.evaluation.completed`. Treat IDs as opaque.
 
 ## Step 3: Read it back
 
-Evaluations are strictly scoped to your merchant account. A foreign or unknown `evaluation_id` returns `404` — indistinguishable from a nonexistent one.
+Evaluations are strictly scoped to your merchant account. A foreign or unknown evaluation ID returns `404` — indistinguishable from a nonexistent one.
 
 ```bash
 # One evaluation
-curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/ieval_9f2c1a7e0b8d4e21" \
+curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/eval_01JD3XB7Q2" \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "DPoP: $ANTON_DPOP_PROOF"
 
@@ -140,18 +111,6 @@ curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations?limit=25" \
 ```
 
 The list endpoint returns the standard `{ data, has_more, next_cursor }` page shape — see [Pagination](/api-reference/pagination).
-
-## Step 4: Retrieve evidence
-
-For decisions you need to justify — to a reviewer, an auditor, or your own case management — fetch the expanded, PII-free evidence. Each evidence view is recorded as an audit event.
-
-```bash
-curl -sS "https://api.antonpayments.dev/v1/intelligence/evaluations/ieval_9f2c1a7e0b8d4e21/evidence" \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
-  -H "DPoP: $ANTON_DPOP_PROOF"
-```
-
-Evidence is provider-neutral and redacted — no raw provider payloads, no raw request bodies, no raw PII. See [Evidence Retrieval](/guides/intelligence/evidence).
 
 ## Errors you may hit
 

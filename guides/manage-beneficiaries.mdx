@@ -36,10 +36,10 @@ The `Idempotency-Key` header is required. Use a value derived from your own busi
 
 ## Deduplication across merchants
 
-Anton computes a content fingerprint from beneficiary PII and uses it internally to link the same real person across merchants for engine-level risk signals. You never see the fingerprint, but its existence means:
+Anton computes a content fingerprint from beneficiary PII and uses it internally to link the same real person across merchants for risk signals. You never see the fingerprint, but its existence means:
 
 - Within your own merchant: attempting to create a beneficiary with identical PII returns `422 duplicate_beneficiary`. Handle it by searching for an existing record with matching `external_ref` or PII and reusing that ID.
-- Across merchants: cross-merchant trust signals feed the Anton Engine's risk scoring on future payouts. You do not see this directly; it's a platform feature.
+- Across merchants: cross-merchant trust signals feed Anton's risk scoring on future payouts. You do not see this directly; it's a platform feature.
 
 ## Updating non-PII fields
 

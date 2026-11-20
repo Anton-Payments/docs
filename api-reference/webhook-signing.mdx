@@ -278,35 +278,36 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 ## Rotating secrets
 
-Every subscription has one signing secret. The secret is returned once — in the response to `POST /v1/webhooks` — and never again. Store it in your secrets manager at creation time.
+Every subscription has one signing secret. It is shown **once**, in the response that creates the subscription (`POST /v1/webhooks`) and in the response that rotates it. It cannot be read back later, so store it in your secrets manager straight away. If you lose it, rotate.
 
 <AccordionGroup>
-  <Accordion title="Retrieve the current secret">
-    ```bash
-    curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret \
-      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
-    ```
-
-    Response:
-
-    ```json
-    { "data": { "secret": "whsec_..." } }
-    ```
-  </Accordion>
   <Accordion title="Rotate the secret">
     ```bash
     curl https://api.antonpayments.dev/v1/webhooks/whk_01HX.../secret/rotate \
       -X POST \
-      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
+      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+      -H "DPoP: $DPOP_PROOF" \
+      -H "Idempotency-Key: rotate-whk-01HX-2026-12-01"
     ```
 
     Response:
 
     ```json
-    { "data": { "secret": "whsec_..." } }
+    {
+      "data": {
+        "id": "whk_01HX...",
+        "object": "webhook_subscription",
+        "secret": "whsec_...",
+        "previous_secret_expires_at": "2026-12-02T14:03:22.104Z"
+      }
+    }
     ```
 
-    Rotation installs the new secret immediately and opens a **24-hour grace window**. During the window every delivery is signed with **both** your new secret and the previous one — `X-Webhook-Signature` carries two comma-separated `v1=` entries. Your endpoint keeps verifying with the old secret while you roll the new one out, and starts matching the new secret the moment you deploy it. After 24 hours the previous secret stops signing and only the new secret is used.
+    The response is the subscription with the new `secret` and `previous_secret_expires_at`, the end of the grace window.
+
+    Rotation installs the new secret immediately and opens a **24-hour grace window**. During the window every delivery is signed with **both** your new secret and the previous one: `X-Webhook-Signature` carries two comma-separated `v1=` entries. Your endpoint keeps verifying with the old secret while you roll the new one out, and starts matching the new secret as soon as you deploy it. After 24 hours the previous secret stops signing.
+
+    A retry of the same rotate request with the same `Idempotency-Key` returns the same subscription with `secret` set to `null`: the secret is never replayed.
   </Accordion>
 </AccordionGroup>
 

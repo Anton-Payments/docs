@@ -3,79 +3,65 @@ title: "How Anton Evaluates Payouts"
 description: "Every payout moves through screening, velocity control, and AI risk scoring before a single dollar leaves your balance. Here's what happens — and how your integration should respond."
 ---
 
-A payout created via `POST /v1/payouts` is not submitted to a rail immediately. Anton evaluates it first. The evaluation outcome is reflected in the payout's state — your application reads that state (and the webhook events that announce transitions) to decide what to do next.
+A payout created via `POST /v1/payouts` is not submitted to a rail immediately. Anton checks it first. The outcome is reflected in the payout's status: your application reads that status (and the webhook events that announce each change) and responds accordingly.
 
-## What runs on every payout
+## What happens to every payout
 
 <Steps>
-  <Step title="Screening">
-    The beneficiary and, where applicable, the sending counterparty are screened before any funds move.
+  <Step title="Checks">
+    The payout and its beneficiary are checked before any funds move. A payout that needs a closer look is placed `on_hold`. Anton does not say why.
   </Step>
-  <Step title="Velocity evaluation">
-    Anton applies merchant-scoped velocity rules: daily and monthly caps, geographic limits, instrument-level thresholds. Exceeding a rule moves the payout to `velocity_blocked`.
-  </Step>
-  <Step title="Risk scoring">
-    The Anton Engine evaluates the payout against cross-merchant trust signals, beneficiary history, counterparty reputation, and real-time anomaly detection.
+  <Step title="Your own rules">
+    If your account has approval rules or velocity limits, a payout that matches one waits for a second approver (`pending_approval`) or is held.
   </Step>
   <Step title="Rail submission">
-    A payout that clears every check moves to `approved` and is queued for the rail. From here, `processing → sent → completed` are rail-driven and reflect settlement reality.
+    A payout that clears every check moves to `processing` and is submitted to the rail. From there `sent` and `completed` are rail-driven and reflect settlement.
   </Step>
 </Steps>
 
-A payout that needs a closer look is placed **under review** instead of moving on. While it is under review the payout carries `on_hold: true`, and Anton does not say why. A review ends with the payout continuing, being cancelled, or moving to `cannot_be_processed`.
-
-## The payout state machine
+## The payout status flow
 
 ```
 created
-  ├─ pending_screening
-  │    ├─ approved ─ processing ─ sent
-  │    │                            ├─ completed
-  │    │                            ├─ failed
-  │    │                            └─ returned
-  │    ├─ pending_approval ─ approved
-  │    ├─ manual_review            (under review)
-  │    └─ screening_failed         (under review)
-  ├─ pending_engine_review         (under review)
-  ├─ velocity_blocked
-  └─ cancelled
-
-Any status before processing can also move to:
-  cannot_be_processed
+  ├─ pending_approval ─ processing  (or cancelled)
+  ├─ processing ─ sent ─ completed
+  │       │         ├─ failed
+  │       │         └─ returned
+  │       ├─ on_hold ─ processing / cancelled / failed
+  │       ├─ failed
+  │       └─ cancelled
+  └─ on_hold
 ```
 
-`pending_screening`: the payout is completing required checks before it can be sent. A payout can return to this status after approval or review. No action is needed.
+`completed`, `returned`, `cancelled` and `failed` are final. Every status change emits a `payout.*` [webhook event](/api-reference/webhook-events).
 
-A payout under review (`manual_review`, `screening_failed`, `pending_engine_review`) returns to the flow, is cancelled, or moves to `cannot_be_processed` when the review concludes. A payout can also be placed on hold in another pre-rail status; `on_hold` tells you, whatever the status.
+## What each status means
 
-Every transition emits a `payout.*` webhook event. Every transition is recorded in the audit log.
-
-## What each terminal state means
-
-| State | Meaning | What you do |
+| Status | Meaning | What to do |
 |---|---|---|
-| `completed` | Funds delivered to the beneficiary and settled. | Mark the payout done in your system. |
-| `failed` | The rail accepted the payout but settlement failed. | Review the failure reason, potentially retry with a different instrument. |
-| `returned` | Funds were returned by the receiving bank or counterparty. The source amount is credited back to your balance and any unused FX buffer is released; the fee is retained, because the payout was attempted. | Handle the return in your accounting, including the retained fee — the original payout is final. |
-| `cannot_be_processed` | The payout cannot be processed. Anton is unable to provide further detail. | Treat as final. It cannot be cancelled via the API; contact support about the funds. |
-| `velocity_blocked` | A merchant velocity rule rejected the payout. | Wait for the velocity window to reset, or contact support to raise a threshold. |
-| `cancelled` | Cancelled by the merchant or operations team. | Final. Create a new payout if you still need to send funds. |
+| `created` | Accepted; checks have not started. | No action. |
+| `pending_approval` | Waiting for a second person on your team to approve it, under your own approval policy. | No action. |
+| `processing` | Being checked and prepared, or submitted to the rail. | Show "in flight" in your UI. |
+| `on_hold` | Held for review. The payout's `status_message` is the only thing we say about it. A payout that waits much longer than usual for its checks also shows as `on_hold`. | Treat it as a normal "pending" state; do not show an error. It cannot be cancelled while held. |
+| `sent` | The rail confirmed dispatch. | Show "sent" in your UI. |
+| `completed` | The beneficiary received the funds. | Mark the payout done in your system. |
+| `returned` | Funds came back after being sent. The source amount is credited back to your balance in the source currency and any unused FX buffer is released. The fee is retained, because the payout was attempted. | Handle the return in your accounting. |
+| `failed` | The payout did not go through and will not change again. `failure_code` says what the rail reported, or is `cannot_be_processed` when we could not process the payout. We give no further detail for `cannot_be_processed`. | Review `failure_code`. Do not retry a `cannot_be_processed` payout to the same beneficiary; contact support. |
+| `cancelled` | Cancelled by you before submission. | Final. |
+
+`completed`, `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
 
 ## What your integration should do
 
-**Subscribe to webhooks. Do not poll.** The payout lifecycle is event-driven. Polling wastes rate-limit budget and misses transitions.
+**Subscribe to webhooks. Do not poll.** The payout lifecycle is event-driven. Polling wastes rate-limit budget and misses changes.
 
-**Treat a review as a normal state.** Most legitimate payouts clear review in minutes. When a payout shows `on_hold: true`, surface a pending state to your end user; do not surface an error. A payout on hold cannot be cancelled until the review concludes — the cancel request returns `409 payout_on_hold`.
+**Treat a hold as a normal state.** Most legitimate payouts clear review quickly. When a payout is `on_hold`, show a pending state to your end user, not an error. A payout on hold cannot be cancelled until the hold ends: the cancel request returns `409 payout_on_hold`.
 
-**Respond to RFIs promptly.** If Anton needs more information during a review — a beneficiary's incorporation document, proof of source of funds — an `rfi.created` event fires. A team member with the `rfis.respond` permission (held by the Admin and Operator roles) responds in the dashboard and can attach documents to the response. RFI responses are accepted from signed-in dashboard users only, not from API credentials. The payout cannot clear review until the RFI is closed.
+**Do not retry a `cannot_be_processed` payout.** Creating a new payout to the same beneficiary does not change the outcome. Contact support with the payout's `id`.
 
-**Don't retry a `cannot_be_processed` payout.** Creating a new payout to the same beneficiary does not change the outcome.
+## What you can and cannot control
 
-## What you can and can't control
-
-Screening, velocity, and engine evaluation run automatically on every live payout. You cannot disable them, override them at submission time, or skip them with a flag. This is a compliance requirement, not a limitation.
-
-For select merchants, Anton can enable programmatic access to the engine — risk signals, velocity rule management, and dashboard-equivalent views — on top of the public API surface. These are not part of the public v1.0.0 contract; they're negotiated per account. [Contact us](https://help.antonpayments.com) if you want to inspect or tune risk signals programmatically.
+Checks run automatically on every payout. You cannot disable them, override them at submission, or skip them with a flag.
 
 ## What you send changes what Anton can see
 

@@ -4,10 +4,6 @@ sidebarTitle: "Batch payouts"
 description: "Upload a CSV or XLSX of many payouts in a single call. Anton validates, you confirm, Anton processes."
 ---
 
-<Note>
-  **Editability note:** this guide was drafted from the OpenAPI spec. If the product/engineering team has an updated batch flow (file schema, row limits, validation rules), edit inline — each H2 is self-contained.
-</Note>
-
 Batch payouts let you send thousands of payments in one upload. The flow is three phases: **upload → validate → confirm → process**. You can't skip steps; Anton requires you to explicitly confirm after seeing the validation summary.
 
 ## When to use batches

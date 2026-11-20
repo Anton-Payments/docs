@@ -69,11 +69,11 @@ curl https://api.antonpayments.dev/v1/payouts \
     "instrument_id": "ins_...",
     "source_amount": "1000.00",
     "source_currency": "USDC",
-    "dest_amount": "1000.00",
-    "dest_currency": "USDC",
+    "destination_amount": "1000.00",
+    "destination_currency": "USDC",
     "method": "stablecoin",
     "rail_type": "stablecoin",
-    "fixed_side": "fixed_dest",
+    "fixed_side": "fixed_destination",
     "purpose": "contractor_payment",
     "reference": "INV-2026-04-042"
   }'
@@ -85,11 +85,11 @@ For `stablecoin → fiat`:
 {
   "source_amount": "1000.00",
   "source_currency": "USDC",
-  "dest_amount": "920.00",
-  "dest_currency": "EUR",
+  "destination_amount": "920.00",
+  "destination_currency": "EUR",
   "method": "sepa",
   "rail_type": "fiat",
-  "fixed_side": "fixed_dest"
+  "fixed_side": "fixed_destination"
 }
 ```
 
@@ -120,7 +120,7 @@ Values populate on the `Payout` response as `block_confirmations` and `required_
 
 ## Gas and network fees
 
-`network_fee` and `network_fee_currency` on the Payout record show the on-chain fee. It's deducted from the settlement, not from your merchant balance — so the `dest_amount` the beneficiary receives may be smaller than what you intended if the recipient pays fees (depending on method and `fee_bearer`).
+`network_fee` and `network_fee_currency` on the Payout record show the on-chain fee. It's deducted from the settlement, not from your merchant balance — so the `destination_amount` the beneficiary receives may be smaller than what you intended if the recipient pays fees (depending on method and `fee_bearer`).
 
 ## Refunds and reversals
 

@@ -3,6 +3,54 @@ title: "Changelog"
 description: "A record of material changes to the Anton Payments API and documentation."
 ---
 
+## 2026-12-01 — API version `2026-12-01`
+
+This is the first dated version of the Anton API and the one every account starts on. It describes the full `/v1` surface: authentication, beneficiaries and instruments, payouts and batches, balances and accounts, FX, webhooks, verifications and Anton Intelligence. Download the [OpenAPI description](/openapi-merchant.yaml) to generate a client or import the API into a tool such as Postman.
+
+### Versioning
+
+- Versions are dates. Your account is pinned to the latest version when you create your first OAuth client. Every response carries an `Anton-Version` header, and you can send `Anton-Version` on a single request to try another version.
+- A breaking change ships only as a new version, so an integration keeps working unchanged. New routes, optional fields, enum values, error codes, event types and headers can appear in any version.
+
+### What every resource looks like
+
+- Every object has `id`, `object`, `livemode`, `created_at` and `updated_at`. Objects you create also carry `metadata`.
+- Amounts are decimal strings with a currency, always rendered at the currency's precision. `GET /v1/currencies` lists each currency's precision.
+- Timestamps are RFC 3339 in UTC with milliseconds, for example `2026-12-01T14:03:22.104Z`.
+- Both sides of a conversion are `source_*` and `destination_*`, in payouts, pricing and FX.
+- Lists are `{"object": "list", "data": [...], "has_more": ..., "next_cursor": ...}`, with `limit` from 1 to 100 (default 25), `created_after` and `created_before`, newest first.
+
+### Requests and responses
+
+- Unknown fields, unknown query parameters and wrong types are rejected with `400`. A path ID of the wrong shape is `400 invalid_id`; an ID that does not exist for your account is `404`.
+- Partial updates use `PATCH`. In a `PATCH`, `null` clears a field and a field you leave out is not changed. Deletes return the object's `id`, `object` and `"deleted": true`.
+- Creates return `201`. Work that finishes later returns `202` with the resource in its pending state.
+- Every `POST` that creates or changes something requires an `Idempotency-Key`. Keys last 24 hours. Reusing a key with a different body is `422 idempotency_key_reused`, and a request still in flight is `409 idempotency_in_flight`. A replay is marked `X-Idempotent-Replayed: true`. Secrets are never replayed.
+- Every response carries a `Request-Id` header (`req_...`). You can send your own identifier as `X-Client-Request-Id`; we log it beside ours.
+
+### Errors
+
+- Every error has `type`, `code`, `message`, `doc_url` and `request_id`, and `param` and `details` where they apply. `type` follows the status. Every code is listed on the [errors page](/api-reference/errors).
+
+### Webhooks
+
+- Events are `{id, object: "event", type, api_version, livemode, created_at, data: {object}}`. `data.object` is the same resource the API returns. A retried delivery is identical to the first. See [webhook events](/api-reference/webhook-events).
+- A signing secret is shown once, when you create a subscription or rotate it. Rotating keeps the previous secret signing for 24 hours. See [webhook signing](/api-reference/webhook-signing).
+
+### Sandbox
+
+- `POST /v1/sandbox/deposits` credits a sandbox balance so you can run a payout end to end from the API. See [sandbox test data](/sandbox/test-data).
+
+### Moving from the pre-release API
+
+If you built against earlier documentation:
+
+- `dest_*` fields are `destination_*`, FX `sell_*` and `buy_*` fields are `source_*` and `destination_*`, and `fixed_dest` is `fixed_destination`.
+- `PUT` updates are `PATCH`. `POST /v1/fx/exchange` is `POST /v1/fx/exchanges`.
+- The error envelope is the object described above, replacing `{message, code}`. Business-rule failures are `422`, state conflicts are `409`, and reusing an idempotency key with a different body is `422 idempotency_key_reused`.
+- A webhook signing secret can no longer be read back; rotate to get a new one.
+- Static API keys are not accepted; use OAuth client credentials with DPoP.
+
 ## 2026-11-18 — Intelligence requires credentials
 
 ### Removed
@@ -128,7 +176,6 @@ The v1.0.0 merchant contract is now frozen. Merchant integrations built against 
 
 - **Bindable pricing quotes.** `POST /v1/pricing/quote` now returns `quote_id` (prefix `pq_`) and `expires_at`. Pass `quote_id` on `POST /v1/payouts` to lock the quoted fee. Missing or mismatched quotes surface as `422 quote_expired` / `422 quote_already_used` / `422 quote_mismatch`.
 - **Per-merchant rate limits.** The 1,000 requests-per-minute base quota is per **merchant** (not per IP). Multi-seat merchants behind shared egress NATs now get coherent quota accounting. Specific merchants can be provisioned at 2×/5×/10×/20× the base by contacting support.
-- **Sandbox seeding.** `POST /v1/merchant/sandbox/reset`, `/seed-beneficiaries`, and `/seed-payouts` produce deterministic fixtures for SDK testing in the sandbox environment.
 
 ### Changed
 
