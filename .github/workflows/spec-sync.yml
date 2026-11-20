@@ -9,7 +9,8 @@ name: spec-sync
 #   1. Integrity: the file's first line records the SHA-256 of the rest of the
 #      file. A hand edit to the body no longer matches it.
 #   2. Provenance: a pull request that changes the file must come from the sync
-#      branch in this repository, be opened by a bot, and change nothing else.
+#      branch in this repository, be opened by the sync bot's login (repository variable SPEC_SYNC_BOT_LOGIN, required;
+#      unset fails the check), and change nothing else.
 #
 # Until the first sync lands the file has no integrity line; that is reported
 # and allowed, but any pull request that changes the file still has to be the
@@ -37,7 +38,11 @@ jobs:
       # Passed through the environment, never interpolated into the script.
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
       AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+      # Login of the sync App's bot, set as a repository variable. Required:
+      # the check fails closed when it is unset.
+      SYNC_BOT_LOGIN: ${{ vars.SPEC_SYNC_BOT_LOGIN }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       THIS_REPO: ${{ github.repository }}
@@ -74,7 +79,8 @@ jobs:
           fail() { echo "::error file=${SPEC}::$1"; exit 1; }
           [ "${HEAD_REPO}" = "${THIS_REPO}" ] || fail "${SPEC} changed from a fork. Only the sync from this repository may change it."
           [ "${HEAD_REF}" = "${SYNC_BRANCH}" ] || fail "${SPEC} changed on branch '${HEAD_REF}'. It is generated; only the '${SYNC_BRANCH}' sync branch may change it."
-          [ "${AUTHOR_TYPE}" = "Bot" ] || fail "${SPEC} changed in a pull request not opened by the sync bot."
+          [ -n "${SYNC_BOT_LOGIN}" ] || fail "Repository variable SPEC_SYNC_BOT_LOGIN is not set, so the sync bot cannot be identified. Set it to the sync App's bot login."
+          [ "${AUTHOR_TYPE}" = "Bot" ] && [ "${AUTHOR_LOGIN}" = "${SYNC_BOT_LOGIN}" ] || fail "${SPEC} changed in a pull request not opened by the sync bot (${SYNC_BOT_LOGIN})."
           [ "${changed}" = "${SPEC}" ] || fail "The sync pull request must change only ${SPEC}; it also changes: $(grep -vxF "${SPEC}" <<< "${changed}" | tr '\n' ' ')"
           [[ "$(head -n 1 "${SPEC}")" == "# anton-spec-sync sha256="* ]] || fail "${SPEC} in the sync pull request has no integrity line."
           echo "Sync pull request: provenance OK."
