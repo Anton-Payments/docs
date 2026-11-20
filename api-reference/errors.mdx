@@ -26,7 +26,7 @@ Every non-2xx response from `/v1` has the same JSON shape, whatever the status. 
 | `error.type` | string | Yes | The broad class of error. It follows the HTTP status. See [Types](#types). |
 | `error.code` | string | Yes | Stable, machine-readable, snake_case. Every code is listed in the [catalog](#error-codes) below, under an anchor with the code's name. |
 | `error.message` | string | Yes | A description for a developer. Safe to log. It never contains personal data. A `5xx` message is always generic. |
-| `error.param` | string | No | The request field or query parameter at fault, when there is one (`amount`, `individual.date_of_birth`). |
+| `error.param` | string | No | The request field or query parameter at fault, when there is one (`amount`, `individual.birth_date`). |
 | `error.doc_url` | string | Yes | A link to this page at the code's anchor. |
 | `error.request_id` | string | Yes | Our identifier for the request (`req_...`). The same value is in the `Request-Id` response header. Quote it in support requests. |
 | `error.details` | array | No | Present on validation failures. One entry per failing field, so you can fix a whole form in one pass. |
@@ -44,9 +44,9 @@ A request that is well formed but fails field validation returns `422` with `cod
     "doc_url": "https://docs.antonpayments.com/api-reference/errors#validation_error",
     "request_id": "req_01JD3XB7Q2",
     "details": [
-      { "param": "destination_amount", "code": "validation_error", "message": "must be greater than zero" },
+      { "param": "individual.first_name", "code": "validation_error", "message": "is required" },
       { "param": "destination_currency", "code": "validation_error", "message": "is required" },
-      { "param": "individual.date_of_birth", "code": "validation_error", "message": "must be YYYY-MM-DD" }
+      { "param": "individual.birth_date", "code": "validation_error", "message": "must be YYYY-MM-DD" }
     ]
   }
 }
@@ -112,7 +112,6 @@ Codes group below by what went wrong, then run in order of status. The status fo
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
-| <span id="amount_invalid">`amount_invalid`</span> | 400 | `invalid_request_error` | An amount is not a valid decimal string. Send amounts as quoted decimal strings, for example `"100.50"`. |
 | <span id="bad_request">`bad_request`</span> | 400 | `invalid_request_error` | The request body could not be read. |
 | <span id="cursor_invalid">`cursor_invalid`</span> | 400 | `invalid_request_error` | `cursor` is not one this endpoint issued, has expired, or has been altered. Start again from the first page. |
 | <span id="empty_body">`empty_body`</span> | 400 | `invalid_request_error` | The endpoint needs a JSON body and none was sent. |
@@ -137,7 +136,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | <span id="missing_required_field">`missing_required_field`</span> | 400 | `invalid_request_error` | A required field is missing. `param` names it. |
 | <span id="resource_id_invalid">`resource_id_invalid`</span> | 400 | `invalid_request_error` | A path ID does not have the shape of an ID for this resource (wrong prefix or characters). `param` names it. The request cannot name any resource. See `resource_missing` for a well-formed ID that does not exist. |
 | <span id="too_many_ids">`too_many_ids`</span> | 400 | `invalid_request_error` | A bulk action named more IDs than one request may carry. |
-| <span id="type_mismatch">`type_mismatch`</span> | 400 | `invalid_request_error` | A field has the wrong JSON type. `param` names it. |
+| <span id="type_mismatch">`type_mismatch`</span> | 400 | `invalid_request_error` | A field has the wrong JSON type, or an amount is not a valid decimal string. `param` names it. |
 | <span id="unknown_field">`unknown_field`</span> | 400 | `invalid_request_error` | The body has a field the endpoint does not define. Unknown fields are rejected, never ignored. `param` names it. |
 | <span id="unknown_parameter">`unknown_parameter`</span> | 400 | `invalid_request_error` | The query string has a parameter the endpoint does not define. `param` names it. |
 | <span id="method_not_allowed">`method_not_allowed`</span> | 405 | `invalid_request_error` | The path exists but does not support this HTTP method. |
@@ -200,6 +199,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | <span id="idempotency_in_flight">`idempotency_in_flight`</span> | 409 | `idempotency_error` | Another request with the same `Idempotency-Key` is still being processed. Retry after it completes; the completed response is then replayed. |
 | <span id="import_already_confirmed">`import_already_confirmed`</span> | 409 | `invalid_request_error` | This beneficiary import has already been confirmed. |
 | <span id="import_expired">`import_expired`</span> | 409 | `invalid_request_error` | This beneficiary import was not confirmed in time. Upload the file again. |
+| <span id="invalid_verification_state">`invalid_verification_state`</span> | 409 | `invalid_request_error` | The verification is not in a state where this action applies. |
 | <span id="monitoring_limit_reached">`monitoring_limit_reached`</span> | 409 | `invalid_request_error` | Your account has reached its limit of monitored subjects. |
 | <span id="note_limit_reached">`note_limit_reached`</span> | 409 | `invalid_request_error` | The review already has the most notes it can hold. |
 | <span id="payout_not_cancellable">`payout_not_cancellable`</span> | 409 | `invalid_request_error` | The payout is past the point where it can be cancelled. |
@@ -209,11 +209,13 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | <span id="review_closed">`review_closed`</span> | 409 | `invalid_request_error` | The review is closed and takes no further changes. |
 | <span id="review_not_waiting">`review_not_waiting`</span> | 409 | `invalid_request_error` | The review is not paused, so it cannot be resumed. |
 | <span id="second_approver_unavailable">`second_approver_unavailable`</span> | 409 | `invalid_request_error` | The decision needs a second approver and none is available. |
+| <span id="webhook_subscription_inactive">`webhook_subscription_inactive`</span> | 409 | `invalid_request_error` | The webhook subscription is not active, so a test event cannot be sent. |
 
 ### Business rules
 
 | Code | Status | Type | What it means |
 | --- | --- | --- | --- |
+| <span id="amount_invalid">`amount_invalid`</span> | 422 | `invalid_request_error` | The amount is zero or negative. Amounts must be greater than zero; `param` names the field. |
 | <span id="amount_precision_invalid">`amount_precision_invalid`</span> | 422 | `invalid_request_error` | The amount has more decimal places than the currency allows. `GET /v1/currencies` lists each currency's precision. |
 | <span id="api_version_downgrade">`api_version_downgrade`</span> | 422 | `invalid_request_error` | The `Anton-Version` you asked for is older than the version your account is pinned to. Pinned versions only move forward. |
 | <span id="batch_cancel_failed">`batch_cancel_failed`</span> | 422 | `invalid_request_error` | The batch could not be cancelled. Safe to retry. |
@@ -246,7 +248,6 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | <span id="invalid_message">`invalid_message`</span> | 422 | `invalid_request_error` | `message` is too long. |
 | <span id="invalid_reason_code">`invalid_reason_code`</span> | 422 | `invalid_request_error` | The reason code is not accepted with this decision. |
 | <span id="invalid_subject_type">`invalid_subject_type`</span> | 422 | `invalid_request_error` | `type` must be `person` or `business`. |
-| <span id="invalid_verification_state">`invalid_verification_state`</span> | 422 | `invalid_request_error` | The verification is not in a state where this action applies. |
 | <span id="link_not_found">`link_not_found`</span> | 422 | `invalid_request_error` | The linked evaluation or review does not exist. |
 | <span id="method_not_supported">`method_not_supported`</span> | 422 | `invalid_request_error` | The payment method is not available for this destination. |
 | <span id="no_buy_account">`no_buy_account`</span> | 422 | `invalid_request_error` | You have no account in the currency you are buying. |
@@ -279,9 +280,6 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | <span id="fx_execution_failed">`fx_execution_failed`</span> | 500 | `api_error` | The exchange could not be executed. Retry with the same `Idempotency-Key`, and quote the `request_id` if it persists. |
 | <span id="internal_error">`internal_error`</span> | 500 | `api_error` | Something failed on our side. The message is generic. Retry with the same `Idempotency-Key`, and quote the `request_id` if it persists. |
 | <span id="sandbox_deposit_failed">`sandbox_deposit_failed`</span> | 500 | `api_error` | The sandbox credit could not be applied. Retry with a new key. |
-| <span id="not_configured">`not_configured`</span> | 501 | `api_error` | This capability is not configured for your account. |
-| <span id="rescreen_not_configured">`rescreen_not_configured`</span> | 501 | `api_error` | Re-screening is not configured for your account. |
-| <span id="stats_unavailable">`stats_unavailable`</span> | 501 | `api_error` | Statistics are not available for your account. |
 | <span id="fx_rates_unavailable">`fx_rates_unavailable`</span> | 502 | `api_error` | FX rates are temporarily unavailable. Retry shortly. |
 | <span id="upstream_error">`upstream_error`</span> | 502 | `api_error` | A provider we depend on failed. Retry with the same `Idempotency-Key`. |
 | <span id="auth_unavailable">`auth_unavailable`</span> | 503 | `api_error` | Authentication is temporarily unavailable. Retry with backoff. |

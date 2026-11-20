@@ -30,11 +30,16 @@ This is the first dated version of the Anton API and the one every account start
 - Every `POST` that creates or changes something requires an `Idempotency-Key`. Keys last 24 hours. Reusing a key with a different body is `422 idempotency_key_reused`, and a request still in flight is `409 idempotency_in_flight`. A replay is marked `Idempotent-Replayed: true`. Secrets are never replayed. `PATCH` and `DELETE` accept an `Idempotency-Key` but do not require one, and `POST /v1/intelligence/evaluations/validate`, which stores nothing, does not need one.
 - Every response carries an `Anton-Version` header, including a `401`. A `429` and a `503` carry `Retry-After`.
 - Field names are consistent across resources: an instrument's flag is `default`, an owner's share is `ownership_percentage`, and a batch's rate time is `rate_at`.
+- A beneficiary's date of birth is `birth_date`. The beneficiary import CSV template still accepts the older `date_of_birth` column header.
+- Quotes are created at `POST /v1/fx/quotes` and `POST /v1/pricing/quotes`.
+- Fields appear in a fixed order: `id`, `object`, `livemode`, `status`, the resource's own fields, `metadata`, `created_at`, `updated_at`.
 - `GET /v1/accounts/{currency}/transactions` is gone. Use `GET /v1/transactions?currency=`.
 - Every response carries a `Request-Id` header (`req_...`). You can send your own identifier as `X-Client-Request-Id`; we log it beside ours.
 
 ### Errors
 
+- A zero or negative amount is `422 amount_invalid`, with `param` naming the field. An amount that is not a decimal string is `400 type_mismatch`.
+- Sending a test event to an inactive webhook subscription is `409 webhook_subscription_inactive`, and an action a verification's state does not allow is `409 invalid_verification_state`.
 - Every error has `type`, `code`, `message`, `doc_url` and `request_id`, and `param` and `details` where they apply. `type` follows the status. Every code is listed on the [errors page](/api-reference/errors).
 - Every `401` carries a `WWW-Authenticate` header naming the DPoP scheme and the accepted proof algorithms, and the reason when a credential was refused. See [authentication challenge](/api-reference/errors#authentication-challenge).
 

@@ -44,7 +44,7 @@ Things to know:
 
 - The endpoint exists only in the sandbox (`https://api.antonpayments.dev`). In production it answers `404`.
 - It requires an `Idempotency-Key`. See [Idempotency](/api-reference/idempotency).
-- The amount must be positive and use no more decimal places than the currency allows, or you get `422 amount_precision_invalid`.
+- The amount must be greater than zero (otherwise `422 amount_invalid`) and use no more decimal places than the currency allows (otherwise `422 amount_precision_invalid`). An amount that is not a decimal string is `400 type_mismatch`.
 - A currency the sandbox cannot fund is `422 unsupported_sandbox_currency`.
 - Calls are rate limited per account. See [Rate limits](/api-reference/rate-limits).
 

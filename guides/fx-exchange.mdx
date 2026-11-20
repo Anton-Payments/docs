@@ -7,7 +7,7 @@ description: "Get indicative rates, lock a quote, execute an exchange between cu
 Three related surfaces sit under `/v1/fx`:
 
 - **Indicative rate** (`GET /v1/fx/rate`) — read-only, cheap, non-binding. For display.
-- **Lockable quote** (`POST /v1/fx/quote`) — binding rate for a short window. Use when you need price certainty before committing.
+- **Lockable quote** (`POST /v1/fx/quotes`) — binding rate for a short window. Use when you need price certainty before committing.
 - **Exchange** (`POST /v1/fx/exchanges`) — executes a locked quote, moves funds between your own merchant balances in different currencies.
 
 Plus — cross-currency payouts automatically use FX under the hood when you submit `POST /v1/payouts` with different `source_currency` and `destination_currency`.
@@ -17,8 +17,8 @@ Plus — cross-currency payouts automatically use FX under the hood when you sub
 | You want to... | Use |
 |---|---|
 | Show a customer what a payout will cost them in their currency | `GET /v1/fx/rate` |
-| Lock in a rate before showing "send" to the customer | `POST /v1/fx/quote` then `POST /v1/fx/exchanges` |
-| Convert your own balance from one currency to another | `POST /v1/fx/quote` then `POST /v1/fx/exchanges` |
+| Lock in a rate before showing "send" to the customer | `POST /v1/fx/quotes` then `POST /v1/fx/exchanges` |
+| Convert your own balance from one currency to another | `POST /v1/fx/quotes` then `POST /v1/fx/exchanges` |
 | Send a payout that debits one of your currencies and credits another on the beneficiary's side | `POST /v1/payouts` with different source/dest currencies — FX is automatic |
 
 ## Indicative rates
@@ -34,18 +34,30 @@ Response:
 
 ```json
 {
+  "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFY",
+  "object": "fx_quote",
+  "livemode": false,
+  "status": "active",
+  "locked": false,
   "source_currency": "USD",
   "destination_currency": "EUR",
+  "source_amount": "1090.18",
+  "destination_amount": "1000.00",
   "mid_market_rate": "0.9215",
   "customer_rate": "0.9173",
-  "fx_markup_bps": 45,
-  "source_amount": "1090.18",
-  "destination_amount": "1000.00"
+  "inverse_rate": "1.0902",
+  "markup_basis_points": 45,
+  "fee": "0.00",
+  "fee_currency": "USD",
+  "expires_at": "2026-04-15T14:32:00.000Z",
+  "metadata": {},
+  "created_at": "2026-04-15T14:31:00.000Z",
+  "updated_at": "2026-04-15T14:31:00.000Z"
 }
 ```
 
 - `mid_market_rate` — raw interbank rate
-- `customer_rate` — mid-market adjusted by your pricing plan's FX markup (`fx_markup_bps`)
+- `customer_rate` — mid-market adjusted by your pricing plan's FX markup (`markup_basis_points`)
 - `source_amount` — computed using `customer_rate` from the supplied `destination_amount`
 - When `destination_amount` is omitted, the response prices a single unit (`destination_amount=1`) for rate display
 
@@ -56,7 +68,7 @@ In sandbox, rates come from a public reference-rate feed. Rate-limited to 30 per
 When you need certainty:
 
 ```bash
-curl https://api.antonpayments.dev/v1/fx/quote \
+curl https://api.antonpayments.dev/v1/fx/quotes \
   -X POST \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -74,15 +86,24 @@ Supply either `source_amount` OR `destination_amount` — Anton computes the oth
 ```json
 {
   "id": "fxq_01HX8Z9K0M2N3P4Q5R6S7T8UFX",
+  "object": "fx_quote",
+  "livemode": false,
+  "status": "active",
+  "locked": true,
   "source_currency": "USD",
   "destination_currency": "EUR",
   "source_amount": "1089.91",
   "destination_amount": "1000.00",
-  "customer_rate": "0.9175",
   "mid_market_rate": "0.9215",
-  "fx_markup_bps": 45,
-  "expires_at": "2026-04-15T14:32:00Z",
-  "locked": true
+  "customer_rate": "0.9175",
+  "inverse_rate": "1.0899",
+  "markup_basis_points": 45,
+  "fee": "0.00",
+  "fee_currency": "USD",
+  "expires_at": "2026-04-15T14:32:00.000Z",
+  "metadata": {},
+  "created_at": "2026-04-15T14:31:00.000Z",
+  "updated_at": "2026-04-15T14:31:00.000Z"
 }
 ```
 
@@ -137,7 +158,7 @@ Anton computes the required `source_amount` using current pricing (rate + markup
 
 The returned `Payout` carries FX detail — `exchange_rate`, `fee`, `fee_currency`, `buffer_amount`, `buffer_currency`. The `buffer_amount` is a cross-currency rate buffer held during processing and released on settlement.
 
-**When to lock separately**: if your application needs to show the exact `source_amount` to the end user before they confirm, pre-lock via `POST /v1/fx/quote` and surface the quote's `customer_rate`. The payout will use the same corridor pricing but isn't bound to the quote unless you execute against the locked quote explicitly (via the merchant account funding path — typically dashboard-driven).
+**When to lock separately**: if your application needs to show the exact `source_amount` to the end user before they confirm, pre-lock via `POST /v1/fx/quotes` and surface the quote's `customer_rate`. The payout will use the same corridor pricing but isn't bound to the quote unless you execute against the locked quote explicitly (via the merchant account funding path — typically dashboard-driven).
 
 ## Listing exchange history
 

@@ -27,10 +27,12 @@ curl "https://api.antonpayments.dev/v1/intelligence/reviews?status=open&limit=25
   "data": [
     {
       "id": "irv_01JB8QK2EXAMPLE",
+      "object": "review",
+      "livemode": false,
+      "status": "open",
       "number": "RV-0142",
       "kind": "possible_sanctions_match",
       "priority": "high",
-      "status": "open",
       "source": "evaluation",
       "evaluation_id": "eval_01JB7ZEXAMPLE",
       "subject": { "type": "person", "display": "V*** S***", "reference": "cust_7731" },

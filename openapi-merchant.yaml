@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=805e8fe10d95f5d2484f78ac9bd38adb2dcec88b4fc7e71d691e5d7bb5227193
+# anton-spec-sync sha256=37f47404c0fa6a2d55696565d11be2f47ea694809a066fdf7d1f669b69118160
 openapi: 3.1.0
 
 info:
@@ -610,7 +610,7 @@ paths:
           description: The review.
           content:
             application/json:
-              example: {"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z","matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}]}
+              example: {"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}],"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z"}
               schema:
                 $ref: '#/components/schemas/ReviewDetail'
         '400':
@@ -1159,9 +1159,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
-        '422':
-          description: The verification is in a terminal state and cannot be resent.
+          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
           content:
             application/json:
               schema:
@@ -1215,7 +1213,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '422':
           $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
@@ -1266,9 +1268,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
-        '422':
-          description: The verification is already approved, declined or expired.
+          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
           content:
             application/json:
               schema:
@@ -1319,9 +1319,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
-        '422':
-          description: The verification is not in a state that can be re-screened.
+          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
           content:
             application/json:
               schema:
@@ -1391,9 +1389,13 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`validation_error` (a malformed `email`), `invalid_verification_state`, or `idempotency_key_reused`.'
+          description: '`validation_error` (a malformed `email`) or `idempotency_key_reused`.'
           content:
             application/json:
               schema:
@@ -2400,7 +2402,7 @@ paths:
                     last_name: Smith
                     email: jane@example.com
                     phone: "+442079460000"
-                    date_of_birth: "1988-05-12"
+                    birth_date: "1988-05-12"
                     nationality: GB
                     address:
                       street_line_1: 10 Example Street
@@ -2726,7 +2728,7 @@ paths:
           description: The beneficiary's personal details.
           content:
             application/json:
-              example: {"object":"beneficiary_pii","livemode":false,"beneficiary_id":"ben_dbvqrpqukoh470i0a2j0","type":"individual","individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","date_of_birth":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}},"business":null}
+              example: {"id":"ben_dbvqrpqukoh470i0a2j0","object":"beneficiary_pii","livemode":false,"type":"individual","individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","birth_date":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}},"business":null}
               schema:
                 $ref: '#/components/schemas/BeneficiaryPII'
         '400':
@@ -2764,7 +2766,7 @@ paths:
         required: true
         content:
           application/json:
-            example: {"individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","date_of_birth":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}}}
+            example: {"individual":{"first_name":"Jane","last_name":"Smith","email":"jane@example.com","phone":"+442079460000","birth_date":"1988-05-12","nationality":"GB","address":{"street_line_1":"10 Example Street","city":"London","postal_code":"SW1A 1AA","country":"GB"}}}
             schema:
               $ref: '#/components/schemas/BeneficiaryPIIUpdateRequest'
       responses:
@@ -3000,7 +3002,7 @@ paths:
         authoritative; the other is recomputed from current corridor pricing.
         Amounts are decimal strings with at most the currency's precision
         (2 places for USD, 0 for JPY, 6 for USDC); more is `422
-        amount_precision_invalid`. Lock a rate first with `POST /v1/fx/quote`
+        amount_precision_invalid`. Lock a rate first with `POST /v1/fx/quotes`
         if you need certainty.
 
         A payout that cannot be processed is refused with `422
@@ -3070,7 +3072,7 @@ paths:
               $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}
+              example: {"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3095,7 +3097,8 @@ paths:
           description: |
             Well-formed but refused. Codes: `validation_error` (a field fails validation; `details` lists every
             one, including `metadata` over its limits), `amount_precision_invalid`, `insufficient_balance`,
-            `payout_rejected`, `policy_blocked` (your own approval policy blocks the payout),
+            `amount_invalid` (an amount is zero or negative; `param` names it), `payout_rejected`,
+            `policy_blocked` (your own approval policy blocks the payout),
             `cannot_be_processed` (the payout cannot be processed; no further detail is given),
             `quote_expired`, `quote_mismatch`, and `idempotency_key_reused`.
           content:
@@ -3194,7 +3197,7 @@ paths:
           description: A page of payouts.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z"}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3293,7 +3296,7 @@ paths:
           description: The payout.
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"100.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null}
+              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"100.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3336,7 +3339,7 @@ paths:
           description: A page of events.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"pev_01HX8Z9K0M2N3P4Q5R6S7T8UE1","object":"payout_event","livemode":false,"payout_id":"pay_dbvqrpqukoh470i0a7j0","status":"created","previous_status":null,"failure_code":null,"actor_type":"api_key","actor_id":null,"occurred_at":"2026-11-20T02:18:15.241Z","created_at":"2026-11-20T02:18:15.241Z"}],"has_more":true,"next_cursor":"eyJsYXN0X2lkIjoiMSIsImxhc3RfdHMiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9"}
+              example: {"object":"list","data":[{"id":"pev_01HX8Z9K0M2N3P4Q5R6S7T8UE1","object":"payout_event","livemode":false,"status":"created","payout_id":"pay_dbvqrpqukoh470i0a7j0","previous_status":null,"failure_code":null,"actor_type":"api_key","actor_id":null,"occurred_at":"2026-11-20T02:18:15.241Z","created_at":"2026-11-20T02:18:15.241Z"}],"has_more":true,"next_cursor":"eyJsYXN0X2lkIjoiMSIsImxhc3RfdHMiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9"}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3390,7 +3393,7 @@ paths:
           description: The cancelled payout.
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z","risk":null,"delivery":null,"session_quality":null}
+              example: {"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z","risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3474,7 +3477,7 @@ paths:
           description: Import created, with per-row validation results.
           content:
             application/json:
-              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"metadata":{},"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":null,"expires_at":"2026-11-21T02:18:15.231Z"}
+              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"confirmed_at":null,"expires_at":"2026-11-21T02:18:15.231Z","metadata":{},"created_at":"2026-11-20T02:18:15.231Z"}
               schema:
                 $ref: '#/components/schemas/BeneficiaryImport'
         '400':
@@ -3552,7 +3555,7 @@ paths:
           description: Confirm completed.
           content:
             application/json:
-              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"confirmed","summary":{"total":2,"valid":2,"invalid":0},"rows":null,"result":{"created":2,"skipped":0,"failed":0,"beneficiary_ids":["ben_0000000000000000000c","ben_0000000000000000000b"],"errors":[]},"metadata":{},"created_at":"2026-11-20T02:18:15.231Z","confirmed_at":"2026-11-20T02:18:15.232Z","expires_at":"2026-11-21T02:18:15.231Z"}
+              example: {"id":"imp_dbvqrpqukoh470i0a3q0","object":"beneficiary_import","livemode":false,"status":"confirmed","summary":{"total":2,"valid":2,"invalid":0},"rows":null,"result":{"created":2,"skipped":0,"failed":0,"beneficiary_ids":["ben_0000000000000000000c","ben_0000000000000000000b"],"errors":[]},"confirmed_at":"2026-11-20T02:18:15.232Z","expires_at":"2026-11-21T02:18:15.231Z","metadata":{},"created_at":"2026-11-20T02:18:15.231Z"}
               schema:
                 $ref: '#/components/schemas/BeneficiaryImport'
         '400':
@@ -3746,7 +3749,7 @@ paths:
           description: Batch accepted and queued for validation.
           content:
             application/json:
-              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"pending_batches":[]}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"pending_batches":[],"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/BatchUpload'
         '400':
@@ -3813,7 +3816,7 @@ paths:
           description: A page of batches.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3854,7 +3857,7 @@ paths:
           description: The batch.
           content:
             application/json:
-              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"validated","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/Batch'
         '400':
@@ -3910,7 +3913,7 @@ paths:
           description: The batch, confirmed and queued for processing.
           content:
             application/json:
-              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"confirmed","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":"2026-11-19T14:05:00.000Z","processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"confirmed","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"confirmed_at":"2026-11-19T14:05:00.000Z","processing_started_at":null,"completed_at":null,"cancelled_at":null,"expires_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/Batch'
         '400':
@@ -3967,7 +3970,7 @@ paths:
           description: The cancelled batch.
           content:
             application/json:
-              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"cancelled","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z","confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":"2026-11-19T14:05:00.000Z","expires_at":null}
+              example: {"id":"bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT","object":"batch","livemode":false,"status":"cancelled","file_name":"payroll.csv","file_format":"csv","file_size":2048,"total_rows":3,"valid_rows":2,"invalid_rows":1,"warning_rows":0,"skipped_rows":0,"processed_rows":0,"summary":{"new_beneficiaries":1,"matched_beneficiaries":0,"existing_beneficiaries":0,"external_id_matched_beneficiaries":0,"methods":{"ach":2},"estimated_debits":[{"currency":"USD","amount":"1200.50","fx_rows":0,"same_currency_rows":2,"rate_at":"2026-11-19T14:00:00.000Z"}],"fx_markup_basis_points":50,"balance_checks":{"USD":{"available":"5000.00","estimated_debit":"1200.50","sufficient":true}}},"source_currency":null,"total_amount":"1200.50","total_currency":"USD","uploaded_by":"usr_1","confirmed_by":null,"cancelled_by":null,"confirmed_at":null,"processing_started_at":null,"completed_at":null,"cancelled_at":"2026-11-19T14:05:00.000Z","expires_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/Batch'
         '400':
@@ -5362,7 +5365,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /v1/pricing/quote:
+  /v1/pricing/quotes:
     parameters:
       - $ref: '#/components/parameters/AntonVersion'
     post:
@@ -5455,8 +5458,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           description: >-
-            A field failed validation, an amount has too many decimal places (`amount_precision_invalid`),
-            or no pricing plan applies (`pricing_plan_not_found`).
+            A field failed validation, an amount is zero or negative (`amount_invalid`), an amount has too many
+            decimal places (`amount_precision_invalid`), or no pricing plan applies (`pricing_plan_not_found`).
           content:
             application/json:
               schema:
@@ -6171,8 +6174,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        '422':
-          description: The subscription is not active.
+        '409':
+          description: The subscription is not active (`webhook_subscription_inactive`, `param` is `id`).
           content:
             application/json:
               schema:
@@ -7543,7 +7546,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /v1/fx/quote:
+  /v1/fx/quotes:
     parameters:
       - $ref: '#/components/parameters/AntonVersion'
     post:
@@ -7633,8 +7636,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           description: >-
-            A field failed validation: both or neither amount, more decimal places than the currency allows
-            (`amount_precision_invalid`), an unsupported currency (`currency_not_supported`) or no account
+            A field failed validation: both or neither amount, a zero or negative amount (`amount_invalid`),
+            more decimal places than the currency allows (`amount_precision_invalid`), an unsupported currency (`currency_not_supported`) or no account
             in the source currency (`no_funding_account`).
           content:
             application/json:
@@ -8704,7 +8707,6 @@ components:
             - no_buy_account
             - no_funding_account
             - not_authenticated
-            - not_configured
             - not_found
             - not_proposer
             - note_limit_reached
@@ -8726,7 +8728,6 @@ components:
             - rate_limited
             - rate_limited_sandbox_deposit
             - reference_not_allowed
-            - rescreen_not_configured
             - resource_id_invalid
             - resource_missing
             - retention_cannot_decrease
@@ -8740,7 +8741,6 @@ components:
             - self_approval_forbidden
             - service_unavailable
             - static_api_keys_disabled
-            - stats_unavailable
             - subject_details_not_stored
             - subject_storage_unavailable
             - temporarily_unavailable
@@ -8753,6 +8753,7 @@ components:
             - upstream_error
             - validation_error
             - verification_not_configured
+            - webhook_subscription_inactive
             - webhook_url_invalid
             - webhook_url_not_https
             - webhook_url_private_address
@@ -8903,7 +8904,7 @@ components:
 
     IndividualDetails:
       type: object
-      required: [first_name, last_name, email, phone, date_of_birth, nationality, address]
+      required: [first_name, last_name, email, phone, birth_date, nationality, address]
       description: PII for an `individual` beneficiary. Tokenized on creation.
       properties:
         first_name:
@@ -8923,7 +8924,7 @@ components:
           type: string
           description: E.164-formatted phone number.
           example: "+442079460000"
-        date_of_birth:
+        birth_date:
           type: string
           description: YYYY-MM-DD.
           pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -9137,7 +9138,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
-      example: {"id": "ben_dbvlj5qukohfu54jblu0", "object": "beneficiary", "livemode": false, "status": "active", "type": "individual", "display_name": "Jane Smith", "country": "GB", "external_ref": "contractor-1042", "risk_score": null, "risk_tier": null, "risk_signals": [], "created_via": "api", "source_batch_id": null, "metadata": {"department": "engineering"}, "created_at": "2026-11-19T20:18:31.415Z", "updated_at": "2026-11-19T20:18:31.415Z"}
+      example: {"id":"ben_dbvlj5qukohfu54jblu0","object":"beneficiary","livemode":false,"status":"active","type":"individual","display_name":"Jane Smith","country":"GB","external_ref":"contractor-1042","risk_score":null,"risk_tier":null,"risk_signals":[],"created_via":"api","source_batch_id":null,"metadata":{"department":"engineering"},"created_at":"2026-11-19T20:18:31.415Z","updated_at":"2026-11-19T20:18:31.415Z"}
 
     BeneficiaryDeleted:
       type: object
@@ -9160,16 +9161,17 @@ components:
         A beneficiary's personal details, read back from the secure vault. Exactly one of
         `individual` and `business` is set, matching `type`; the other is `null`. Optional
         fields are omitted when they were never set.
-      required: [object, livemode, beneficiary_id, type, individual, business]
+      required: [id, object, livemode, type, individual, business]
       properties:
+        id:
+          type: string
+          description: The beneficiary's ID.
+          pattern: '^ben_[a-zA-Z0-9]+$'
         object:
           type: string
           enum: [beneficiary_pii]
         livemode:
           type: boolean
-        beneficiary_id:
-          type: string
-          pattern: '^ben_[a-zA-Z0-9]+$'
         type:
           type: string
           enum: [individual, business]
@@ -9201,6 +9203,10 @@ components:
         livemode:
           type: boolean
           description: True in production, false in the sandbox.
+        status:
+          type: string
+          enum: [active, deprecated]
+          description: Whether a corridor routes this currency end to end.
         code:
           type: string
           description: ISO 4217 code for fiat, the published asset code for crypto and stablecoins. Same as `id`.
@@ -9218,10 +9224,6 @@ components:
           type: integer
           description: >-
             Decimal places amounts in this currency carry: CAD 2, JPY 0, USDC 6.
-        status:
-          type: string
-          enum: [active, deprecated]
-          description: Whether a corridor routes this currency end to end.
         supported_rails:
           type: array
           items:
@@ -9506,7 +9508,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
           $ref: '#/components/schemas/Timestamp'
-      example: {"id": "ins_dbvlj5qukohfu54jbmlg", "object": "instrument", "livemode": false, "status": "active", "beneficiary_id": "ben_dbvlj5qukohfu54jbmjg", "method": "iban", "currency": "EUR", "country": null, "label": "Primary EUR account", "default": true, "display_last4": "3000", "display_bank": null, "display_network": "IBAN", "masked_account": "IBAN ****3000", "created_via": "api", "source_batch_id": null, "metadata": {"cost_center": "4421"}, "created_at": "2026-11-19T20:18:31.832Z", "updated_at": "2026-11-19T20:18:31.832Z"}
+      example: {"id":"ins_dbvlj5qukohfu54jbmlg","object":"instrument","livemode":false,"status":"active","beneficiary_id":"ben_dbvlj5qukohfu54jbmjg","method":"iban","currency":"EUR","country":null,"label":"Primary EUR account","default":true,"display_last4":"3000","display_bank":null,"display_network":"IBAN","masked_account":"IBAN ****3000","created_via":"api","source_batch_id":null,"metadata":{"cost_center":"4421"},"created_at":"2026-11-19T20:18:31.832Z","updated_at":"2026-11-19T20:18:31.832Z"}
 
     InstrumentDeleted:
       type: object
@@ -9757,7 +9759,7 @@ components:
           type: string
           pattern: '^pq_[a-zA-Z0-9]+$'
           description: |
-            A bindable pricing quote returned by `POST /v1/pricing/quote`. The payout fee is locked to the
+            A bindable pricing quote returned by `POST /v1/pricing/quotes`. The payout fee is locked to the
             quoted value. The quote must be unexpired, unused, and match the payout's currencies and amount,
             otherwise `422 quote_expired`, `409 quote_already_used` or `422 quote_mismatch`.
 
@@ -9988,12 +9990,6 @@ components:
           type: string
         reference:
           type: string
-        metadata:
-          $ref: '#/components/schemas/Metadata'
-        created_at:
-          $ref: '#/components/schemas/Timestamp'
-        updated_at:
-          $ref: '#/components/schemas/Timestamp'
         approved_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
@@ -10052,6 +10048,12 @@ components:
             Always present. On `POST /v1/payouts`, the data-quality flags found in the request's `session` object
             (non-blocking: the payout was created; fix the flagged fields to improve risk-signal quality); `null`
             when there are none and on every other response and event.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
       example:
         {
           "id": "pay_01HX8Z9K0M2N3P4Q5R6S7T8UAB",
@@ -10122,11 +10124,11 @@ components:
           enum: [payout_event]
         livemode:
           type: boolean
+        status:
+          $ref: '#/components/schemas/PayoutStatus'
         payout_id:
           type: string
           pattern: '^pay_[a-zA-Z0-9]+$'
-        status:
-          $ref: '#/components/schemas/PayoutStatus'
         previous_status:
           oneOf:
             - $ref: '#/components/schemas/PayoutStatus'
@@ -10451,14 +10453,6 @@ components:
           type: [string, 'null']
         cancelled_by:
           type: [string, 'null']
-        metadata:
-          allOf:
-            - $ref: '#/components/schemas/Metadata'
-          description: Your own key/value pairs for this batch, set with the `metadata` form field on upload. Returned as-is, never read by Anton.
-        created_at:
-          $ref: '#/components/schemas/Timestamp'
-        updated_at:
-          $ref: '#/components/schemas/Timestamp'
         confirmed_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
@@ -10480,6 +10474,14 @@ components:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
           description: Deadline for confirming a `validated` batch.
+        metadata:
+          allOf:
+            - $ref: '#/components/schemas/Metadata'
+          description: Your own key/value pairs for this batch, set with the `metadata` form field on upload. Returned as-is, never read by Anton.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
       example:
         {
           "id": "bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT",
@@ -10596,18 +10598,18 @@ components:
             - $ref: '#/components/schemas/BeneficiaryImportResult'
             - type: 'null'
           description: The outcome of the confirm. `null` until confirmed.
+        confirmed_at:
+          type: [string, 'null']
+          format: date-time
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
         metadata:
           allOf:
             - $ref: '#/components/schemas/Metadata'
           description: Your own key/value pairs for this import, set with the `metadata` form field on upload. Returned as-is, never read by Anton.
         created_at:
           $ref: '#/components/schemas/Timestamp'
-        confirmed_at:
-          type: [string, 'null']
-          format: date-time
-        expires_at:
-          $ref: '#/components/schemas/Timestamp'
-      example: {"id":"imp_dbvlj5qukohfu54jbn2g","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"metadata":{},"created_at":"2026-11-19T20:18:31.834Z","confirmed_at":null,"expires_at":"2026-11-20T20:18:31.834Z"}
+      example: {"id":"imp_dbvlj5qukohfu54jbn2g","object":"beneficiary_import","livemode":false,"status":"preview","summary":{"total":2,"valid":2,"invalid":0},"rows":[{"row_number":1,"type":"individual","valid":true,"errors":[],"external_ref":"R-001","country":"GB","masked":{"display_name":"A**** L**","email":"***@example.com","phone":"**********11"}},{"row_number":2,"type":"individual","valid":true,"errors":[],"external_ref":"R-002","country":"US","masked":{"display_name":"B** S****","email":"***@example.com","phone":"*********01"}}],"result":null,"confirmed_at":null,"expires_at":"2026-11-20T20:18:31.834Z","metadata":{},"created_at":"2026-11-19T20:18:31.834Z"}
 
     BeneficiaryImportRow:
       type: object
@@ -10975,6 +10977,8 @@ components:
         livemode:
           type: boolean
           description: True in production, false in the sandbox.
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
         review_id:
           type: string
         number:
@@ -10993,8 +10997,6 @@ components:
         actor_type:
           type: string
           enum: [user, api_client, system]
-        status:
-          $ref: '#/components/schemas/ReviewStatus'
         due_at:
           $ref: '#/components/schemas/Timestamp'
         decision_id:
@@ -11063,12 +11065,12 @@ components:
         livemode:
           type: boolean
           description: True in production, false in the sandbox.
-        name:
-          type: string
-          description: The schedule's name.
         status:
           type: string
           description: The schedule's status after the event.
+        name:
+          type: string
+          description: The schedule's name.
         beneficiary_id:
           type: string
           description: Who is paid.
@@ -11216,13 +11218,13 @@ components:
           type: string
           enum: [verification]
           description: The type of the object.
+        status:
+          $ref: '#/components/schemas/VerificationStatus'
+          description: The verification's status after the event.
         subject_id:
           type: string
           pattern: '^vsub_[a-zA-Z0-9]+$'
           description: The subject being verified.
-        status:
-          $ref: '#/components/schemas/VerificationStatus'
-          description: The verification's status after the event.
         created_at:
           $ref: '#/components/schemas/Timestamp'
           description: When the verification was opened.
@@ -11244,11 +11246,11 @@ components:
           enum: [payout]
         livemode:
           type: boolean
+        status:
+          type: string
         test:
           type: boolean
           enum: [true]
-        status:
-          type: string
         source_amount:
           type: string
         source_currency:
@@ -11470,6 +11472,9 @@ components:
           type: string
           enum: [event]
           description: The type of the object.
+        livemode:
+          type: boolean
+          description: True in production, false in the sandbox.
         type:
           $ref: '#/components/schemas/WebhookEventType'
           description: The event type.
@@ -11477,12 +11482,6 @@ components:
           type: string
           description: The API version `data.object` is rendered at.
           example: '2026-12-01'
-        livemode:
-          type: boolean
-          description: True in production, false in the sandbox.
-        created_at:
-          $ref: '#/components/schemas/Timestamp'
-          description: When the event was created.
         data:
           type: object
           description: The event data.
@@ -11510,6 +11509,9 @@ components:
                 - $ref: '#/components/schemas/Insight'
                 - $ref: '#/components/schemas/ReviewEvent'
                 # END GENERATED
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: When the event was created.
 
     WebhookDelivery:
       type: object
@@ -12050,14 +12052,14 @@ components:
         livemode:
           type: boolean
           description: True in production, false in the sandbox.
-        type:
-          type: string
-          enum: [payin, payout, fee, exchange, transfer, return]
-          description: What kind of movement it is.
         status:
           type: string
           enum: [completed, pending, failed, returned]
           description: Where the movement stands.
+        type:
+          type: string
+          enum: [payin, payout, fee, exchange, transfer, return]
+          description: What kind of movement it is.
         direction:
           type: [string, 'null']
           enum: [credit, debit]
@@ -12785,6 +12787,8 @@ components:
           enum: [verification_owner]
         livemode:
           type: boolean
+        status:
+          $ref: '#/components/schemas/VerificationStatus'
         display_name:
           type: string
           description: Masked owner name.
@@ -12794,8 +12798,6 @@ components:
         ownership_percentage:
           type: integer
           description: Declared ownership percentage.
-        status:
-          $ref: '#/components/schemas/VerificationStatus'
         completed_at:
           type: [string, 'null']
           format: date-time
