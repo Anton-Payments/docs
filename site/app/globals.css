@@ -696,3 +696,6 @@ a.card:hover .go { gap: 11px; }
 /* with results, the palette takes the height the screen gives it, so it doesn't jump as results change */
 .pal:has(.pal-scope) { height: 84vh; }
 @media (min-width: 761px) { .overlay:has(.pal) { padding-top: 8vh; } }
+/* scrolling the palette's lists never hands the scroll on to the page */
+.pal-list, .pal-prev { overscroll-behavior: contain; }
+.overlay { overscroll-behavior: contain; }

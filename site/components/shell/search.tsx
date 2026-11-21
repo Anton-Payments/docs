@@ -147,6 +147,17 @@ export function SearchDialog() {
     else { setQ(''); setScope('All'); }
   }, [open]);
 
+  // the page behind stays put while the palette is open; the scrollbar's space is kept so nothing shifts
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    const gap = window.innerWidth - root.clientWidth;
+    const prev = { overflow: root.style.overflow, padding: root.style.paddingRight };
+    root.style.overflow = 'hidden';
+    if (gap > 0) root.style.paddingRight = `${gap}px`;
+    return () => { root.style.overflow = prev.overflow; root.style.paddingRight = prev.padding; };
+  }, [open]);
+
   useEffect(() => {
     if (!q.trim()) { setRes({ terms: [], groups: [] }); setSel(0); return; }
     const c = new AbortController();
