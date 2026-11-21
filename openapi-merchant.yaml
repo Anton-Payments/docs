@@ -3004,8 +3004,8 @@ paths:
         authoritative; the other is recomputed from current corridor pricing.
         Amounts are decimal strings with at most the currency's precision
         (2 places for USD, 0 for JPY, 6 for USDC); more is `422
-        amount_precision_invalid`. Lock a rate first with `POST /v1/fx/quotes`
-        if you need certainty.
+        amount_precision_invalid`. Pin the fee and rate first with `POST /v1/pricing/quotes`
+        and pass its `id` as `quote_id`.
 
         A payout that cannot be processed is refused with `422
         cannot_be_processed`; the response never says why. A payout your own

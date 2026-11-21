@@ -1,0 +1,61 @@
+---
+title: "Onboard a merchant"
+description: "Screen a business before you let it onto your platform. Only a business can be evaluated, and the verdict comes back in the same response."
+kind: guide
+---
+
+`merchant_onboarding` evaluates a company at the point you would accept it as a customer. It decides before it answers, so the result can gate your own signup flow.
+
+<BeforeYouBegin items={["Sandbox credentials with the intelligence scope", "The business's legal name, or a vault token that holds it", "A registration number, if you have one"]} />
+
+## Name the business
+
+`entity.type` must be `business`; `person` is a `422`. One of `name` or `vault_token_id` is required. `country` and a `document` of `type` `business_registration` or `tax_id`, with its `country` and `number`, give the screening more to match the company on.
+
+<Decision>
+  <Choice title="Send the details" value='entity.name' fields="name, country, document" set={{ entity: { type: "business", reference_id: "merchant-example", name: "Example Imports LLC", country: "US", document: { type: "business_registration", country: "US", number: "TEST-REG-123" } } }} picked>
+    Everything travels in the request and is discarded after the evaluation.
+  </Choice>
+  <Choice title="Send a vault token" value='entity.vault_token_id' fields="vault_token_id" set={{ entity: { type: "business", reference_id: "merchant-example", vault_token_id: "vt_01HX8Z9K0M2N3P4Q5R6S7T8UA4" } }}>
+    The token must belong to your account, and the details are read in memory.
+  </Choice>
+</Decision>
+
+## Send the evaluation
+
+<RunStep title="Screen the business" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "intel-merchant-example-001" }}
+  body={{
+    use_case: "merchant_onboarding",
+    client_reference_id: "merchant-example-001",
+    entity: {
+      type: "business",
+      reference_id: "merchant-example",
+      name: "Example Imports LLC",
+      country: "US",
+      document: {
+        type: "business_registration",
+        country: "US",
+        number: "TEST-REG-123"
+      }
+    }
+  }}>
+  The response is `201` with `status: "completed"`.
+</RunStep>
+
+The `merchant` object on the request is accepted but ignored today; don't depend on it. Put your own context in `metadata`.
+
+## Act on the decision
+
+`approve` lets the business through. `decline` stops it. On `review`, `reasons` says why and `required_actions` may ask for `provide_missing_information`, which means resubmit the same business with more details, or `verify_identity`, which points to a [verification subject](/concepts/verifications) for the people behind it. [Decisions](/intelligence/decisions) lists every value.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Verifications" href="/concepts/verifications">
+    Identity and business checks through hosted flows.
+  </Card>
+  <Card title="Reviews" href="/intelligence/reviews">
+    Work the cases that need a person.
+  </Card>
+</CardGroup>

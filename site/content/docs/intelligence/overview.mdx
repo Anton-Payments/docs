@@ -1,0 +1,80 @@
+---
+title: "Anton Intelligence"
+description: "One request screens a payee, instrument, payout or onboarding, and returns a decision, a score from 0 to 1000 and the actions that would change it."
+kind: concept
+---
+
+You send a request with a `use_case`, an `entity`, and optional instrument or payout context. Anton screens the inputs, scores the risk, and returns a decision. A `payout_screening` evaluation runs the full panel and is accepted with `202`: poll the evaluation or subscribe to `intelligence.evaluation.completed`. Every other use case is decided before the response, with `201`.
+
+Unknown fields are rejected and enum values are fixed. Sensitive values are used in memory for the evaluation, and Anton persists redacted decision evidence, not raw PII.
+
+## Authentication
+
+Every Intelligence route requires OAuth and DPoP credentials with the `intelligence` scope. See [Authentication](/authentication). A request without credentials returns `401`. Evaluations persist under your merchant account, and you read them back with the [list](/reference/intelligence/list-evaluations) and [get](/reference/intelligence/get-evaluation) endpoints. `Idempotency-Key` is required on create. To try the API, use your sandbox credentials.
+
+The account also needs the `intelligence` capability. [AI-compliance-only accounts](/concepts/capabilities) hold only that one and have no payout surface. Start with the [quickstart](/intelligence/quickstart).
+
+## Use cases
+
+| Use case | When to use it | Event type |
+|---|---|---|
+| `payee_registration` | Registering or screening a person or business payee | `payee.create` |
+| `instrument_screening` | Adding or screening a bank account, wallet, card, or IBAN | `instrument.create` |
+| `payout_screening` | Evaluating payment movement context | `payout.create` |
+| `merchant_onboarding` | Evaluating business onboarding data | `merchant.onboard` |
+| `monitoring` | Generic/manual screening | `monitoring.evaluate` |
+
+## Required shape
+
+```json
+{
+  "use_case": "payee_registration",
+  "entity": {
+    "type": "person"
+  }
+}
+```
+
+For a meaningful evaluation, include at least one searchable input: `entity.name`, `entity.vault_token_id`, `instrument.vault_token_id`, or the matching instrument fields.
+
+## Validate before creating
+
+Use validation to test request shape without creating an evaluation:
+
+```bash
+curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations/validate" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $ANTON_DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "use_case": "payee_registration",
+    "entity": {
+      "type": "person",
+      "name": "John Doe",
+      "country": "US"
+    }
+  }' | jq
+```
+
+## Field rules
+
+| Field class | Rule |
+|---|---|
+| Countries | Uppercase ISO 3166 alpha-2, such as `US` or `CA` |
+| Dates | Real calendar dates in `YYYY-MM-DD` format |
+| Currencies and assets | Uppercase supported currency or asset codes, such as `USD` or `BTC` |
+| Instrument payloads | The nested payload must match `instrument.type` |
+
+## The evaluation
+
+The response is an evaluation: `id` (`eval_...`), `object`, `livemode`, `status`, `use_case`, and the result fields below. See the [quickstart](/intelligence/quickstart) for a complete example.
+
+| Field | Meaning |
+|---|---|
+| `coverage` | How much of the screening panel answered: `complete`, `partial` or `error`. |
+| `decision` | `approve`, `review` or `decline`. See [Decisions](/intelligence/decisions). |
+| `score` | Risk score from 0 to 1000. Higher is worse. |
+| `tier` | The score's band: `low`, `medium`, `high` or `critical`. |
+| `reasons` | Why the decision is not a plain approval. Empty for a clean approval. |
+| `required_actions` | What you can do about it. |
+

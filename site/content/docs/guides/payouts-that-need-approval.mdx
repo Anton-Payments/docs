@@ -1,0 +1,65 @@
+---
+title: Payouts that need approval
+description: Approval is a person's decision in the dashboard, and your credentials cannot make it. The API only tells you a payout is waiting.
+kind: guide
+---
+
+When a payout matches one of your own approval policies, it waits for a second person on your team. Approving or rejecting happens in the dashboard, because it takes a signed-in person with the right role. No API call can do it.
+
+<BeforeYouBegin items={["An approval policy on your account", "A subscription to payout.approval_required, payout.approved and payout.approval_expired", "A second person on your team who can approve"]} />
+
+## What you see at creation
+
+`POST /v1/payouts` returns the payout as `pending_approval` instead of `created`. The status means a second person on your team has to approve it under your own policy.
+
+A policy can also refuse the request outright. That is `422 policy_blocked`, and no payout is created.
+
+<Errors>
+  <ErrorRow status={422} code="policy_blocked">Your own approval policy blocks the payout. Review the rule on your account; retrying the same request gets the same answer.</ErrorRow>
+</Errors>
+
+## Events
+
+Three events track the wait. `payout.approval_required` and `payout.approval_expired` are in the Approvals category of `GET /v1/webhooks/event-types`, and `payout.approved` is with the other payout events.
+
+| Event | Means |
+| --- | --- |
+| `payout.approval_required` | The payout matched a policy and is waiting on an approver. |
+| `payout.approved` | The payout was approved and will be sent. |
+| `payout.approval_expired` | The approval window lapsed with no decision, and the payout was cancelled. |
+
+Each carries the payout in `data.object`. `approved_at` on the payout is `null` until it is approved.
+
+<RunStep title="Read a waiting payout" method="GET" path="/v1/payouts/{id}"
+  pathParams={{ id: "pay_dbvqrpqukoh470i0a400" }}
+  respond={{ status: "pending_approval", status_message: null, approved_at: null }}>
+  A payout that waits shows `pending_approval`, and `approved_at` stays `null` until someone approves it.
+</RunStep>
+
+## How the wait ends
+
+<Lifecycle states="pending_approval, processing"
+  notes="Waiting on a second person | Approved, checked and submitted"
+  edges="approved">
+  A payout in `pending_approval` can also become `cancelled`.
+</Lifecycle>
+
+Approved goes to `processing`, and the checks in [How Anton evaluates payouts](/concepts/how-anton-evaluates-payouts) still apply from there, so a payout can still be held. You can cancel it yourself from `pending_approval` with [`POST /v1/payouts/{id}/cancel`](/reference/payouts/cancel-payout).
+
+When the approval window lapses, the payout is `cancelled` and the money it held goes back to your balance; `payout.approval_expired` follows. If a compliance review is holding the payout at that moment, the expiry waits until the review ends.
+
+## Who can approve
+
+The creator can never approve their own payout. `created_by` names the user for a payout made in the dashboard, and it is `null` for one made with programmatic credentials or in a batch. Because a credential can never approve, a payout your integration creates always needs a person on your team. If nobody else can approve, it waits.
+
+## What to build
+
+- Notify your approvers on `payout.approval_required`, with the payout `id`. Don't poll.
+- Show your user a waiting state, not a failure.
+- Alert on a payout that stays in `pending_approval` past your own deadline, and on `payout.approval_expired`.
+- Update your records from the event. The payout in it is the same object `GET /v1/payouts/{id}` returns.
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">The lifecycle and cancellation rules.</Card>
+  <Card title="Track payouts with webhooks" href="/guides/track-payouts-with-webhooks">Receive and verify these events.</Card>
+</CardGroup>

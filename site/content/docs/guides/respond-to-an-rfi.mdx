@@ -1,0 +1,66 @@
+---
+title: Respond to an RFI
+description: An RFI is answered by a person in the dashboard. Your integration cannot answer one, so its job is to keep the payout waiting and tell your team.
+kind: guide
+---
+
+An RFI is a request for information from Anton. A payout or review that is waiting on it moves on once your team answers.
+
+<Note>
+  RFIs are coming to the API as an additive change. Nothing you build today changes shape, and the [changelog](/changelog) will say when it can answer for you.
+</Note>
+
+<BeforeYouBegin items={["At least one team member with the Admin or Operator role", "A payout.on_hold subscription that reaches your team"]} />
+
+## Decide who answers
+
+A person signed in to the dashboard answers: they open the RFI, write the response and attach documents. The `rfis.respond` permission allows it, and the Admin and Operator roles hold it. No API credential can respond, whatever its scope, so your integration needs a step that tells a person to act.
+
+RFIs exist on every account tier, including accounts that hold only the `intelligence` capability. Make sure someone on your team holds the role.
+
+## What your integration can see
+
+There is no RFI object, endpoint or webhook event. No `rfi.*` type exists, so you cannot subscribe to one, and a subscription that names an unknown type is refused with `422 validation_error`.
+
+You see the payout. One that is under review has `status` `on_hold`. The API cannot tell you whether a hold is waiting on an RFI, so treat every `on_hold` payout as possibly waiting on one and check the dashboard.
+
+<RunStep title="Read a held payout" method="GET" path="/v1/payouts/{id}"
+  pathParams={{ id: "pay_dbvqrpqukoh470i0a400" }}>
+  `status` is `on_hold` and `status_message` is the only text. It does not mention an RFI.
+</RunStep>
+
+[Handle holds and reviews](/guides/handle-holds-and-reviews) covers the payout side in full.
+
+## What to build
+
+<Steps>
+  <Step title="Notify the people who can answer">
+    On `payout.on_hold`, send the Admin and Operator holders a message with the payout `id` and a link to your dashboard view. They check for an open RFI.
+  </Step>
+  <Step title="Keep the payout where it is">
+    A held payout cannot be cancelled, and a second payout for the same invoice risks paying twice. Wait for `payout.processing`, `payout.failed` or `payout.cancelled`.
+  </Step>
+  <Step title="Show your user a pending state">
+    Don't present Anton's `status_message` as a reason. It gives none.
+  </Step>
+  <Step title="Alert on age">
+    Flag a payout that stays on hold past your own deadline, and an RFI that stays open past it.
+  </Step>
+</Steps>
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={409} code="payout_on_hold">You tried to cancel a payout under review. Wait for the hold to end.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">You subscribed to an event type that does not exist, such as an `rfi.*` name. Take names from `GET /v1/webhooks/event-types`.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">The payout does not exist or belongs to another merchant.</ErrorRow>
+</Errors>
+
+A payout that ends `failed` with `failure_code` `cannot_be_processed` comes with no detail. Contact support at [help.antonpayments.com](https://help.antonpayments.com) with the payout `id` and the `request_id`.
+
+An RFI nobody can answer leaves payouts waiting, so name the responders before you go live.
+
+<CardGroup cols={2}>
+  <Card title="Handle holds and reviews" href="/guides/handle-holds-and-reviews">What your code sees while a payout is held.</Card>
+  <Card title="How Anton evaluates payouts" href="/concepts/how-anton-evaluates-payouts">What a hold means and what you cannot see.</Card>
+</CardGroup>

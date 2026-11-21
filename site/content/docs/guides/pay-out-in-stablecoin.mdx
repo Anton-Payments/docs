@@ -1,0 +1,104 @@
+---
+title: Pay out in stablecoin
+description: The same payout call as fiat, aimed at a wallet. The transfer isn't done when the call returns; it is done when the chain has confirmed it enough.
+kind: guide
+---
+
+A stablecoin payout is `POST /v1/payouts` with a wallet as the instrument and `stablecoin` as the `rail_type`. Anton checks it before anything goes on-chain, so the call answers at once and the payout then climbs through `block_confirmations` until it reaches `required_confirmations`.
+
+<BeforeYouBegin items={["A payee with a wallet instrument", "Enough balance in the funding currency", "A sandbox OAuth client and its DPoP key"]} />
+
+Set up the payee and the wallet first with [Register a payee](/guides/register-a-payee) and [Register an instrument](/guides/register-an-instrument). To top up the balance, see [Fund your balance](/guides/fund-your-balance).
+
+<Note>
+  `GET /v1/corridors?rail_type=stablecoin` lists the networks, currencies, confirmation counts and delivery estimates your account can pay out through.
+</Note>
+
+## Create the wallet instrument
+
+A wallet is an instrument with `method: "crypto"`. Anton tokenizes the credentials on receipt, so the address never sits in Anton's database in the clear.
+
+```json Wallet credentials
+{
+  "wallet_address": "0x...",
+  "network": "ethereum",
+  "token_symbol": "USDC"
+}
+```
+
+`GET /v1/instruments/methods?country=XX` lists the exact fields and the allowed `network` values. See [Create an instrument](/reference/instruments/create-instrument).
+
+The network belongs to the instrument. Check it against what the payee expects before you pay. Funds sent on the wrong network are usually lost.
+
+## Send the payout
+
+`source_amount` and `destination_amount` are both here, with `fixed_side` saying which one you promise, as in [Send a payout](/guides/send-a-payout). In USDC to USDC the two are the same number. To pin the fee first, request a [pricing quote](/guides/pay-across-currencies) and send its `id` as `quote_id`.
+
+<RunStep title="Pay 1,000 USDC to a wallet" method="POST" path="/v1/payouts"
+  headers={{ "Idempotency-Key": "pay-INV-1042" }}
+  body={{
+    beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    instrument_id: "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA3",
+    source_amount: "1000.000000",
+    source_currency: "USDC",
+    destination_amount: "1000.000000",
+    destination_currency: "USDC",
+    method: "stablecoin",
+    rail_type: "stablecoin",
+    fixed_side: "fixed_destination",
+    purpose: "contractor_payment",
+    reference: "INV-1042"
+  }}>
+  Amounts are strings, and USDC allows up to 6 decimal places. The call returns `201`, and the payout is not done yet.
+</RunStep>
+
+`network` is an optional hint on the request. Leave it out and Anton routes the payout. If you send it, use a chain from the `Network` enum: `ethereum`, `bitcoin`, `tron`, `solana`, `polygon`, `arbitrum`, `optimism`, `base`, `avalanche`, `bsc`, `lightning`, `stellar` or `ripple`. Which of them carry USDC for you is a corridor question, not a schema one.
+
+Every status change reaches you as a `payout.*` event. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers receiving them.
+
+## Follow the chain
+
+<Lifecycle states="created, processing, sent, completed"
+  notes="Accepted | Checked and submitted | Dispatch confirmed | Payee received"
+  edges="checks start | on-chain submit | confirmations met">
+  A payout can also move to `pending_approval` (your own approval policy), `on_hold`, `failed`, `cancelled` or `returned`. `completed`, `failed`, `cancelled` and `returned` are final. Treat a status you don't recognize as still moving.
+</Lifecycle>
+
+The payout object gains fields as the transfer progresses:
+
+- `transaction_hash` appears once the payout is sent.
+- `block_confirmations` counts the confirmations seen so far.
+- `required_confirmations` is the number needed before the payout is `completed`.
+- `network_fee` and `network_fee_currency` show the gas cost. It comes out of the settlement, not out of your balance.
+
+`completed` is final: the funds are in the payee's wallet. A payout in `on_hold` is under review and can't be cancelled while it waits. It never comes with a reason, so show your user a pending state.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="invalid_credentials">The wallet credentials failed the method's format rules when you created the instrument. Fix the address or network and retry.</ErrorRow>
+  <ErrorRow status={409} code="duplicate_instrument">You already hold this wallet for the payee. Use the existing instrument.</ErrorRow>
+  <ErrorRow status={422} code="amount_precision_invalid">More decimal places than the currency allows. `GET /v1/currencies` lists each precision.</ErrorRow>
+  <ErrorRow status={422} code="insufficient_balance">Your balance can't cover the payout. Fund the account and retry with a new key.</ErrorRow>
+  <ErrorRow status={422} code="cannot_be_processed">Anton couldn't process the payout and gives no reason. Contact support with the `request_id`.</ErrorRow>
+  <ErrorRow status={422} code="policy_blocked">Your own approval policy blocks this payout.</ErrorRow>
+  <ErrorRow status={409} code="idempotency_in_flight">Another request with this `Idempotency-Key` is still running. Wait and retry.</ErrorRow>
+  <ErrorRow status={422} code="idempotency_key_reused">The key was used with a different body. Send a new key for a new request.</ErrorRow>
+</Errors>
+
+A payout that fails after creation shows `status: "failed"` with a `failure_code`, and it won't change again. [Errors](/errors) lists every code.
+
+## Idempotency
+
+Derive the `Idempotency-Key` from your own invoice or order, so a retry never pays twice. [Idempotency](/concepts/idempotency) has the rest.
+
+<Note>
+  Sandbox credentials work against `https://api.antonpayments.dev` and production credentials against `https://api.antonpayments.com`. They don't cross over. See [Environments](/environments).
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">The same call for fiat, with the full field list.</Card>
+  <Card title="Go live" href="/guides/go-live">What to check before your first live payout.</Card>
+</CardGroup>

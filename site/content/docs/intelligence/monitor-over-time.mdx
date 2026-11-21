@@ -1,0 +1,73 @@
+---
+title: "Monitor over time"
+description: "Anton keeps re-screening your monitored customers as the lists change. You hear about it only when something matches."
+kind: guide
+---
+
+Two things share the name. Ongoing monitoring is Anton's: it re-screens every monitored customer on a regular basis, chiefly whenever the lists it screens against are updated, and once more when a customer is added or resumed. A `monitoring` evaluation is yours: one screen of a subject you already know, sent through the API and answered in the response. Anton does not repeat it for you.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key, with the `intelligence` scope", "A subject to screen: a name or vault token on `entity`, or an `instrument`", "A stable reference of your own for the subject"]} />
+
+## What ongoing monitoring sends you
+
+A clear re-screen is recorded and sends nothing. A match opens a review in your own queue, and the review fires `intelligence.review.opened`. Subscribe to that event, and [work the review](/intelligence/reviews) like any other.
+
+
+## Screen a subject yourself
+
+`use_case` is `monitoring`, and the event type it maps to is `monitoring.evaluate`. `entity` is required, and `entity.type` is `person` or `business`. Beyond that, the evaluation needs searchable `entity` or `instrument` data: an `entity.name`, an `entity.vault_token_id`, or an `instrument`. Without one it is a `422 validation_error`.
+
+Use `reference_id` for your own identifier of the subject, such as `cust_7731`. A name sent in `name` is used in memory and never stored; see [PII and vault tokens](/intelligence/pii-and-vault) to send a token instead.
+
+<RunStep title="Screen a subject" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "monitor-cust_7731-2026-11-21" }}
+  body={{
+    use_case: "monitoring",
+    entity: {
+      type: "person",
+      reference_id: "cust_7731",
+      name: "John Doe",
+      country: "US"
+    },
+    metadata: { run: "2026-11-21" }
+  }}>
+  The response is `201` with the evaluation already `completed`. Only `payout_screening` answers `202`.
+</RunStep>
+
+`Idempotency-Key` is required, and a retry with the same key returns the first response. Build the key from the subject and the run, as above. A key made only from the subject would return the first run's answer on every later run.
+
+`metadata` is yours: strings only, up to 50 keys, returned on the evaluation and never sent to screening. A run date or batch id there makes each evaluation easy to find again.
+
+## Read the result
+
+The evaluation carries `decision`, `score`, `tier`, `reasons` and `required_actions`, the same as every use case. [Act on a decision](/intelligence/decisions) covers what each value asks of you.
+
+The evaluation does not echo `entity`, so nothing on it tells you which subject it was about. Keep the evaluation `id` beside your own record, or put your subject reference in `metadata`, which comes back with it.
+
+## Find earlier runs
+
+[`GET /v1/intelligence/evaluations`](/reference/intelligence/list-evaluations) pages your evaluations, newest first. Filter with `event_type=monitoring.evaluate` for monitoring runs, and bound the dates with `created_after` and `created_before`, which must be RFC 3339 UTC with milliseconds and a `Z`, such as `2026-11-01T00:00:00.000Z`. An unknown value is a `400`, never an empty list.
+
+## Events
+
+A completed evaluation can reach you as `intelligence.evaluation.completed`, and a failed one as `intelligence.evaluation.failed`. A review opened from an evaluation names it in `evaluation_id`; [Work the review queue](/intelligence/reviews) covers reading it.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="validation_error">Nothing searchable on `entity` or `instrument`, or a value that is not valid.</ErrorRow>
+  <ErrorRow status={400} code="unknown_field">The body has a field outside the contract, at any depth.</ErrorRow>
+  <ErrorRow status={403} code="capability_required">The account does not carry the `intelligence` capability.</ErrorRow>
+  <ErrorRow status={409} code="idempotency_in_flight">The first attempt with this key is still running. Wait and resend.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Act on a decision" href="/intelligence/decisions">
+    What `approve`, `review` and `decline` ask of you.
+  </Card>
+  <Card title="Work the review queue" href="/intelligence/reviews">
+    Where a result that needs a person goes.
+  </Card>
+</CardGroup>

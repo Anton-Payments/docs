@@ -1,0 +1,34 @@
+name: Docs app
+
+# Builds the new docs app and crawls it for broken links and anchors.
+# Mintlify's checks don't cover this app; this job is what does.
+on:
+  pull_request:
+    branches: [develop, main]
+    paths: ['site/**', 'openapi-merchant.yaml', 'api-reference/**', 'docs.json']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and links
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Crawl for broken links and anchors
+        run: |
+          npm run start -- --port 3004 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3004/ >/dev/null && break; sleep 1; done
+          npm run check:links

@@ -1,0 +1,64 @@
+---
+title: Handle returns and failures
+description: A failed payout did not go through, and a returned one went out and came back. Your code reads a different field for each.
+kind: guide
+---
+
+Both are final, and neither can be retried in place. `failed` carries a `failure_code`. `returned` carries none, because the money went out first.
+
+<BeforeYouBegin items={["A subscription to payout.failed and payout.returned", "Your own record of each payout, keyed on its id"]} />
+
+## Read the ending
+
+`payout.failed` and `payout.returned` carry the payout in `data.object`, the same object `GET /v1/payouts/{id}` returns. Branch on `status`, then on `failure_code`.
+
+<RunStep title="Read a failed payout" method="GET" path="/v1/payouts/{id}"
+  pathParams={{ id: "pay_dbvqrpqukoh470i0bco0" }}
+  respond={{ status: "failed", failure_code: "provider_rejected", status_message: null, failed_at: "2026-11-21T14:05:12.000Z" }}>
+  For a `failed` payout, `failure_code` says what the rail reported, and `failed_at` says when. `status_message` is set only for `cannot_be_processed`.
+</RunStep>
+
+## Failed
+
+A payout fails before it is sent, or while the rail has it. `processing` can go to `failed`, `on_hold` can go to `failed`, and so can `sent`.
+
+| `failure_code` | Means | Do |
+| --- | --- | --- |
+| `cannot_be_processed` | Anton could not process the payout and cannot say more. | Don't retry to the same payee. Contact support with the payout `id` and the `request_id`. |
+| `provider_rejected` | The generic rail failure. | Check the payee and instrument, then create a new payout. |
+| `provider_unavailable` | The rail reported it was unavailable. | Create a new payout later. |
+| `insufficient_funds` | What the rail reported. | Check your balance and the amounts before you create a new payout. |
+| `beneficiary_not_found` | What the rail reported. | Check the payee's details. |
+
+Treat a code you don't know as a plain failure. New values can be added without breaking you.
+
+A failed payout cannot be revived. Fixing the cause means a new payout, with a new `Idempotency-Key`, since the old key would give you the failed payout back for 24 hours. Mark your own record as failed from the event, then decide whether to pay again.
+
+<Warning>
+  Create the replacement only when you know the first did not pay. A `failed` status is final, so it is safe. A payout that is only taking long is not.
+</Warning>
+
+## Returned
+
+`returned` is reachable only from `sent`: the funds came back after being sent, and `payout.returned` says the receiving institution returned them. Your user did not get paid.
+
+The whole amount comes back to your balance, fee included. The movement shows in the transactions list; [Reconcile with transactions](/guides/reconcile-with-transactions) covers reading it.
+
+## What to tell your user
+
+- **Failed:** the payment did not go out. Say so, and say what you will do next. For `cannot_be_processed`, don't invent a reason; Anton gives none.
+- **Returned:** the payment went out and came back. Say the payee's institution sent it back, and ask for corrected details before you pay again.
+
+Don't show `failure_code` to your user as text. It's for your code.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={409} code="payout_not_cancellable">You tried to cancel a payout that is already with a rail, or finished.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">The payout does not exist or belongs to another merchant.</ErrorRow>
+</Errors>
+
+<CardGroup cols={2}>
+  <Card title="Reconcile with transactions" href="/guides/reconcile-with-transactions">Match each ending to the ledger.</Card>
+  <Card title="Handle holds and reviews" href="/guides/handle-holds-and-reviews">A hold can also end in failure.</Card>
+</CardGroup>

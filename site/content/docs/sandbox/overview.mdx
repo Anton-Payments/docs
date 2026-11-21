@@ -1,0 +1,42 @@
+---
+title: "Sandbox overview"
+description: "Everything production does, except move money. Rails are simulated, so no bank or chain is ever contacted."
+kind: concept
+---
+
+The sandbox runs the same API as production: the same validation, the same payout statuses, the same `Idempotency-Key` rules and the same signed webhook deliveries. Rail submission and settlement are simulated, so you can run the whole flow in a test suite without waiting on a bank.
+
+## Get in
+
+<Steps>
+  <Step title="Create sandbox credentials">
+    In the dashboard. You get a `client_id`, a `client_secret` shown once, and a DPoP key generated in your browser. See [Authentication](/authentication).
+  </Step>
+  <Step title="Point at the sandbox host">
+    `https://api.antonpayments.dev`. Sandbox credentials work nowhere else.
+  </Step>
+  <Step title="Fund a balance">
+    `POST /v1/sandbox/deposits` credits a currency in one call. See [Fund your balance](/guides/fund-your-balance).
+  </Step>
+</Steps>
+
+## What differs from production
+
+| | Sandbox | Production |
+|---|---|---|
+| Money | None moves | Real funds |
+| Rails | Simulated | Banks and chains |
+| Timing | Seconds | The rail's own clock |
+| Access | Before your business is verified | Once your account is approved |
+| Access token | 8 hours | 1 hour |
+| Funding | `POST /v1/sandbox/deposits` | Bank transfer to your account details |
+| `livemode` | `false` | `true` |
+
+Everything else is the same, so the code you test here is the code you ship.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send your first payout" href="/quickstart">Six calls, from an empty sandbox to a payout on its way.</Card>
+  <Card title="Go live" href="/guides/go-live">What production asks for that the sandbox doesn't.</Card>
+</CardGroup>

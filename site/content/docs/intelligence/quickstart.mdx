@@ -1,0 +1,95 @@
+---
+title: "Intelligence quickstart"
+description: "One call screens a person or business and answers already decided. Only a payout screening finishes later."
+kind: guide
+---
+
+An evaluation is a stored verdict on a subject, and its ID starts with `eval_`. Intelligence is its own product: you can screen people, accounts and payouts without sending money through Anton, and accounts with no payout surface at all use exactly this call.
+
+<BeforeYouBegin items={["Sandbox OAuth credentials with the intelligence scope, and the DPoP key that goes with them", "A subject to screen: a name and country is enough to start"]} />
+
+The credential needs the `intelligence` scope. [Authentication](/authentication) covers minting the DPoP-bound token. The examples leave out the per-request `DPoP` proof header; send it with every call.
+
+## Say who you are screening
+
+The `entity` is the subject, and `entity.type` is `person` or `business`. Give it something to search on: `name` or `vault_token_id`. Add `country` and, for a person, `birth_date` as `YYYY-MM-DD`. Details you leave out can come back as the reason `information_incomplete`.
+
+<Decision>
+  <Choice title="A person" value='type: "person"' fields="birth_date helps" set={{ entity: { type: "person", reference_id: "payee-84012", name: "Maria Testperson", country: "DE", birth_date: "1988-03-14" } }} picked>
+    A date of birth and country give the screening more to match on.
+  </Choice>
+  <Choice title="A business" value='type: "business"' fields="document helps" set={{ entity: { type: "business", reference_id: "payee-84013", name: "Example Imports LLC", country: "US" } }}>
+    Add a registration number in `document` when you have one.
+  </Choice>
+</Decision>
+
+`reference_id` is your own identifier for the subject. `client_reference_id`, on the request itself, is your identifier for this evaluation.
+
+## Create the evaluation
+
+`use_case` tells Anton what the screening is for, and each value has its own required fields: `payee_registration` here, with `instrument_screening`, `payout_screening` and `merchant_onboarding` in their own guides. Send an `Idempotency-Key`; it is required on this endpoint, and a retry with the same key returns the first answer instead of running the screening again.
+
+<RunStep title="Create the evaluation" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "intel-payee-84012" }}
+  body={{
+    use_case: "payee_registration",
+    client_reference_id: "crm-payee-84012",
+    entity: {
+      type: "person",
+      reference_id: "payee-84012",
+      name: "Maria Testperson",
+      country: "DE",
+      birth_date: "1988-03-14"
+    },
+    metadata: { crm_id: "42" }
+  }}>
+  Every use case except `payout_screening` answers `201` with the evaluation already decided.
+</RunStep>
+
+`metadata` is yours: strings only, up to 50 keys. It is stored on the evaluation and returned with it, never searched and never used in screening.
+
+## Read the verdict
+
+Branch on `decision`: `approve`, `review` or `decline`. `score` runs from 0 to 1000 and higher is worse; `tier` is its band. `reasons` is empty for a clean approval, and otherwise says why it isn't one. `required_actions` says what you can do about it. [Decisions](/intelligence/decisions) lists every value.
+
+`coverage` tells you how much of the screening answered. Treat `partial` or `error` as a weaker verdict than `complete`, and don't approve on it silently.
+
+The result fields exist only once `status` is `completed`. A `failed` evaluation has no verdict, only `failure_reason: "evaluation_failed"`; run it again with a new key.
+
+## Read it back
+
+Evaluations belong to your account. `GET /v1/intelligence/evaluations/{id}` returns one, and `GET /v1/intelligence/evaluations` lists them newest first in the standard [page shape](/concepts/pagination). An ID that is someone else's answers `404`, the same as one that doesn't exist.
+
+## Check a request without running it
+
+`POST /v1/intelligence/evaluations/validate` takes the same body and answers `valid: true` with the `event_type` it maps to, or the same field errors as the real call. It stores nothing, so it needs no `Idempotency-Key`. It suits CI.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={400} code="missing_idempotency_key">Create calls need the `Idempotency-Key` header.</ErrorRow>
+  <ErrorRow status={400} code="unknown_field">The body has a field outside the contract, at any depth. Remove it.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">A field required by the `use_case` is missing, or a value is invalid. `error.details` lists each one.</ErrorRow>
+  <ErrorRow status={403} code="insufficient_scope">The credential was created without the `intelligence` scope.</ErrorRow>
+  <ErrorRow status={403} code="capability_required">The account does not hold the `intelligence` capability.</ErrorRow>
+  <ErrorRow status={429} code="rate_limit_exceeded">Wait the `Retry-After` and resend.</ErrorRow>
+</Errors>
+
+[Rate limits and errors](/intelligence/rate-limits-errors) has the limits and the full list.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Screen a payee" href="/intelligence/payee-registration">
+    People and businesses, with direct details or a vault token.
+  </Card>
+  <Card title="Screen an account or wallet" href="/intelligence/instrument-screening">
+    Bank accounts, IBANs, cards and crypto wallets.
+  </Card>
+  <Card title="Screen a payout" href="/intelligence/payout-screening">
+    The one use case that answers `202` and finishes later.
+  </Card>
+  <Card title="PII and vault tokens" href="/intelligence/pii-and-vault">
+    Send details directly, or by reference.
+  </Card>
+</CardGroup>

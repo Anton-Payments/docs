@@ -1,0 +1,121 @@
+---
+title: Register an instrument
+description: The account number goes in and never comes back out. What you get is a masked display and an ID to name on a payout.
+kind: guide
+kicker: Core path · 2 of 3
+---
+
+An instrument is where a payee gets paid: a bank account, a wallet or a card. The API calls it an `instrument`, and its ID starts with `ins_`. Each instrument belongs to one payee. A payee can hold many, and a payout uses exactly one.
+
+The credentials you send are tokenized on receipt. The API never returns them. You get back masked display fields such as `masked_account: "IBAN ****3000"`.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "A payee, and its ben_ ID", "The payee's account details for the method you pick"]} />
+
+## Choose the method
+
+`method` names the credential format you store, not the rail that delivers the money. One credential can route over several rails, and Anton picks the rail when you send the payout. The methods that exist depend on the payee's country.
+
+<Decision>
+  <Choice title="A bank account" value='method: "iban"' fields="account_holder_name, iban, bic (optional)" set={{ method: "iban", currency: "EUR", credentials: { account_holder_name: "Jane Smith", iban: "DE89370400440532013000" } }} picked>
+    The format changes by country: `iban`, `uk_bank`, `us_bank`, `ca_bank`, `au_bank` and others. Category `bank_account`.
+  </Choice>
+  <Choice title="A crypto wallet" value='method: "crypto"' fields="wallet_address, network, token_symbol" set={{ method: "crypto", currency: "USDC", credentials: { wallet_address: "0x0000000000000000000000000000000000000000", network: "ethereum", token_symbol: "USDC" } }}>
+    Network is one of the chains the catalog lists. Set `token_symbol` for a token such as `USDC`. Category `crypto`.
+  </Choice>
+</Decision>
+
+Other values exist, including `card`, `interac`, `pix`, `upi` and `mobile_money`. Do not hard-code the fields. Ask the catalog.
+
+```bash List the methods for a country
+curl "https://api.antonpayments.dev/v1/instruments/methods?country=DE" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+Each entry gives you `method`, `category`, `default_currency` and a `fields` list. Every field has a `key`, a `label`, a `required` flag and, where it applies, a `pattern` and an `example`. Build your form from that list. For a country picker, use [`GET /v1/instruments/countries`](/reference/instruments/list-instrument-countries). Germany, for example, returns `iban`, `card` and `crypto`.
+
+## Register the instrument
+
+<RunStep title="Register the instrument" method="POST" path="/v1/instruments"
+  headers={{ "Idempotency-Key": "ins-contractor-1042-eur-primary" }}
+  body={{
+    beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    method: "iban",
+    currency: "EUR",
+    label: "Primary account",
+    default: true,
+    credentials: { account_holder_name: "Jane Smith", iban: "DE89370400440532013000" }
+  }}>
+  Creates the instrument and returns it as `active`. Pass `beneficiary_id` in the body: there is no per-payee create path.
+</RunStep>
+
+`currency` is optional. Without it, the instrument takes the method's `default_currency`. `label` is yours, up to 255 characters. `default: true` makes this the payee's default instrument and clears the flag on the previous one.
+
+The response carries the masked fields: `display_last4`, `display_bank`, `display_network` and `masked_account`. Show those in your UI. Do not ask for the account number again.
+
+## What happens next
+
+An instrument is `active` or `disabled`. You move it between them.
+
+<Lifecycle states="active, disabled"
+  notes="Can be named on a payout | Not usable on payouts"
+  edges="<> you set status">
+  Set `status` with `PATCH /v1/instruments/{id}`. A deleted instrument leaves your listings and cannot be used on new payouts.
+</Lifecycle>
+
+A payout accepts only an `active` instrument that belongs to the payee named on it.
+
+Listen for `instrument.created`, `instrument.updated` and `instrument.deleted`. See [Track payouts with webhooks](/guides/track-payouts-with-webhooks).
+
+## Change an instrument
+
+`PATCH /v1/instruments/{id}` changes `label`, `default`, `status` and `metadata`. A field you leave out stays as it is. `metadata` replaces the whole map. `null` clears `label` and `metadata`, and sets `default` to `false`.
+
+You cannot change credentials. To rotate them, create a new instrument and delete the old one:
+
+1. Create the new instrument with `default: true`. The old one loses the default flag.
+2. Send new payouts to the new `ins_` ID.
+3. Delete the old instrument. Delete removes its credentials from the vault. Past payouts that used it stay readable and unchanged.
+
+Create before you delete, so the payee is never without a payable instrument.
+
+## Dedupe
+
+An instrument you already hold for the payee returns `409 duplicate_instrument`. Treat it as "already registered". List the payee's instruments and reuse the existing ID:
+
+```bash List one payee's instruments
+curl "https://api.antonpayments.dev/v1/instruments?beneficiary_id=ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1&status=active" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="method_not_supported">The method is not available in the payee's country. Check `GET /v1/instruments/methods?country=XX`.</ErrorRow>
+  <ErrorRow status={422} code="invalid_credentials">The credentials failed the method's format rules. Compare each value to the `pattern` the catalog gives for that field.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">A field failed validation. `details` lists every failing field.</ErrorRow>
+  <ErrorRow status={409} code="duplicate_instrument">The payee already has this instrument. Reuse its ID.</ErrorRow>
+  <ErrorRow status={409} code="beneficiary_not_active">The payee is archived or blocked. Restore it first, or contact support if it is blocked.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">`beneficiary_id` names no payee of yours.</ErrorRow>
+  <ErrorRow status={422} code="idempotency_key_reused">The same key came with a different body. Use a new key.</ErrorRow>
+</Errors>
+
+## Idempotency
+
+`POST /v1/instruments` requires an `Idempotency-Key`. Derive it from your own data, such as the payee reference and a label, so a retry returns the original instrument. See [Idempotency](/concepts/idempotency).
+
+<Note>
+  Anton's database holds a token reference, the masked display values and a content fingerprint used for dedupe. It never holds the account number, wallet address or card number. Keep your own record of what you sent if you need it back.
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout" kicker="Step 3 of 3">
+    Pay this instrument.
+  </Card>
+  <Card title="Create an instrument" href="/reference/instruments/create-instrument">
+    The full request and response reference.
+  </Card>
+</CardGroup>

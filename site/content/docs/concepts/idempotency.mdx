@@ -1,0 +1,127 @@
+---
+title: "Idempotency"
+description: "A retried request with the same key returns the first response. Keys are kept for 24 hours."
+kind: concept
+---
+
+If the connection drops after you call `POST /v1/payouts`, you cannot tell whether the payout exists, and a blind retry could create a second one. Send an `Idempotency-Key` with the request. Sending the same request with the same key again returns the original response instead of repeating the work.
+
+## Using a key
+
+Add an `Idempotency-Key` header:
+
+```bash
+curl https://api.antonpayments.dev/v1/payouts \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payout-inv-1042" \
+  -d '{
+    "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    "source_amount": "500.00",
+    "source_currency": "USD",
+    "destination_amount": "500.00",
+    "destination_currency": "USD",
+    "method": "ach",
+    "fixed_side": "fixed_destination",
+    "purpose": "supplier_payment",
+    "reference": "INV-1042"
+  }'
+```
+
+A replayed response carries `Idempotent-Replayed: true`. Its body is the original body, at the API version the original request was served at.
+
+## When a key is needed
+
+| Request | Key |
+| --- | --- |
+| `POST` that creates or changes something (payouts, beneficiaries, batches, quotes, exchanges, webhooks, evaluations, and so on) | **Required.** Without one the response is `400 missing_idempotency_key`. |
+| `PATCH` and `DELETE` | Accepted, not required. |
+| `POST` that only calculates and stores nothing (for example `POST /v1/intelligence/evaluations/validate`) | Not needed. |
+| `GET` | Not applicable. Reads are safe to retry. |
+
+Each operation's reference page says whether it requires a key.
+
+## Key rules
+
+| Rule | Detail |
+| --- | --- |
+| Unique per operation | Use a different key for each distinct operation. |
+| Same key to retry | Reuse the key when retrying the same operation. |
+| Length | Up to 255 characters. |
+| Retention | Keys are retained for 24 hours. |
+| What is stored | Only a `2xx` response. A `4xx` or `5xx` is not stored, so a retry with the same key runs the request again. |
+
+## What happens
+
+| Situation | Result |
+| --- | --- |
+| Same key, same request | The original response is replayed, with `Idempotent-Replayed: true`. |
+| Same key, different request body | `422 idempotency_key_reused`. Send a new key for a new request. |
+| Same key while the first request is still running | `409 idempotency_in_flight`. Wait a moment and send it again to get the settled response. |
+| Different key, same body | A new request. It creates a second resource. |
+| Missing key where one is required | `400 missing_idempotency_key`. |
+| The idempotency check is temporarily unavailable | `503 idempotency_unavailable`. Retry with the same key. |
+
+A `5xx` is safe to retry with the same key.
+
+A replay is its own request: its `Request-Id` header is new, while the body keeps the original request's identifiers, including `error.request_id` on a replayed error.
+
+## Secrets are not replayed
+
+Some responses carry a secret that is shown once: a webhook subscription's signing secret and a verification's `hosted_link`. A replay returns the same resource with the secret set to `null`. Save the secret from the first response. If you lost it, rotate the webhook secret or regenerate the verification.
+
+## Generating keys
+
+Derive the key from your own data. After a crash the retry produces the same key, so you do not need to remember whether the first request went through.
+
+<CodeGroup>
+
+```bash cURL
+curl ... -H "Idempotency-Key: payout-${INVOICE_ID}-${BENEFICIARY_ID}"
+```
+
+```javascript JavaScript
+import { createHash, randomUUID } from "node:crypto";
+
+// Derived from your data (recommended)
+const key = `payout-${invoiceId}-${beneficiaryId}`;
+
+// A hash of the request body, when there is no natural key
+const bodyKey = createHash("sha256").update(JSON.stringify(payoutBody)).digest("hex");
+
+// A random UUID. Simple, but you must store it to retry safely.
+const uuidKey = randomUUID();
+```
+
+```php PHP
+// Derived from your data (recommended)
+$key = "payout-{$invoiceId}-{$beneficiaryId}";
+
+// A hash of the request body, when there is no natural key
+$bodyKey = hash('sha256', json_encode($payoutBody));
+
+// A random UUID. Simple, but you must store it to retry safely.
+$uuidKey = bin2hex(random_bytes(16));
+```
+
+```go Go
+// Derived from your data (recommended)
+key := fmt.Sprintf("payout-%s-%s", invoiceID, beneficiaryID)
+
+// A hash of the request body, when there is no natural key
+sum := sha256.Sum256(body)
+bodyKey := hex.EncodeToString(sum[:])
+
+// A random UUID. Simple, but you must store it to retry safely.
+uuidKey := uuid.NewString()
+```
+
+</CodeGroup>
+
+## What idempotency does not do
+
+- It does not deduplicate on the body. A different key with the same body is a new request.
+- It does not replay a payout's later lifecycle. Outcomes arrive by [webhook](/concepts/webhook-events).

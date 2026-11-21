@@ -1,0 +1,100 @@
+---
+title: Track payouts with webhooks
+description: Delivery is at least once and arrival order is not guaranteed. Build the receiver around those two facts, not around the happy path.
+kind: webhooks
+kicker: After the core path
+---
+
+A payout does not finish when `POST /v1/payouts` returns. Each status change is sent to a URL you control as a signed HTTPS request, carrying the same payout object `GET /v1/payouts/{id}` would return. Polling shows you the same change later and spends rate limit doing it.
+
+<BeforeYouBegin items={["A public HTTPS URL that can receive a POST", "A secrets manager for the signing secret"]} />
+
+## Choose the events
+
+A subscription lists the event types it wants, and [`PATCH /v1/webhooks/{id}`](/reference/webhooks/update-webhook-subscription) changes the list later, so start with less.
+
+<Decision>
+  <Choice title="Outcomes only" value='events: ["payout.completed", ...]' fields="payout.completed, payout.failed, payout.returned, payout.on_hold" set={{ events: ["payout.completed", "payout.failed", "payout.returned", "payout.on_hold"] }} picked>
+    Enough to tell your user the result and to catch what needs a person. You learn how it ended, not each step on the way.
+  </Choice>
+  <Choice title="Every step" value='events: [every payout.* event]' fields="payout.created, payout.approved, payout.processing, payout.sent, payout.completed, payout.failed, payout.cancelled, payout.returned, payout.on_hold, payout.approval_required, payout.approval_expired" set={{ events: ["payout.created", "payout.approved", "payout.processing", "payout.sent", "payout.completed", "payout.failed", "payout.cancelled", "payout.returned", "payout.on_hold", "payout.approval_required", "payout.approval_expired"] }}>
+    Mirror every status change in your own system. The two approval events only fire if you use an approval policy.
+  </Choice>
+</Decision>
+
+Each type is named in full. There is no `payout.*` pattern. The only wildcard is `*`, which delivers every event type on your account, including ones added later, so a handler that uses it must ignore types it does not know. An unknown name is refused with `422`, and a retired name points at its replacement. `payout.on_hold` replaced `payout.screening_failed`.
+
+## Create the subscription
+
+<RunStep title="Create the subscription" method="POST" path="/v1/webhooks"
+  headers={{ "Idempotency-Key": "webhook-orders-1" }}
+  body={{
+    url: "https://example.com/hooks",
+    events: ["payout.completed", "payout.failed", "payout.returned", "payout.on_hold"],
+    metadata: { team: "payments" }
+  }}>
+  The response carries the subscription `id` (`whk_...`) and the signing `secret` (`whsec_...`). Store the secret now. It is never shown again.
+</RunStep>
+
+The `url` must be HTTPS and publicly reachable. Loopback, private and metadata addresses are refused. A retry with the same `Idempotency-Key` returns the same subscription with `secret` set to `null`, so a lost secret is not recovered that way. [Rotate it](/guides/run-webhooks-in-production) instead.
+
+Before a real payout depends on the receiver, send it a test event with `POST /v1/webhooks/{id}/test`.
+
+## What arrives
+
+Every delivery is the same envelope. The payout is in `data.object`, and the event `id` (`evt_...`) is the same on every retry. A retry sends the same bytes as the first attempt: the event is rendered once, at the API version your account was pinned to.
+
+| Header | Use |
+| --- | --- |
+| `X-Webhook-ID` | The event `id`. Deduplicate on it. |
+| `X-Webhook-Event` | The event type. |
+| `X-Webhook-Timestamp` | Unix seconds when the delivery was signed. |
+| `X-Webhook-Signature` | One or more `v1=` HMAC-SHA256 signatures. |
+
+Verify the signature before you read the body as truth. [Verify webhook signatures](/guides/verify-webhook-signatures) has the handler in four languages.
+
+<Warning>
+  A payout must never complete in your system on an unverified request. Anyone who finds the URL can post to it.
+</Warning>
+
+## Make the handler safe to repeat
+
+Four facts shape the receiver, and each one has a counter.
+
+- **Delivery is at least once.** Keep the event ids you have applied and skip a repeat.
+- **Order is not guaranteed.** Events for one payout are dispatched in order, but retries can reorder them at your endpoint. Compare `created_at` with the last event you applied for that payout.
+- **The status is the truth, not the event name.** Set your record from `data.object.status`, so applying an event twice leaves the same state.
+- **Final statuses stay final.** `completed`, `returned`, `cancelled` and `failed` end a payout. Never move one out of them because a late event arrived.
+
+Treat a status you do not know as still in progress, and a `failure_code` you do not know as a plain failure. New values then never break the handler.
+
+A hold is not an error. `payout.on_hold` is a review and carries no reason: the payout's `status_message` is the only text Anton gives. Show your user a pending state, not an error. It resumes as `processing` or ends as `cancelled` or `failed`. A payout Anton could not process arrives as `payout.failed` with `failure_code` set to `cannot_be_processed`, and the response gives no more. Contact support with the `request_id` and the payout `id`.
+
+## Answer fast, retry safely
+
+Answer with a `2xx` within 30 seconds, and do the work from a queue. Anything else counts as a failed delivery, a redirect included: Anton doesn't follow a `3xx`.
+
+Anything else is retried with exponential backoff, five attempts in all, and then the delivery is abandoned. No endpoint replays an abandoned delivery, so keep a way to reconcile. `GET /v1/webhooks/events` lists every event for your account, and [Run webhooks in production](/guides/run-webhooks-in-production) covers reading the attempts and closing a gap.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={400} code="webhook_url_not_https">The `url` must use `https://`. Put the receiver behind TLS.</ErrorRow>
+  <ErrorRow status={400} code="webhook_url_private_address">The `url` is loopback, private, internal or a metadata address. Use a public HTTPS endpoint.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">An entry in `events` is not a known event type. `details[].param` names it, for example `events[0]`. Check the name against `GET /v1/webhooks/event-types`.</ErrorRow>
+  <ErrorRow status={409} code="webhook_subscription_inactive">You sent a test delivery to a deactivated subscription. Activate it first.</ErrorRow>
+  <ErrorRow status={429} code="rate_limit_exceeded">Wait the seconds in `Retry-After`, then retry with the same `Idempotency-Key`.</ErrorRow>
+</Errors>
+
+If every delivery fails your own check, you are most likely hashing a parsed body or holding a secret that has since been rotated.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Verify webhook signatures" href="/guides/verify-webhook-signatures">
+    The handler in four languages.
+  </Card>
+  <Card title="Run webhooks in production" href="/guides/run-webhooks-in-production">
+    Rotate secrets, test sends and the delivery record.
+  </Card>
+</CardGroup>

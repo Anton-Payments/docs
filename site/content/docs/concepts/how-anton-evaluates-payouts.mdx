@@ -1,0 +1,63 @@
+---
+title: "How Anton evaluates payouts"
+description: "A payout is screened and risk-scored before any rail sees it, so the create call returns early and the outcome arrives as a status change."
+kind: concept
+---
+
+`POST /v1/payouts` does not submit to a rail. Anton checks the payout first, and the result shows up in its `status` and in the `payout.*` [webhook events](/concepts/webhook-events) that announce each change.
+
+## What happens to every payout
+
+<Steps>
+  <Step title="Checks">
+    The payout and its beneficiary are screened and risk-scored before any funds move. A payout that needs a closer look goes `on_hold`, and Anton does not say why.
+  </Step>
+  <Step title="Your approval policy">
+    If your own approval policy needs a second person, the payout waits as `pending_approval`. A payout your policy blocks outright is refused with `422 policy_blocked`.
+  </Step>
+  <Step title="Rail submission">
+    A payout that clears every check moves to `processing` and is submitted to the rail. `sent` and `completed` come from the rail.
+  </Step>
+</Steps>
+
+You cannot disable the checks, override them at submission or skip them with a flag. A payout Anton cannot process is refused with `422 cannot_be_processed`, and the response never says why.
+
+## Status transitions
+
+| From | To |
+| --- | --- |
+| `created` | `pending_approval`, `processing`, `on_hold` |
+| `pending_approval` | `processing`, `cancelled` |
+| `processing` | `on_hold`, `sent`, `failed`, `cancelled` |
+| `on_hold` | `processing`, `cancelled`, `failed` |
+| `sent` | `completed`, `failed`, `returned` |
+
+`completed`, `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
+
+## What each status means
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `created` | Accepted; checks have not started. | Nothing. |
+| `pending_approval` | Waiting for a second person on your team to approve it, under your own approval policy. | Nothing. |
+| `processing` | Being checked and prepared, or submitted to the rail. | Show it as in flight. |
+| `on_hold` | Held for review. `status_message` is the only text Anton gives. | Show a pending state, not an error. A held payout cannot be cancelled: the request returns `409 payout_on_hold`. |
+| `sent` | The rail confirmed dispatch. | Show it as sent. |
+| `completed` | The beneficiary received the funds. | Mark it done. |
+| `returned` | The funds came back after being sent. | Reconcile the return in your books. |
+| `failed` | The payout did not go through. `failure_code` is one of `provider_rejected`, `provider_unavailable`, `insufficient_funds`, `beneficiary_not_found`, or `cannot_be_processed` when Anton could not process it. | Read `failure_code`. For `cannot_be_processed` there is no further detail: contact support with the payout `id` and the `request_id`. |
+| `cancelled` | Cancelled by you before submission. | Nothing. |
+
+## What your integration should do
+
+**Subscribe to webhooks and do not poll.** Status changes are pushed to you, and polling spends rate limit to learn the same thing later.
+
+**Treat a hold as a normal state.** Show your end user a pending state. The payout leaves `on_hold` for `processing`, `cancelled` or `failed`.
+
+## What you send changes what Anton can see
+
+Anton scores what it is given. The largest single improvement most integrations can make is the `session` object on `POST /v1/payouts`: the end user's IP, timezone and user agent as your own edge observed them.
+
+Without it the only address in the request is your server's. With it, Anton can use IP geolocation and network type, check whether the timezone agrees with where the address resolves, and follow a device across sessions.
+
+Every field is optional. Only an `ip` that is not a valid address is rejected, with `422`. Anything else that looks wrong, such as a private `ip`, an unrecognised `timezone` or a future `started_at`, is accepted and reported back in the payout's `session_quality` array. See [Create a payout](/reference/payouts/create-payout).

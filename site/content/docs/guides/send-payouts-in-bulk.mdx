@@ -1,0 +1,116 @@
+---
+title: Send payouts in bulk
+description: Nothing is paid until you confirm, and confirming can't be undone. Upload one file of payouts, review what validation found, then read the result of every row.
+kind: guide
+---
+
+A batch turns one CSV or XLSX file into many payouts, each an ordinary payout with its own lifecycle and webhooks. The batch is immutable: to fix a row you fix the file and upload it again.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "Balance in each funding currency the file uses", "A CSV or XLSX built from the template"]} />
+
+## Decide: batch or a loop
+
+<Decision>
+  <Choice title="Batch upload" value="POST /v1/batches" fields="file (CSV or XLSX), metadata" picked>
+    Use it when the payouts already live in a file: a payroll run, a settlement report, a month of contractor invoices. You get one review step, one confirmation and per-row results. A batch can create payees and instruments from the rows.
+  </Choice>
+  <Choice title="Loop over the payout API" value="POST /v1/payouts" fields="one JSON call per payout">
+    Use it when each payout is triggered by an event in your system and needs its own response. Every call carries its own `Idempotency-Key`, and you handle each result yourself.
+  </Choice>
+</Decision>
+
+To load payees from a file without paying anyone, see [Import payees](/guides/import-payees).
+
+## Get the template
+
+The template has the exact header row and a few example rows. Column order and casing matter, so build your file from it and do not rename columns.
+
+```bash Download the template
+curl "https://api.antonpayments.dev/v1/batches/template?format=csv" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -o batch-template.csv
+```
+
+`format` is `xlsx` (the default) or `csv`. The template is the only definition of the columns, so download it rather than building one.
+
+## Upload the file
+
+Uploads are `multipart/form-data`, which the console can't send. Use curl or your HTTP client.
+
+```bash Upload a batch
+curl "https://api.antonpayments.dev/v1/batches" \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Idempotency-Key: payroll-2026-11" \
+  -F "file=@payroll.csv" \
+  -F 'metadata={"payroll_run":"2026-11"}'
+```
+
+The file can be up to 32 MB. `metadata` is a JSON object string of strings, with at most 50 keys, and it must never hold personal data. The optional `file_hash` field (`sha256:` prefix) makes Anton refuse the upload if the hash does not match.
+
+The batch comes back as `uploaded`. Validation runs asynchronously and the result arrives by webhook. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers delivery.
+
+## Review, then confirm
+
+When the batch is `validated`, fetch it with `GET /v1/batches/{id}`. The `summary` shows new and matched payees, the mix of methods, estimated debits per currency, and a balance check per currency. Read `balance_checks` before you confirm.
+
+If `invalid_rows` is above zero, read `GET /v1/batches/{id}/errors`. Each issue has a `severity` (`error` stops the row, `warning` does not), the 1-based `row`, the `field` and a `message`. Warnings carry a `type` of `duplicate_in_batch` or `beneficiary_name_change`.
+
+<RunStep title="Confirm the batch" method="POST" path="/v1/batches/{id}/confirm"
+  pathParams={{ id: "bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT" }}
+  headers={{ "Idempotency-Key": "confirm-bat_01HX8Z9K0M2N3P4Q5R6S7T8UBT" }}
+  body={{ source_currency: "USD" }}>
+  `source_currency` is the funding currency for rows that name none. The body is optional.
+</RunStep>
+
+The batch becomes `confirmed`, then `processing` as payouts are created from the valid rows. Invalid rows are not paid.
+
+A `validated` batch carries an `expires_at`, the deadline for confirming it. Miss it and you get `batch_confirmation_expired`; upload the file again.
+
+## Follow the lifecycle
+
+<Lifecycle states="uploaded, validating, validated, confirmed, processing, completed"
+  notes="File stored | Checking rows | Ready to review | You approved | Payouts being created | Every valid row paid"
+  edges="async | | you confirm | | ">
+  Other outcomes: `validation_failed` after validating, `partial` (some rows failed) or `failed` (all rows failed) after processing, and `cancelled`. `POST /v1/batches/{id}/cancel` works from `uploaded`, `validating`, `validated`, `validation_failed` or `confirmed`. Once `processing` starts, cancel payouts one at a time with `POST /v1/payouts/{id}/cancel`. Treat a status you do not know as in progress.
+</Lifecycle>
+
+## Read the results
+
+A `partial` batch is normal, not an error. Read the outcome row by row:
+
+- `GET /v1/batches/{id}/results` returns each row's `status` (`success`, `failed`, `skipped` or `pending`), its `payout_id`, and a `message` for any row that did not succeed.
+- `GET /v1/batches/{id}/payouts` lists the payouts the batch created. Each is an ordinary payout with its own lifecycle and webhooks.
+
+Reconcile against your source file by row number. Retry failed rows in a new batch.
+
+## What goes wrong
+
+<Errors>
+  <ErrorRow status={400} code="invalid_file_format">Only `.csv` and `.xlsx` are accepted.</ErrorRow>
+  <ErrorRow status={413} code="file_too_large">The file is over 32 MB. Split it.</ErrorRow>
+  <ErrorRow status={409} code="duplicate_file">A batch with this exact file is still being processed. Wait for it to finish.</ErrorRow>
+  <ErrorRow status={422} code="batch_upload_failed">The upload could not be stored. Retry with a new key.</ErrorRow>
+  <ErrorRow status={409} code="batch_not_validated">The batch is still validating or failed validation. Wait, or fix the file.</ErrorRow>
+  <ErrorRow status={409} code="batch_confirmation_expired">You confirmed too late. Upload the file again.</ErrorRow>
+  <ErrorRow status={422} code="insufficient_balance">Your balance cannot cover the batch in one or more funding currencies. Fund it and confirm again.</ErrorRow>
+  <ErrorRow status={422} code="batch_confirm_failed">Confirmation did not complete. Retry with the same key.</ErrorRow>
+  <ErrorRow status={409} code="batch_not_cancellable">The batch is finished or already processing. Cancel its payouts one at a time.</ErrorRow>
+</Errors>
+
+## Before you go live
+
+- **Idempotency.** Upload, confirm and cancel all require an `Idempotency-Key`. Use a key that names the run, such as `payroll-2026-11`, so a retried upload does not create a second batch.
+- **Screening is per payout.** Validation checks the file: format, amounts, methods, credentials and payee matching. Each payout the batch creates is checked separately before it is sent, so a confirmed row can still end in `on_hold` or `failed`.
+- **Rate limits.** A `429` carries `Retry-After`. Respect it. See [Rate limits](/concepts/rate-limits).
+- **Credentials per environment.** Sandbox credentials work against `https://api.antonpayments.dev` and production credentials against `https://api.antonpayments.com`. See [Environments](/environments).
+- **Test first.** [Fund a sandbox balance](/guides/fund-your-balance) and run a small file end to end. See [Test data](/sandbox/test-data).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">The single-payout call, for event-driven flows.</Card>
+  <Card title="Go live" href="/guides/go-live">What to check before your first live payout.</Card>
+</CardGroup>

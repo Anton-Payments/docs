@@ -1,0 +1,72 @@
+---
+title: "Use the docs from your AI tool"
+description: "Point your assistant at the docs and it writes requests against the live API contract instead of its memory of it."
+kind: concept
+---
+
+The docs run an MCP server at one address:
+
+```text
+https://docs.antonpayments.com/mcp
+```
+
+It is read-only and public. It needs no key and can't see your account. It answers from the same pages and the same OpenAPI file you're reading now, so it changes when they do.
+
+## Connect
+
+### Claude Code
+
+```bash
+claude mcp add --transport http anton-docs https://docs.antonpayments.com/mcp
+```
+
+### Claude
+
+Open **Settings → Connectors**, choose **Add custom connector**, and paste the address above.
+
+### Cursor
+
+In `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "anton-docs": { "url": "https://docs.antonpayments.com/mcp" }
+  }
+}
+```
+
+### VS Code
+
+In `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "anton-docs": { "type": "http", "url": "https://docs.antonpayments.com/mcp" }
+  }
+}
+```
+
+## What it can do
+
+| Tool | Gives your assistant |
+|---|---|
+| `search_docs` | The matching passage from any guide, concept or endpoint, with its link |
+| `read_page` | One page as Markdown, request examples included |
+| `list_endpoints` | Every endpoint, by resource |
+| `get_endpoint` | One endpoint's fields, rules, example request and response, and the errors it returns |
+
+`get_endpoint` is the one that matters most. Field names, precision rules and error codes come straight from the contract, so a generated request has the right shape the first time.
+
+## What it can't do
+
+It can't call the API. Nothing here sends a payout, reads a balance or touches your sandbox. Your code does that, with your credentials and a DPoP proof only it can sign.
+
+## Without MCP
+
+The same text is served as plain Markdown for tools that read files rather than connect:
+
+- [`/llms.txt`](/llms.txt) lists every page.
+- Any page is Markdown at `/md/` plus its path, such as [`/md/guides/send-a-payout`](/md/guides/send-a-payout).
+- The contract itself is [`/openapi-merchant.yaml`](/openapi-merchant.yaml).

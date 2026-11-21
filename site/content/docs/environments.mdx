@@ -1,0 +1,20 @@
+---
+title: "Environments"
+description: "Sandbox and production share one API and nothing else. Keys, data and webhooks never cross between them."
+kind: concept
+---
+
+| Environment | Base URL | Token lifetime | Money |
+|---|---|---|---|
+| **Production** | `https://api.antonpayments.com` | 1 hour | Real |
+| **Sandbox** | `https://api.antonpayments.dev` | 8 hours | None. Rails are simulated |
+
+A credential belongs to one environment, and its `client_id` says which: sandbox IDs start `ant_oc_test_` and production IDs `ant_oc_live_`. Send one to the other host and the call is refused with `403 key_environment_mismatch`. Every object carries `livemode`, `true` in production and `false` in the sandbox, so stored data can always say where it came from. [Authentication](/authentication) covers the token and the proof.
+
+## Sandbox
+
+The same endpoints, schemas, statuses, idempotency and signed webhooks as production. Rails are simulated, so nothing reaches a bank or a chain, and a payout finishes in seconds. It opens before your business is verified. One call funds a balance: see [Fund your balance](/guides/fund-your-balance).
+
+## Production
+
+Production opens once your business is verified through KYB, Anton has underwritten the account, and the corridors you plan to use are enabled. Nothing is promoted from the sandbox. You create production credentials, subscriptions and payees again, and your code is the only thing that carries over. [Go live](/guides/go-live) is the checklist.

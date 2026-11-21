@@ -5,3 +5,6 @@
 # Draft content
 drafts/
 *.draft.mdx
+
+# The new docs app (Next.js). Mintlify must not render its content.
+site/

@@ -1,0 +1,104 @@
+---
+title: "Record and approve a decision"
+description: "A clearing decision recorded with an API credential waits for a person to approve it, and that person cannot be tied to your API credentials."
+kind: guide
+---
+
+You record a decision with a reason code through the API. Approving it, sending it back and withdrawing it are done by people, in the portal, and the API has no endpoints for them. The response to your call is the decision. Fetch the review for its new status.
+
+<BeforeYouBegin items={["The Reviews API and Webhooks add-on, and a credential with the `intelligence` scope and `reviews.decide`", "An open review, and its `irv_` id", "On your team, someone who can approve without being tied to your API credentials"]} />
+
+## Choose the decision
+
+The decisions allowed depend on the review's `kind`.
+
+| Review kind | Decisions |
+|---|---|
+| `possible_sanctions_match`, `possible_pep_match`, `screening_review` | `waiting_on_customer`, `not_a_match`, `confirmed_match` |
+| `manual` | `waiting_on_customer`, `no_concern`, `concern_confirmed` |
+
+<Decision>
+  <Choice title="Sanctions, PEP or screening review" value='decision: "not_a_match"' fields="reason_code: dob_differs" set={{ decision: "not_a_match", reason_code: "dob_differs" }} picked>
+    The match is not your subject. This clears the subject.
+  </Choice>
+  <Choice title="Manual review" value='decision: "no_concern"' fields="reason_code: activity_explained" set={{ decision: "no_concern", reason_code: "activity_explained" }}>
+    Your team found no concern. This clears the subject.
+  </Choice>
+</Decision>
+
+Each `decision` accepts its own `reason_code` values, and `other` goes with any of them.
+
+| `decision` | `reason_code` |
+|---|---|
+| `waiting_on_customer` | `dob_needed`, `id_document_needed`, `more_information_needed` |
+| `not_a_match` | `dob_differs`, `nationality_differs`, `id_document_verified`, `different_entity_type`, `location_differs` |
+| `confirmed_match` | `identity_confirmed`, `exact_identifier_match`, `customer_confirmed` |
+| `no_concern` | `activity_explained`, `documents_verified` |
+| `concern_confirmed` | `suspicious_activity`, `policy_breach` |
+
+## Record it
+
+<RunStep title="Record a decision" method="POST" path="/v1/intelligence/reviews/{id}/decisions"
+  pathParams={{ id: "irv_dbvqsbiukoh4g0rnek30" }}
+  headers={{ "Idempotency-Key": "rv-0001-decision-1" }}
+  body={{
+    decision: "not_a_match",
+    reason_code: "dob_differs",
+    note: "Date of birth differs from the listed person."
+  }}>
+  The response reads `requires_approval: true`. The approval is in the portal.
+</RunStep>
+
+`note` is optional, up to 2000 characters. It is stored in a vault and never returned: the response says only `note_recorded`. Send an `Idempotency-Key` with every change.
+
+## Who approves
+
+Two rules can require a second person.
+
+- **Your second-approver setting.** A decision it covers waits for a person to approve it in the portal. `approval_rule` is `sanctions_pep` or `all`, and `decision_proposed` reaches you as an event. [`GET /v1/intelligence/reviews/settings`](/reference/reviews/get-review-settings) shows the setting, read only.
+- **`api_clearance`.** A decision your API credential records that clears the subject (`not_a_match`, `no_concern`) always waits for a person, whatever the setting. `api_clearance_requires_approval` is always `true`.
+
+The approver for `api_clearance` must be independent of your API credentials. They cannot be the person who created the credential, or hold a role that can create, rotate or revoke credentials (Admin, Technical). In practice that is your Compliance role.
+
+The decision's `approval` is `null` until there is an answer, then carries `outcome` as `approved`, `sent_back` or `withdrawn`. The review's `pending_decision_id` names the decision that is waiting.
+
+## Wait on your customer
+
+`waiting_on_customer` pauses the due time while you ask your customer for something. Call [`POST /v1/intelligence/reviews/{id}/resume`](/reference/reviews/resume-review) with an `Idempotency-Key` and no body when they answer. The due time moves out by the time spent waiting. A review that is not waiting is `409 review_not_waiting`.
+
+## Add a note
+
+[`POST /v1/intelligence/reviews/{id}/notes`](/reference/reviews/add-note) takes `text`, up to 2000 characters, on an open review. The text goes to a vault and is never returned. Your team reads it in the portal, and it appears in the case files your people export. A review that already has the most notes it can hold is `409 note_limit_reached`.
+
+## Events
+
+| Event | When |
+|---|---|
+| `intelligence.review.decision_proposed` | A decision is waiting for a second approver. |
+| `intelligence.review.decided` | A decision took effect, including waiting on your customer. |
+| `intelligence.review.reopened` | A decision was sent back or withdrawn, or your customer responded. `reason` is `sent_back`, `withdrawn` or `customer_responded`. |
+| `intelligence.review.closed` | A review closed, with its `outcome`. |
+
+The event can carry `decision_id`, `decision`, `reason_code`, `requires_approval`, `approval_rule` and `approved`, and never a name or note text.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={409} code="review_closed">The review is closed and takes no further changes.</ErrorRow>
+  <ErrorRow status={409} code="decision_pending">The review already has a decision waiting for approval. Wait for the approval before recording another.</ErrorRow>
+  <ErrorRow status={409} code="second_approver_unavailable">The decision needs a second approver and nobody else on your team can approve it. Give a person the Compliance role, then retry.</ErrorRow>
+  <ErrorRow status={422} code="invalid_decision">The decision is not allowed for this review's kind.</ErrorRow>
+  <ErrorRow status={422} code="invalid_reason_code">The `reason_code` is not accepted for that `decision`.</ErrorRow>
+  <ErrorRow status={422} code="note_too_long">`note` is over 2000 characters.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Work the review queue" href="/intelligence/reviews">
+    Read reviews, deadlines and events.
+  </Card>
+  <Card title="Export case files and evidence" href="/intelligence/export-case-files">
+    The record of what was decided and approved.
+  </Card>
+</CardGroup>

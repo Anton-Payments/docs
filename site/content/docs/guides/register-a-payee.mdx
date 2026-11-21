@@ -1,0 +1,128 @@
+---
+title: Register a payee
+description: A payee holds identity and nothing else. The details you send go to a vault, and Anton keeps a name and a token.
+kind: guide
+kicker: Core path · 1 of 3
+---
+
+A payee is the person or business you pay. The API calls it a `beneficiary`, and its ID starts with `ben_`. A payee holds identity only. It cannot receive money until you [attach an instrument](/guides/register-an-instrument) to it.
+
+Every payee belongs to one merchant. If two merchants pay the same person, each creates its own record. Personal details you send are tokenized, and Anton's database never stores them raw. The payee record keeps a display name, a country and a token reference.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "The payee's type, name and country", "Your own ID for the payee, sent as external_ref"]} />
+
+## Choose the type
+
+`type` decides which detail block you send. The block is named after it: `individual` or `business`. Send exactly one, matching `type`. `country` is required in both cases.
+
+<Decision>
+  <Choice title="An individual" value='type: "individual"' fields="first_name, last_name, email, phone, birth_date, nationality, address" set={{ type: "individual", business: null, individual: { first_name: "Jane", last_name: "Smith", email: "jane@example.com", phone: "+442079460000", birth_date: "1988-05-12", nationality: "GB", address: { street_line_1: "10 Example Street", city: "London", postal_code: "SW1A 1AA", country: "GB" } } }} picked>
+    Contractors and creators. Optional: `middle_name`, `tax_id`. `birth_date` is `YYYY-MM-DD` and `phone` is E.164.
+  </Choice>
+  <Choice title="A business" value='type: "business"' fields="legal_name, registration_number, email, phone, address" set={{ type: "business", individual: null, business: { legal_name: "Smith Supplies Ltd", registration_number: "01234567", email: "accounts@example.com", phone: "+442079460000", address: { street_line_1: "10 Example Street", city: "London", postal_code: "SW1A 1AA", country: "GB" } } }}>
+    Vendors and suppliers. Optional: `trading_name`, `tax_id`, `entity_type`, `incorporation_country`, `incorporation_date`, `website`.
+  </Choice>
+</Decision>
+
+`address` takes `street_line_1`, `city`, `postal_code` and `country`. Add `street_line_2` and `state` where the country needs them.
+
+## Register the payee
+
+<RunStep title="Register the payee" method="POST" path="/v1/beneficiaries"
+  headers={{ "Idempotency-Key": "ben-contractor-1042" }}
+  body={{
+    type: "individual",
+    country: "GB",
+    external_ref: "contractor-1042",
+    metadata: { department: "engineering" },
+    individual: {
+      first_name: "Jane",
+      last_name: "Smith",
+      email: "jane@example.com",
+      phone: "+442079460000",
+      birth_date: "1988-05-12",
+      nationality: "GB",
+      address: {
+        street_line_1: "10 Example Street",
+        city: "London",
+        postal_code: "SW1A 1AA",
+        country: "GB"
+      }
+    }
+  }}>
+  Creates the payee and returns it with status `active`. Keep the `id`: you need it for the instrument and the payout.
+</RunStep>
+
+Two fields exist for your own use. `external_ref` is your ID for this payee, up to 255 characters. `metadata` is a string map for tags such as a department. Put no personal data in either.
+
+Add `end_user_ip` when a person in your product triggered the call. It is optional and feeds risk signals.
+
+Many payees at once is a different job. [Import payees from a file](/guides/import-payees) creates them from a CSV.
+
+## What happens next
+
+The payee starts `active`. Its `risk_score` and `risk_tier` are `null` and `risk_signals` is empty until the first score, shortly after creation. Scores run from 0 to 1000 and higher is worse. Show `risk_signals[].label` as it comes and branch on `code`.
+
+<Lifecycle states="archived, active, blocked"
+  notes="Paused by you | Ready to pay | Cannot be paid"
+  edges="<> you archive · you restore | Anton blocks">
+  You archive and restore. Anton blocks. A `blocked` payee cannot be used for payouts and cannot be restored through the API.
+</Lifecycle>
+
+You can ask for a fresh check of an active payee with [`POST /v1/beneficiaries/{id}/rescreen`](/reference/beneficiaries/rescreen-beneficiary). It returns `202` and the payee stays `active` until the check finishes. If the check blocks the payee, you get a `beneficiary.blocked` event.
+
+Listen for these events instead of polling: `beneficiary.created`, `beneficiary.updated`, `beneficiary.blocked` and `beneficiary.deleted`. See [Track payouts with webhooks](/guides/track-payouts-with-webhooks).
+
+## Find a payee you already hold
+
+Anton refuses an identity you already hold. A second create with the same details returns `409 duplicate_beneficiary`. Treat that as "already registered", not as a failure.
+
+To find the existing record, search on your own reference:
+
+```bash Find an existing payee
+curl "https://api.antonpayments.dev/v1/beneficiaries?search=contractor-1042" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+`search` is a substring match on the display name and `external_ref`, so check the result for an exact `external_ref` before you reuse the ID. Store the `ben_` ID next to your own record so you only search once.
+
+## Update a payee
+
+The two update paths do different things.
+
+`PATCH /v1/beneficiaries/{id}` changes `display_name`, `country`, `external_ref` and `metadata`. A field you leave out stays as it is. Send `null` to clear `external_ref` or `metadata`. It does not touch personal details.
+
+`PATCH /v1/beneficiaries/{id}/pii` replaces the stored personal details. Vault tokens are immutable, so the block you send replaces the old one as a whole. A field you leave out is cleared, not kept. Send the complete block, even if one field changed. The `display_name` is re-derived from it.
+
+<Warning>
+  Machine credentials can write personal details but cannot read them back. `GET /v1/beneficiaries/{id}/pii` answers `403` to an API credential. It works only for signed-in admin users of the merchant dashboard, and each read is audited. Keep your own copy of what you submit.
+</Warning>
+
+To stop paying someone, [archive](/reference/beneficiaries/archive-beneficiary) the payee. Archive keeps the record and the history, and you can restore it. [Delete](/reference/beneficiaries/delete-beneficiary) is for a payee you will never use again.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={409} code="duplicate_beneficiary">You already hold this identity. Search by `external_ref` and use that ID.</ErrorRow>
+  <ErrorRow status={409} code="idempotency_in_flight">Another request with the same key is still running. Wait a moment and send the same request again.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">The block is missing, does not match `type`, or a field is invalid. `details` lists every failing field, so fix them in one pass.</ErrorRow>
+  <ErrorRow status={422} code="idempotency_key_reused">You sent the same key with a different body. Use a new key for a new payee.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">The ID does not exist, or it belongs to another merchant. Check the `ben_` ID.</ErrorRow>
+  <ErrorRow status={409} code="beneficiary_not_active">A blocked payee cannot be archived or restored, and only an active payee can be re-screened.</ErrorRow>
+</Errors>
+
+## Idempotency
+
+`POST /v1/beneficiaries` requires an `Idempotency-Key`. Build it from your own data, such as `ben-contractor-1042`, so a retry after a network failure returns the original payee. A replay carries `Idempotent-Replayed: true`. Keys last 24 hours, and only a `2xx` answer is stored, so a refused request runs again on retry. See [Idempotency](/concepts/idempotency).
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Register an instrument" href="/guides/register-an-instrument" kicker="Step 2 of 3">
+    Attach a bank account or wallet to this payee.
+  </Card>
+  <Card title="Create a payee" href="/reference/beneficiaries/create-beneficiary">
+    The full request and response reference.
+  </Card>
+</CardGroup>
