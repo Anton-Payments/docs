@@ -11,6 +11,10 @@ const config = {
   async redirects() {
     return redirects.map((r) => ({ ...r, permanent: true }));
   },
+  // a preview deployment is never indexed, whatever a crawler makes of robots.txt
+  async headers() {
+    return process.env.DOCS_PREVIEW === '1' ? [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] }] : [];
+  },
   outputFileTracingRoot: new URL('.', import.meta.url).pathname,
   turbopack: { root: new URL('.', import.meta.url).pathname },
 };

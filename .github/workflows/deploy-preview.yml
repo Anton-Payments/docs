@@ -1,0 +1,65 @@
+name: Deploy docs preview
+
+# Builds the docs site and rolls it out to the preview (docs-preview.antonpayments.com) on every
+# push to the docs-platform branch. The infrastructure is Terraform in the infra repo
+# (environments/docs); this workflow only builds an image and rolls a revision.
+#
+# Repository variables, from `make output-docs` in infra:
+#   GCP_WIF_PROVIDER  workload_identity_provider
+#   GCP_DEPLOY_SA     deploy_service_account
+
+on:
+  push:
+    branches: [feat/docs-platform]
+    paths: ['site/**', 'openapi-merchant.yaml', 'api-reference/**', 'docs.json', '.github/workflows/deploy-preview.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # WIF: GitHub's OIDC token is exchanged for a short-lived GCP credential
+
+concurrency:
+  group: docs-preview
+  cancel-in-progress: false # never interrupt a rollout halfway
+
+env:
+  PROJECT: anton-docs
+  REGION: northamerica-northeast2
+  SERVICE: docs-site
+  IMAGE: northamerica-northeast2-docker.pkg.dev/anton-docs/site/site
+
+jobs:
+  deploy:
+    # skipped, not failed, until infra is applied and the two repository variables are set
+    if: vars.GCP_WIF_PROVIDER != '' && vars.GCP_DEPLOY_SA != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build the preview image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          # DOCS_PREVIEW=1 bakes in robots.txt "Disallow: /" and an X-Robots-Tag header
+          docker build -f site/Dockerfile --build-arg DOCS_PREVIEW=1 -t "${IMAGE}:${GITHUB_SHA}" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+
+      - name: Roll out
+        # Only the image changes; every other setting on the service belongs to Terraform.
+        run: gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT}" --quiet
+
+      - name: Check the preview answers
+        run: |
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://docs-preview.antonpayments.com/robots.txt || true)
+            [ "$code" = "200" ] && echo "preview is up" && exit 0
+            sleep 6
+          done
+          echo "::warning::docs-preview.antonpayments.com did not answer 200 (DNS or the certificate may still be pending)"
