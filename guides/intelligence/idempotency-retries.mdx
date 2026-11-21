@@ -13,4 +13,4 @@ If a network timeout occurs, retry the exact same request with the same key. Ant
 
 The JSON body also accepts `idempotency_key` for testing, but the header is the enterprise contract. If both are present, the header wins.
 
-Standard idempotency semantics apply — 24-hour key retention, `409 idempotency_conflict` on key reuse with a different body, `X-Idempotent-Replayed: true` on replays. See [Idempotency](/api-reference/idempotency).
+Standard idempotency semantics apply — 24-hour key retention, `422 idempotency_key_reused` on key reuse with a different body, `Idempotent-Replayed: true` on replays. See [Idempotency](/api-reference/idempotency).

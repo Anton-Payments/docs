@@ -38,33 +38,45 @@ curl https://api.antonpayments.dev/v1/verification-subjects \
   }'
 ```
 
-The response carries the new subject and its first verification attempt:
+The response is the subject. Its first verification is in `verifications`, and it carries the one-time `hosted_link`:
 
 ```json
 {
-  "data": {
-    "subject": {
-      "id": "vsub_01HX8Z9K0M2N3P4Q5R6S7T8UG3",
-      "type": "person",
-      "display_name": "A•• L••••••••",
-      "email": "ada@example.com",
-      "external_ref": "customer_8841",
-      "country": "CA",
-      "created_at": "2026-07-16T14:30:00Z",
-      "attempts": [{ "...": "the attempt below" }]
-    },
-    "verification": {
-      "id": "vrf_01HX8Z9K0M2N3P4Q5R6S7T8UG2",
-      "status": "sent",
+  "id": "vsub_01JD3XB7Q2",
+  "object": "verification_subject",
+  "livemode": false,
+  "status": "created",
+  "type": "person",
+  "display_name": "A•• L••••••",
+  "email": "ada@example.com",
+  "external_ref": "customer_8841",
+  "country": "CA",
+  "current_verification_id": "vrf_01JD3XB7Q3",
+  "verifications": [
+    {
+      "id": "vrf_01JD3XB7Q3",
+      "object": "verification",
+      "livemode": false,
+      "status": "created",
+      "subject_id": "vsub_01JD3XB7Q2",
       "reason": "initial",
-      "created_at": "2026-07-16T14:30:00Z",
-      "link_expires_at": "2026-07-23T14:30:00Z",
-      "checks": [],
-      "hosted_link": "https://verify.example.com/inquiry?..."
+      "screening": null,
+      "owners": [],
+      "link_expires_at": "2026-11-26T20:26:03.152Z",
+      "completed_at": null,
+      "hosted_link": "https://verify.example.com/v/example",
+      "metadata": {},
+      "created_at": "2026-11-19T20:26:03.152Z",
+      "updated_at": "2026-11-19T20:26:03.152Z"
     }
-  }
+  ],
+  "metadata": { "crm_id": "42" },
+  "created_at": "2026-11-19T20:26:03.152Z",
+  "updated_at": "2026-11-19T20:26:03.152Z"
 }
 ```
+
+`metadata` is yours: up to 50 string keys. Send it when you create the subject (it is stored on the subject) or when you re-verify (it is stored on the new verification), and it comes back on every read.
 
 Three things to internalize from this response:
 
@@ -78,15 +90,19 @@ Three things to internalize from this response:
 
 `type: "business"` runs a KYB flow: business details first, then a cascade to each **controlling owner** (25%+), who each complete an individual KYC flow at their own hosted link. The business attempt sits in `awaiting_owners` until every controlling owner is approved.
 
-The attempt's `ubos` array tracks each owner's status. To re-deliver one owner's link:
+The verification's `owners` array tracks each owner's status. To re-deliver one owner's link, name the owner by `owner_id`:
 
 ```bash
-curl https://api.antonpayments.dev/v1/verifications/$VRF_ID/owners/$VUBO_ID/resend \
+curl https://api.antonpayments.dev/v1/verifications/$VRF_ID/owners/resend \
   -X POST \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
   -H "DPoP: $DPOP_PROOF" \
-  -H "Idempotency-Key: resend-owner-$VUBO_ID-1"
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: resend-owner-$OWNER_ID-1" \
+  -d '{ "owner_id": "'"$OWNER_ID"'" }'
 ```
+
+You can name the owner by `email` instead. With `deliver: false` the link comes back in the response for you to pass on.
 
 ## Lifecycle
 
@@ -118,19 +134,14 @@ Every completed verification is screened against sanctions, PEP, and watchlists 
 ```json
 {
   "status": "clear",
-  "lists_checked": [
-    "OFAC SDN",
-    "UN Consolidated",
-    "EU Consolidated",
-    "UK HMT",
-    "PEP"
-  ],
   "evaluation_id": "eval_01HX8Z9K0M2N3P4Q5R6S7T8UH1",
-  "detail": "No matches across 5 lists."
+  "score": 140,
+  "tier": "low",
+  "reasons": []
 }
 ```
 
-`evaluation_id` resolves at [`GET /v1/intelligence/evaluations/{id}`](/api-reference/intelligence/get-evaluation) for the full decision evidence. A screening `hit` moves the attempt to `review` — it does not auto-decline.
+`status` is `clear`, `review` or `pending`. `score` runs from 0 to 1000, higher is worse. `reasons` are codes from the fixed list an evaluation uses. The block never lists what was checked. `evaluation_id` resolves at [`GET /v1/intelligence/evaluations/{id}`](/api-reference/intelligence/get-evaluation) for the full decision evidence. A screening `hit` moves the attempt to `review` — it does not auto-decline.
 
 ## Managing links
 
@@ -153,7 +164,7 @@ The machine surface is deliberately PII-free:
 You supplied the subject's name at creation, so your systems already hold what you need; the masking means an exfiltrated API credential cannot harvest verified identities.
 
 <Note>
-  All mutating verification endpoints require an `Idempotency-Key` header — see
+  Every `POST` verification endpoint requires an `Idempotency-Key` header — see
   [Idempotency](/api-reference/idempotency). Reads are cursor-paginated — see
   [Pagination](/api-reference/pagination).
 </Note>

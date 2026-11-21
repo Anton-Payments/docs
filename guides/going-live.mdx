@@ -27,7 +27,7 @@ Moving from sandbox to production is a deliberate switch, not an upgrade. The en
 
 <Steps>
   <Step title="Idempotency on every mutation">
-    Every `POST`, `PUT`, or `PATCH` that creates or mutates state must carry an `Idempotency-Key` header. Derive keys deterministically from your own business data so you can safely retry after a network failure without double-sending. See [Idempotency](/api-reference/idempotency).
+    Every `POST` that creates or changes something must carry an `Idempotency-Key` header. `PATCH` and `DELETE` accept one but do not need it. Derive keys deterministically from your own business data so you can safely retry after a network failure without double-sending. See [Idempotency](/api-reference/idempotency).
   </Step>
   <Step title="Webhook endpoint in production">
     Deploy your webhook receiver with HTTPS, a publicly reachable hostname, and logging. Subscribe to `payout.*`, `beneficiary.*`, `rfi.*`, and any other events you depend on.

@@ -7,45 +7,47 @@ Rate limits protect the platform from accidental and malicious overload. Normal 
 
 ## Global limit
 
-Every authenticated merchant gets a **base of 1,000 requests per minute**, shared across all `/v1/*` endpoints, enforced on a rolling 60-second window. The limit is **per merchant** (not per IP) — seats and servers behind a shared egress NAT all count against the same quota, but separate merchants never share quotas with each other.
+Every authenticated merchant gets a **base of 1,000 requests per minute**, shared across all `/v1/*` endpoints, enforced per 60-second window. The limit is **per merchant** (not per IP) — seats and servers behind a shared egress NAT all count against the same quota, but separate merchants never share quotas with each other.
 
-## Merchant rate-limit tiers
+## Rate-limit tiers
 
-Merchants can be placed on a higher tier by Anton. The tier applies a multiplier to the base 1,000 rpm ceiling.
+Anton can place your account on a higher tier, which multiplies the base ceiling. Ask support if your sustained traffic needs one.
 
 | Tier | Multiplier | Effective ceiling |
-|---|---|---|
-| Default | 1× | 1,000 rpm |
-| Growth | 2× | 2,000 rpm |
-| Scale | 5× | 5,000 rpm |
-| High-volume | 10× | 10,000 rpm |
-| Enterprise | 20× | 20,000 rpm |
+| --- | --- | --- |
+| Default | 1x | 1,000 requests per minute |
+| Growth | 2x | 2,000 |
+| Scale | 5x | 5,000 |
+| High-volume | 10x | 10,000 |
+| Enterprise | 20x | 20,000 |
 
-Read your current tier from `GET /v1/merchant` — the response includes `rate_limit_multiplier` (1, 2, 5, 10, or 20) and the effective `rate_limit_per_minute`. Promotions take effect immediately on the next request; no rollout is required.
+A tier change takes effect immediately. The `X-RateLimit-Limit` header on any response always shows the ceiling that applies to you.
 
 ## Endpoint-specific limits
 
-Some endpoints are more expensive or more sensitive and carry a tighter ceiling:
+Some endpoints are more expensive and carry a tighter ceiling on top of the global one:
 
 | Endpoint | Limit |
-|---|---|
-| `POST /v1/fx/quote` | 30 / minute per merchant |
-| `GET /v1/fx/rate` | 30 / minute per merchant |
-| `POST /v1/fx/exchange` | 10 / minute per merchant |
-| `/v1/intelligence/*` | 120 / minute per merchant, on top of the global quota |
-| `POST /v1/webhooks/{id}/test` | Reduced (sensitive operations ceiling) |
+| --- | --- |
+| `POST /v1/fx/quotes` and `GET /v1/fx/rates` | 30 per minute |
+| `POST /v1/fx/exchanges` | 10 per minute |
+| `/v1/intelligence/*` | 120 per minute |
+| `GET /v1/transactions/export` | 5 per minute |
+| `POST /v1/webhooks/{id}/test` | 60 per minute |
 
-**Sensitive operations** — webhook test sends and similar one-off verification flows — run under a lower per-merchant ceiling to prevent abuse. Normal integration traffic will not reach it.
+Intelligence evaluations run under their own per-account limit because each one does more work than an ordinary request. The limit covers all `/v1/intelligence/*` endpoints together.
 
-**Intelligence** runs under a dedicated per-merchant limiter in addition to the global quota, because evaluations fan out to multiple scoring systems per call. The limit applies across all `/v1/intelligence/*` endpoints. Sustained-volume screening integrations can request a raise the same way as the global ceiling.
+## Headers
 
-## Headers on every response
+Every authenticated response carries:
 
 | Header | Value |
 |---|---|
 | `X-RateLimit-Limit` | Maximum requests permitted in the current window. |
 | `X-RateLimit-Remaining` | Requests remaining in the current window. |
 | `X-RateLimit-Reset` | Unix timestamp (seconds) when the current window resets. |
+
+If Anton cannot check your limit for a moment, the request is still served, and these three headers are left out rather than guessed. Treat a response without them as "limit unknown", not "unlimited", and keep your own pacing.
 
 When you exceed a limit, Anton returns `429 Too Many Requests` with an additional header:
 
@@ -58,8 +60,11 @@ Response body:
 ```json
 {
   "error": {
+    "type": "rate_limit_error",
     "code": "rate_limit_exceeded",
-    "message": "Rate limit exceeded. Retry after 42 seconds."
+    "message": "rate limit exceeded, retry after 42 seconds",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#rate_limit_exceeded",
+    "request_id": "req_01JD3XB7Q2"
   }
 }
 ```

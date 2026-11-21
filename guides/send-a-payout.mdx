@@ -4,10 +4,6 @@ sidebarTitle: "Send a payout"
 description: "The full payout flow — beneficiary, instrument, economics, corridors, and the state machine your integration should respond to."
 ---
 
-<Note>
-  **Editability note:** this guide was drafted against the OpenAPI spec. If the product/engineering team hasn't validated it against a recent end-to-end trace, flag anything that reads off and edit the relevant section — each H2 below is self-contained.
-</Note>
-
 A payout is a single payment from your merchant balance to a beneficiary's payment instrument. This guide walks through everything you need to know to send one in production: the data model, the fields that matter, the state machine, and how your integration should respond to each state.
 
 For a 5-minute sandbox walkthrough, start with the [Quickstart](/quickstart). This guide assumes you've already done that and need to build the real thing.
@@ -27,17 +23,17 @@ Create them in that order. Beneficiaries can have many instruments; one payout u
 Every payout has two amounts:
 
 - `source_amount` — what's debited from your merchant balance in your source currency.
-- `dest_amount` — what the beneficiary receives in their destination currency.
+- `destination_amount` — what the beneficiary receives in their destination currency.
 
 For same-currency payouts these are equal. For cross-currency payouts, Anton computes the other side using the current corridor pricing. The `fixed_side` field tells Anton which amount is authoritative:
 
-- `fixed_dest` (default) — beneficiary receives exactly `dest_amount`; Anton computes `source_amount` including FX and fees.
+- `fixed_destination` (default) — beneficiary receives exactly `destination_amount`; Anton computes `source_amount` including FX and fees.
 - `fixed_source` — merchant pays exactly `source_amount`; Anton computes how much the beneficiary receives after FX and fees.
 
 `fee_bearer` controls who absorbs the fee:
 
 - `merchant` (default) — fee is added on top of `source_amount`.
-- `beneficiary` — fee is deducted from `dest_amount`, so the beneficiary receives less than the stated amount.
+- `beneficiary` — fee is deducted from `destination_amount`, so the beneficiary receives less than the stated amount.
 
 ## Corridors, methods, and rails
 
@@ -128,10 +124,9 @@ anything failing in production:
 
 ```json
 {
-  "data": {
-    "id": "pay_...",
-    "session_quality": ["non_public_ip"]
-  }
+  "id": "pay_...",
+  "object": "payout",
+  "session_quality": ["non_public_ip"]
 }
 ```
 
@@ -160,31 +155,25 @@ users outside that purpose.
 Idempotency-Key: payout-{invoice_id}-{beneficiary_id}
 ```
 
-If you retry with the same key, Anton returns the original response and sets `X-Idempotent-Replayed: true`. Different bodies with the same key return `409 idempotency_conflict`. See [Idempotency](/api-reference/idempotency) for details.
+If you retry with the same key, Anton returns the original response and sets the `Idempotent-Replayed: true` response header. A different body with the same key returns `422 idempotency_key_reused`. See [Idempotency](/api-reference/idempotency) for details.
 
 ## The state machine
 
-Payouts move through a 15-state machine. The full detail is in [How Anton Evaluates Payouts](/how-anton-evaluates-payouts); the short version:
+Payouts move through the statuses below. The full detail is in [How Anton Evaluates Payouts](/how-anton-evaluates-payouts); the short version:
 
-| State | Meaning | What to do |
+| Status | Meaning | What to do |
 |---|---|---|
-| `created` | Payout record exists. Next: screening. | No action. |
-| `pending_screening` | The payout is completing required checks before it can be sent. A payout can return to this status after approval or review. | No action is needed. |
-| `pending_approval` | Clear to submit; waiting for maker-checker if configured. | No action. |
-| `approved` | Ready for the rail. | No action. |
-| `processing` | Submitted to the rail. | Surface "in flight" in your UI. |
-| `sent` | Rail confirmed dispatch. | Surface "sent" in your UI. |
-| `completed` | Funds delivered and settled. | Mark the payout done in your system. |
-| `failed` | Rail returned a hard failure. | Review failure reason; may retry with a different instrument. |
-| `returned` | Funds were returned after send. The source amount is credited back to your balance in the source currency and any unused FX buffer is released; the fee is retained, because the payout was attempted. | Handle the return in your accounting, including the retained fee. |
-| `screening_failed` | Under review (`on_hold: true`). | Treat as a normal "pending" state. |
-| `velocity_blocked` | Merchant velocity rule rejected. | Wait for velocity window to reset, or request a higher threshold. |
-| `manual_review` | Under review (`on_hold: true`). | Treat as a normal "pending" state; can take minutes to hours. |
-| `pending_engine_review` | Under review (`on_hold: true`). | Treat as a normal "pending" state. |
-| `cannot_be_processed` | The payout cannot be processed. Anton is unable to provide further detail. | Final. Cannot be cancelled via the API; contact support. |
-| `cancelled` | Cancelled before rail submission. | Final. |
+| `created` | Accepted; checks have not started. | No action. |
+| `pending_approval` | Waiting for a second person on your team to approve it, under your own approval policy. | No action. |
+| `processing` | Being checked and prepared, or submitted to the rail. | Show "in flight" in your UI. |
+| `on_hold` | Held for review. The payout's `status_message` is the only thing we say about it. | Treat it as a normal "pending" state; do not show an error. It cannot be cancelled while held. |
+| `sent` | The rail confirmed dispatch. | Show "sent" in your UI. |
+| `completed` | The beneficiary received the funds. | Mark the payout done in your system. |
+| `returned` | Funds came back after being sent. The source amount is credited back to your balance in the source currency and any unused FX buffer is released. The fee is retained, because the payout was attempted. | Handle the return in your accounting. |
+| `failed` | The payout did not go through and will not change again. `failure_code` says what the rail reported, or is `cannot_be_processed` when we could not process the payout. We give no further detail for `cannot_be_processed`. | Review `failure_code`. For `cannot_be_processed`, contact support with the `request_id`. |
+| `cancelled` | Cancelled by you before submission. | Final. |
 
-The `on_hold` field on the payout is `true` while the payout waits on a review, in any status before `processing`. It carries no reason.
+`completed`, `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
 
 ## Subscribe to webhooks — don't poll
 
@@ -192,16 +181,15 @@ Every state transition fires a `payout.*` event. Subscribe once via `POST /v1/we
 
 - `payout.completed` — funds delivered
 - `payout.failed`, `payout.returned` — terminal failure paths
-- `payout.velocity_blocked`, `payout.engine_blocked` — risk blocks (`payout.engine_blocked` fires alongside `payout.velocity_blocked` when the Anton engine drove the block)
 - `payout.on_hold` — a payout is on hold
-- `payout.cannot_be_processed` — the payout cannot be processed
-- `payout.cancelled` — operator or API cancellation
+- `payout.approval_required` — a payout is waiting on an approver
+- `payout.cancelled` — the payout was cancelled
 
 Polling `GET /v1/payouts/{id}` works in development but wastes rate-limit budget at scale and misses transitions.
 
 ## Cancelling a payout
 
-You can cancel a payout that has not yet been submitted to a rail — from `created`, `pending_screening`, `pending_approval`, or `approved`:
+You can cancel a payout that has not yet been submitted to a rail — from `created`, `pending_approval` or `processing` (before it is submitted to the rail):
 
 ```bash
 curl https://api.antonpayments.dev/v1/payouts/$PAYOUT_ID/cancel \
@@ -212,9 +200,9 @@ curl https://api.antonpayments.dev/v1/payouts/$PAYOUT_ID/cancel \
   -d '{"reason": "beneficiary requested change of account"}'
 ```
 
-Once a payout reaches `processing`, the rail has it — cancellation is no longer possible via the API. Contact support if you need to halt an in-flight payout.
+Once a payout has been submitted to the rail, cancellation is no longer possible. Contact support if you need to halt an in-flight payout.
 
-A payout on hold (`on_hold: true`) cannot be cancelled until the review concludes: the request returns `409` with code `payout_on_hold`. A payout in `cannot_be_processed` cannot be cancelled via the API (`422 payout_not_cancellable`).
+A payout that is `on_hold` cannot be cancelled until the hold ends: the request returns `409 payout_on_hold`. A payout past submission, or one that has `failed`, returns `409 payout_not_cancellable`.
 
 On successful cancellation, the debited funds (source amount, fee, and any FX buffer) are released back to your balance.
 
@@ -224,10 +212,10 @@ On successful cancellation, the debited funds (source amount, fee, and any FX bu
   <Accordion title="422 insufficient_balance">
     Your merchant balance in the source currency can't cover `source_amount + fee + buffer`. Top up the balance or reduce the payout.
   </Accordion>
-  <Accordion title="403 corridor_not_enabled">
-    The requested `(source_currency, dest_currency, country, method)` isn't active on your account. Call `GET /v1/corridors` to see active ones, or contact support to enable a new corridor.
+  <Accordion title="422 corridor_not_enabled">
+    The requested `(source_currency, destination_currency, country, method)` isn't active on your account. Call `GET /v1/corridors` to see active ones, or contact support to enable a new corridor.
   </Accordion>
-  <Accordion title="404 beneficiary_not_found / instrument_not_found">
+  <Accordion title="404 resource_missing">
     The ID doesn't exist or belongs to a different merchant. Double-check the ID, including prefix (`ben_...`, `ins_...`).
   </Accordion>
   <Accordion title="422 invalid_instrument">

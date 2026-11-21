@@ -44,7 +44,7 @@ Sandbox credentials are issued by `app.antonpayments.dev` and only authenticate 
 
 ## Token endpoint
 
-`POST /oauth/token` exchanges your `(client_id, client_secret)` plus a DPoP proof for an access token.
+`POST /oauth/token` (see [Mint an access token](/api-reference/authentication/create-access-token)) exchanges your `(client_id, client_secret)` plus a DPoP proof for an access token.
 
 **Request:**
 
@@ -68,7 +68,7 @@ Sandbox credentials are issued by `app.antonpayments.dev` and only authenticate 
 
 `scope` echoes the credential's grants, space-delimited (RFC 6749 §3.3) — the same values are embedded in the access token's `scope` claim. There is no scope request parameter: tokens always carry exactly the scopes the OAuth client was created with. See [Capabilities & Scopes](/capabilities).
 
-**Errors** (RFC 6749 §5.2 envelope):
+**Errors** use the RFC 6749 §5.2 format rather than Anton's error object, because OAuth libraries expect it: `{"error": "invalid_client", "error_description": "..."}`.
 
 | HTTP | `error` | When |
 |---|---|---|
@@ -185,6 +185,14 @@ curl -fsS "$REQ_URL" \
 - On `401 invalid_token`, force-refresh once (the previous token may have expired between mint and use).
 - DPoP proofs are **not** cacheable — generate a fresh one for every request.
 
+## Errors on authenticated calls
+
+A failed authentication on a `/v1` call returns Anton's standard [error object](/api-reference/errors) with `type` `authentication_error` (`401`) or `permission_error` (`403`). Branch on `error.code`: `unauthorized`, `invalid_token`, `invalid_dpop_proof`, `static_api_keys_disabled`, `key_environment_mismatch`, `insufficient_scope`, `capability_required`. Every response, including errors, carries a `Request-Id` header to quote in support requests.
+
+## Versioning
+
+Your account is pinned to the latest API version when you create your first OAuth client. Every `/v1` response carries an `Anton-Version` header with the version it was served at, and you can send `Anton-Version` on a single request to try another version. See [API reference](/api-reference/introduction#conventions).
+
 ## Troubleshooting
 
 | Error code | Likely cause | Fix |
@@ -196,9 +204,9 @@ curl -fsS "$REQ_URL" \
 | `invalid_dpop_proof` (jkt mismatch) | The DPoP key in the proof header isn't the one you registered | Re-register the keypair, or fix your client to use the registered key. |
 | `invalid_token` (`ath` mismatch) | The `ath` claim doesn't match SHA-256 of the access token | Recompute `ath = base64url(sha256(access_token))` per request. |
 | `invalid_token` (expired) | Access token past its `exp` | Mint a new token via `POST /oauth/token`. |
-| `invalid_client` | Wrong `client_id` / `client_secret` / revoked client | Check secrets; rotate via portal if compromised. |
+| `invalid_client` | Wrong `client_id` / `client_secret` / revoked client (from `POST /oauth/token`) | Check secrets; rotate in the dashboard if compromised. |
 | `key_environment_mismatch` | Test creds against prod (or vice versa) | Use the right pair. Sandbox credentials only work on `api.antonpayments.dev`. |
-| `static_api_keys_disabled` | You sent `Authorization: Bearer ak_*` | Static API keys are not accepted on v1. Migrate to OAuth. |
+| `static_api_keys_disabled` | You sent `Authorization: Bearer ak_*` | Static API keys are not accepted. Use OAuth client credentials with DPoP. |
 | `insufficient_scope` | The credential was created without the scope this endpoint needs | Use (or create) a credential carrying the right scope. See [Capabilities & Scopes](/capabilities). |
 | `capability_required` | Your account doesn't hold the capability this endpoint needs (e.g. AI-compliance-only account calling a payout endpoint) | Contact Anton to change your account's tier. |
 
@@ -210,7 +218,7 @@ curl -fsS "$REQ_URL" \
 
 **Token TTL is the revocation mechanism.** If you suspect a credential is compromised, rotate the `client_secret` (the rotate endpoint issues a new one) and revoke the client. Outstanding tokens will continue to verify until their `exp` — at most 1 hour in production. For emergency revocation of in-flight tokens, contact support.
 
-**Anton's signing key rotates every 90 days** with a 24-hour publication overlap. The JWKS endpoint at `/v1/.well-known/jwks.json` always reflects the currently-trusted set; cache it for ≤5 minutes (the response includes a matching `Cache-Control`).
+**Anton rotates its signing key** with a 24-hour overlap during which both keys are published. The JWKS endpoint at `GET /.well-known/jwks.json` (see [Get the signing key set](/api-reference/authentication/get-jwks)) always reflects the currently-trusted set; cache it for ≤5 minutes (the response includes a matching `Cache-Control`).
 
 ## SDKs
 

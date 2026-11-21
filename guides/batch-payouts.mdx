@@ -4,10 +4,6 @@ sidebarTitle: "Batch payouts"
 description: "Upload a CSV or XLSX of many payouts in a single call. Anton validates, you confirm, Anton processes."
 ---
 
-<Note>
-  **Editability note:** this guide was drafted from the OpenAPI spec. If the product/engineering team has an updated batch flow (file schema, row limits, validation rules), edit inline — each H2 is self-contained.
-</Note>
-
 Batch payouts let you send thousands of payments in one upload. The flow is three phases: **upload → validate → confirm → process**. You can't skip steps; Anton requires you to explicitly confirm after seeing the validation summary.
 
 ## When to use batches
@@ -47,8 +43,13 @@ Consult the downloaded template for the exact schema; do not reorder columns.
 curl "https://api.antonpayments.dev/v1/batches" \
   -X POST \
   -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
-  -F "file=@payroll-2026-04-30.csv"
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Idempotency-Key: payroll-2026-04-30" \
+  -F "file=@payroll-2026-04-30.csv" \
+  -F 'metadata={"payroll_run":"2026-04-30"}'
 ```
+
+The upload is `multipart/form-data`; curl sets that `Content-Type` for you with `-F`. A body of any other type is `400 invalid_content_type`. The optional `metadata` field is a JSON object of string values, up to 50 keys, and comes back on the batch. It is never a place for personal data.
 
 - Max file size: 32 MB
 - Max rows: contact support for current limits

@@ -1,166 +1,80 @@
 ---
 title: "Sandbox Test Data"
 sidebarTitle: "Test data"
-description: "Reset your sandbox to a clean state and seed realistic beneficiaries, instruments, and payouts with a single call each."
+description: "Fund a sandbox balance from the API so you can run the payout flow end to end."
 ---
 
-The sandbox gives you three endpoints to manage test data for your merchant:
+To send a payout you need a balance to pay from. In the sandbox you can credit one with a single API call, with no dashboard step and no real money.
 
-- `POST /v1/merchant/sandbox/reset` — wipe and optionally reseed
-- `POST /v1/merchant/sandbox/seed-beneficiaries` — generate sample beneficiaries across multiple countries and methods
-- `POST /v1/merchant/sandbox/seed-payouts` — generate sample payouts in mixed states for UI and webhook testing
+## Fund a balance
 
-All three are **sandbox-only** — calling them against production returns `403 sandbox_only`. They're scoped to your merchant — you can't affect another merchant's data.
-
-## Reset
-
-Four reset scopes:
-
-| `?scope=` | What it does |
-|---|---|
-| `balances` (default) | Wipe `merchant_accounts` + sandbox transactions, re-seed fresh balances. Beneficiaries, instruments, and payouts stay. |
-| `all` | Wipe payouts, instruments, beneficiaries, and sandbox transactions. Re-seed currency balances only. |
-| `delete-all` | Wipe everything. No reseed. You land at zero state. |
-| `full-reset` | Wipe everything. Re-seed balances + sample beneficiaries + sample payouts. Equivalent to a fresh merchant with demo data. |
+`POST /v1/sandbox/deposits` credits your sandbox balance in a currency. The credit is additive: calling it twice credits twice. If you have no account in that currency yet, one is created holding the deposit.
 
 ```bash
-# Clean balances, keep your beneficiaries and payouts
-curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=balances" \
+curl https://api.antonpayments.dev/v1/sandbox/deposits \
   -X POST \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
-
-# Nuclear option — fresh merchant state with demo data
-curl "https://api.antonpayments.dev/v1/merchant/sandbox/reset?scope=full-reset" \
-  -X POST \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fund-usd-1" \
+  -d '{
+    "currency": "USD",
+    "amount": "1000.00"
+  }'
 ```
 
-Rate-limited to 10 resets per merchant per hour — enough for active development, tight enough to catch a runaway test suite.
-
-Response:
+Response (`201`):
 
 ```json
 {
-  "status": "reset",
-  "scope": "balances",
-  "merchant_id": "mer_01HX..."
+  "id": "sdp_dbvqrpqukoh470i09vfg",
+  "object": "sandbox_deposit",
+  "livemode": false,
+  "currency": "USD",
+  "amount": "1000.00",
+  "available": "1000.00",
+  "created_at": "2026-11-20T02:18:15.202Z",
+  "updated_at": "2026-11-20T02:18:15.202Z"
 }
 ```
 
-`status` varies by scope:
+`amount` is what you credited and `available` is the balance after the credit.
 
-- `balances` → `"status": "reset"`
-- `all` → `"status": "cleaned"`
-- `delete-all` → `"status": "deleted"`
-- `full-reset` → `"status": "reset"` with extra counts for the sample data that was re-seeded
+Things to know:
 
-`full-reset` adds `beneficiaries`, `instruments`, and `payouts` counts so the
-dashboard can render a confirmation toast without a second call:
+- The endpoint exists only in the sandbox (`https://api.antonpayments.dev`). In production it answers `404`.
+- It requires an `Idempotency-Key`. See [Idempotency](/api-reference/idempotency).
+- The amount must be greater than zero (otherwise `422 amount_invalid`) and use no more decimal places than the currency allows (otherwise `422 amount_precision_invalid`). An amount that is not a decimal string is `400 type_mismatch`.
+- A currency the sandbox cannot fund is `422 unsupported_sandbox_currency`.
+- Calls are rate limited per account. See [Rate limits](/api-reference/rate-limits).
 
-```json
-{
-  "status": "reset",
-  "scope": "full-reset",
-  "merchant_id": "mer_01HX...",
-  "beneficiaries": 4,
-  "instruments": 4,
-  "payouts": 4
-}
-```
+Check the result with `GET /v1/balances`.
 
-## Seed sample beneficiaries
-
-Creates a curated set of realistic beneficiaries across multiple countries and payment methods — useful for populating your UI or testing country-specific edge cases:
-
-```bash
-curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-beneficiaries \
-  -X POST \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
-```
-
-Response:
-
-```json
-{
-  "status": "seeded",
-  "merchant_id": "mer_01HX...",
-  "beneficiaries": 4,
-  "instruments": 4
-}
-```
-
-`beneficiaries` is the number of beneficiary records created; `instruments`
-is the number of payment instruments attached across those beneficiaries
-(usually one per beneficiary, but kept separate so the response shape stays
-honest if the seeder later creates multi-instrument beneficiaries).
-
-The beneficiaries created include a mix of `individual` and `business` types, spanning several corridors — enough variety to exercise most payout flows without you having to construct PII by hand.
-
-## Seed sample payouts
-
-Creates payouts in a mix of states — `completed`, `failed`, `cancelled`, `manual_review`, and in-flight — so you can validate your UI and webhook handling against every outcome:
-
-```bash
-curl https://api.antonpayments.dev/v1/merchant/sandbox/seed-payouts \
-  -X POST \
-  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN"
-```
-
-```json
-{
-  "status": "seeded",
-  "merchant_id": "mer_01HX...",
-  "created": 4
-}
-```
-
-`created` is the number of sample payouts created — one per seeded
-beneficiary, cycling through the four outcome triggers (happy path, slow,
-return, failure).
-
-**Requires seeded beneficiaries first.** Running seed-payouts with no beneficiaries returns `422 no_beneficiaries`. Call seed-beneficiaries first, or use `?scope=full-reset` on the reset endpoint which seeds both.
-
-## Using these in CI
-
-A recommended CI pattern:
+## A typical test run
 
 <Steps>
-  <Step title="Before each test run, reset">
-    `POST /v1/merchant/sandbox/reset?scope=delete-all` to guarantee a clean slate.
+  <Step title="Fund a balance">
+    `POST /v1/sandbox/deposits` in the currency you pay from.
   </Step>
-  <Step title="Seed any baseline data your tests assume">
-    If your tests need a starting population (e.g., dashboard snapshot tests), call `seed-beneficiaries` and `seed-payouts`.
+  <Step title="Create a beneficiary and instrument">
+    Use `POST /v1/beneficiaries` and `POST /v1/instruments`, as in the [payout guide](/guides/send-a-payout).
   </Step>
-  <Step title="Run your tests">
-    Exercise your real integration against the seeded state.
-  </Step>
-  <Step title="Between test suites, reset scoped to balances">
-    `?scope=balances` is faster than a full reset — keeps your seeded data, resets funding state.
+  <Step title="Send a payout">
+    `POST /v1/payouts`, then watch it move through its statuses by [webhook](/api-reference/webhook-events) or with `GET /v1/payouts/{id}`.
   </Step>
 </Steps>
 
-Rate limits apply across the hour: 10 resets per merchant per hour. In a heavy-test CI setup, either share a merchant across workers carefully, or provision multiple sandbox merchants.
+## What is different from production
 
-## Triggering specific scenarios (future)
-
-Sandbox seeders produce a curated distribution — payouts in mixed states, beneficiaries across corridors. For deterministic triggering of specific engine verdicts, screening hits, or rail failures, that's forthcoming functionality — when it lands it'll use the `?simulate=` query parameter on `POST /v1/payouts` (sandbox-only). Watch the [changelog](/changelog) for when it ships.
-
-## What's different from production
-
-See [Sandbox Overview](/sandbox/overview) for the full list. Key points:
-
-- Rail submission is mocked — no real banks are contacted
-- Timing is compressed — sandbox payouts transition to `completed` in seconds
-- Real OFAC screening runs, but you can trigger deterministic outcomes using specific test beneficiaries
-- All authentication, authorization, webhook signing, and state-machine behavior is identical to production
+See the [Sandbox overview](/sandbox/overview). Rail submission is mocked, timing is compressed, and everything else (authentication, validation, idempotency, rate limits, webhook signing and the payout status flow) behaves as in production.
 
 ## Next steps
 
 <CardGroup cols={2}>
   <Card title="Sandbox overview" icon="flask" href="/sandbox/overview">
-    What sandbox is, and how it differs from production.
+    What the sandbox is, and how it differs from production.
   </Card>
   <Card title="Going live" icon="rocket" href="/guides/going-live">
-    Checklist for promoting from sandbox to production.
+    Checklist for moving from sandbox to production.
   </Card>
 </CardGroup>

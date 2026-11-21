@@ -3,30 +3,34 @@ title: "Decisions and Next Actions"
 description: "Understand Intelligence decisions, risk levels, and next actions."
 ---
 
-Anton Intelligence peers return evidence. The orchestrator makes the final decision.
+Anton Intelligence gathers evidence about the subject and returns one decision. You branch on `decision`, and read `reasons` and `required_actions` to see what to do next.
 
 ## Decisions
 
 | Decision | Meaning |
 |---|---|
-| `approve` | No meaningful evidence, or evidence was cleared by contradictions |
-| `review_auto` | Possible match that needs more data or vault enrichment |
-| `review_manual` | High-risk or incomplete evidence requires human review |
-| `decline` | High-confidence prohibited evidence |
+| `approve` | No meaningful adverse evidence, or the evidence was cleared. |
+| `review` | Needs a closer look. `reasons` says why and `required_actions` says what you can do. |
+| `decline` | High-confidence adverse evidence. Do not continue the flow. |
 
-## Risk levels
+## Tiers
 
-`low`, `medium`, `high`, `critical`
+`score` runs from 0 to 1000, and higher is worse. `tier` is its band: `low`, `medium`, `high` or `critical`.
 
-## Next actions
+## Reasons
 
-| Next action | Meaning |
+| Reason | Meaning |
 |---|---|
-| `none` | No follow-up required |
-| `request_more_information` | Ask for missing disambiguators such as date of birth or address |
-| `manual_review` | Route to compliance review |
-| `decline` | Do not continue the flow |
+| `watchlist_review` | A possible or confirmed list match needs review. |
+| `identity_unverified` | The identity could not be confirmed. |
+| `information_incomplete` | Details needed for a confident answer were missing. |
+| `elevated_risk` | The risk is elevated, or the reason is not one of the others. |
 
-## Automated review
+## Required actions
 
-`review_auto` means the deterministic policy found possible evidence but needs more data before manual review or decline. The response includes `next_action: "request_more_information"` and repeats the missing fields in both `missing_disambiguators` and `summary.missing_fields`.
+| Action | What to do |
+|---|---|
+| `provide_missing_information` | Resubmit with the missing details. |
+| `verify_identity` | Verify the subject's identity with a [verification subject](/guides/verifications). |
+
+Reasons and actions can gain new values. Treat a value you do not know as the generic case.
