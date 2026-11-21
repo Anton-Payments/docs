@@ -99,6 +99,7 @@ Each delivery also carries these HTTP headers:
 | --- | --- |
 | `X-Webhook-ID` | The event `id`. |
 | `X-Webhook-Event` | The event type. |
+| `User-Agent` | `AntonPayments-Webhook/1.0`. The version can change, so don't match it exactly. |
 | `X-Webhook-Timestamp` | Unix seconds when the delivery was signed. |
 | `X-Webhook-Signature` | One or more `v1={hex}` HMAC-SHA256 signatures. See [Webhook signing](/concepts/webhook-signing). |
 

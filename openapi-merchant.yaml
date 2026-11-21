@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=d8c9c3174f5158280f7d48f242dd9501c98ea48fa15ccb5cdc82deb7ebaa5e17
+# anton-spec-sync sha256=195887486ac671e550e420879b1e9bbbf0e222e38ecf0b816b3349c21f1eef5e
 openapi: 3.1.0
 
 info:
@@ -268,10 +268,10 @@ paths:
         - name: decision
           in: query
           required: false
-          description: One or more of `approve`, `review_manual`, `decline`, `review_auto`, comma-separated.
+          description: One or more of `approve`, `review`, `decline`, comma-separated. These are the values an evaluation's `decision` shows.
           schema:
             type: string
-          example: review_manual,decline
+          example: review,decline
         - name: event_type
           in: query
           required: false
@@ -468,7 +468,7 @@ paths:
           description: A page of reviews.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z"}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"eval_dbvqsbiukoh4g0rnek2g","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z"}],"has_more":false,"next_cursor":null}
               schema:
                 type: object
                 required: [object, data, has_more, next_cursor]
@@ -612,7 +612,7 @@ paths:
           description: The review.
           content:
             application/json:
-              example: {"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"iev_conf1","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}],"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z"}
+              example: {"id":"irv_dbvqsbiukoh4g0rnek30","object":"review","livemode":false,"status":"open","number":"RV-0001","kind":"possible_sanctions_match","priority":"high","outcome":null,"source":"evaluation","evaluation_id":"eval_dbvqsbiukoh4g0rnek2g","linked_evaluation_id":null,"linked_review_id":null,"subject":{"type":"person","display":"A*** L***","reference":null},"open_reason":null,"opened_by":{"type":"system"},"owner_id":null,"due_at":"2026-11-20T13:00:00.000Z","paused_at":null,"overdue":false,"closed_at":null,"matched_entries":1,"opening_note_recorded":false,"pending_decision_id":null,"decisions":[],"notes":[],"events":[{"kind":"opened","actor":{"type":"system"},"summary":"Opened automatically from your screening","created_at":"2026-11-20T02:19:26.332Z"}],"created_at":"2026-11-20T02:19:26.327Z","updated_at":"2026-11-20T02:19:26.327Z"}
               schema:
                 $ref: '#/components/schemas/ReviewDetail'
         '400':
@@ -859,8 +859,8 @@ paths:
       summary: List verification subjects
       operationId: listVerificationSubjects
       description: |
-        Pages the merchant's verification subjects, newest first. Each row carries a single
-        synthesized .
+        Pages the merchant's verification subjects, newest first. Each row carries a summary of its
+        current verification.
 
         `display_name` is **masked** on every read (`J•••••• D••`). The true name is available only
         through the dashboard's audited reveal flow — it is never returned on this surface.
@@ -994,7 +994,7 @@ paths:
                   link_expires_in_days: 30
       responses:
         '201':
-          description: Subject created; first verification verification opened.
+          description: Subject created; its first verification opened.
           content:
             application/json:
               schema:
@@ -1070,7 +1070,7 @@ paths:
       summary: Re-verify a subject
       operationId: reverifySubject
       description: |
-        Opens a **new verification verification** for an existing subject (periodic KYC refresh, or a
+        Opens a **new verification** for an existing subject (periodic KYC refresh, or a
         material change in the subject's details). The prior verification history is preserved; the
         subject's current status now tracks the new verification. The response carries the new verification
         with its secret-once `hosted_link`; when the subject has an email on file, Anton also
@@ -1136,8 +1136,8 @@ paths:
       description: |
         Mints a fresh one-time hosted link for the **same verification** and re-delivers it to the
         subject's email when one is on file. Use when the previous link expired unused or never
-        arrived. Fails with `422` on verifications in a terminal state (approved, declined, expired,
-        revoked) — open a new verification via re-verify instead.
+        arrived. Fails with `409 invalid_verification_state` on verifications in a terminal state (approved,
+        declined, expired, revoked) — open a new verification via re-verify instead.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1246,7 +1246,7 @@ paths:
       description: |
         Terminally cancels an in-flight verification and expires its hosted link. The verification moves to
         `revoked` and cannot be resumed — open a new verification via re-verify if the subject should
-        be verified later. Fails with `422` when the verification is already approved, declined or expired. Revoking one that is already revoked returns it unchanged.
+        be verified later. Fails with `409 invalid_verification_state` when the verification is already approved, declined or expired. Revoking one that is already revoked returns it unchanged.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1294,8 +1294,8 @@ paths:
         watchlist update. This refreshes the screening only; it does **not** re-open the verification
         or change its status (the prior decision is preserved in the audit trail). Responds `200`
         with the verification, whose embedded `screening` carries the fresh `status`, `evaluation_id`,
-        score, tier and reasons. Fails with `422` on verifications that have not been screened
-        yet (created, sent, in_progress) or are terminally cancelled (revoked, expired).
+        score, tier and reasons. Fails with `409 invalid_verification_state` on verifications that have not
+        been screened yet (created, sent, in_progress) or are terminally cancelled (revoked, expired).
 
         Not the same as re-verify, which opens a new verification and re-collects identity.
       security:
@@ -2992,12 +2992,14 @@ paths:
         Initiate a payout from your merchant balance to a beneficiary's payment
         instrument. The payout goes through compliance screening and risk
         evaluation before it is submitted to a rail — see
-        [How Anton Evaluates Payouts](/how-anton-evaluates-payouts).
+        [How Anton Evaluates Payouts](/concepts/how-anton-evaluates-payouts).
 
-        The payout is returned in status `created` (or `pending_approval` when
-        your own approval policy needs a second person) and moves on
-        asynchronously. Its status changes are delivered as `payout.*` webhook
-        events. Do not poll.
+        The payout is usually returned in status `processing`: screening starts
+        as it is created. It is `on_hold` when it goes to review. When your own
+        approval policy needs a second person, it moves to `pending_approval`
+        after screening. Treat `created` the same way: in progress. It moves on
+        asynchronously, and its status changes are delivered as `payout.*`
+        webhook events. Do not poll.
 
         Both `source_amount` and `destination_amount` are required, with
         `fixed_side` (`fixed_source` or `fixed_destination`) saying which one is
@@ -3298,7 +3300,7 @@ paths:
           description: The payout.
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"100.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z"}
+              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"555.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3379,11 +3381,13 @@ paths:
       summary: Cancel a payout
       operationId: cancelPayout
       description: |
-        Cancel a payout that has not been submitted to a rail: possible while its status is `created`,
-        `pending_approval` or `processing` before submission. A payout that is `on_hold` cannot be cancelled
-        until the hold ends (`409 payout_on_hold`); one that is already past submission, or that `failed`, is
-        `409 payout_not_cancellable`, and so is one that failed with `cannot_be_processed`, always with the same
-        wording whatever the reason. The request takes no body.
+        Cancel a payout that has not been submitted to a rail. A payout can be cancelled while its status is
+        `created` or `pending_approval`, and while it is `processing` early on: up to the point it is
+        submitted to the rail, which the response does not show, so a `processing` payout may or may not be
+        cancellable. A payout that is `on_hold` cannot be cancelled until the hold ends (`409
+        payout_on_hold`). One that is already past submission, or that is `sent`, `completed`, `returned`,
+        `cancelled` or `failed`, is `409 payout_not_cancellable`, and so is one that failed with
+        `cannot_be_processed`, always with the same wording whatever the reason. The request takes no body.
 
         Any debited source funds (source amount, fee and buffer) return to your balance on success.
 
@@ -4241,6 +4245,7 @@ paths:
                   label: Primary EUR account
                   default: true
                   credentials:
+                    account_holder_name: Jane Smith
                     iban: DE89370400440532013000
       responses:
         '201':
@@ -5084,8 +5089,9 @@ paths:
                     }
         '400':
           description: >-
-            An unknown query parameter, a filter value that is not valid, a timestamp that does not parse, a
-            `limit` outside 1 to 100 (`invalid_limit`) or a malformed `cursor` (`cursor_invalid`).
+            An unknown query parameter (`unknown_parameter`), a filter value that is not valid or a timestamp
+            that does not parse (`invalid_request`), a `limit` outside 1 to 100 (`invalid_limit`) or a malformed
+            `cursor` (`cursor_invalid`).
           content:
             application/json:
               schema:
@@ -5178,8 +5184,8 @@ paths:
                 stx_01,2026-11-19T14:03:22.104Z,payout,debit,completed,-40.00,USD,INV-1042,,pay_01,
         '400':
           description: >-
-            An unknown query parameter, a filter value that is not valid or a timestamp that does not parse
-            (`invalid_request`).
+            An unknown query parameter (`unknown_parameter`), or a filter value that is not valid or a
+            timestamp that does not parse (`invalid_request`).
           content:
             application/json:
               schema:
@@ -5628,7 +5634,21 @@ paths:
 
         The URL must use `https://` (enforced outside development) and be publicly reachable: private, loopback and metadata addresses are refused. The response carries the signing `secret`, shown once: store it now, Anton cannot show it again. Rotate it any time with `POST /v1/webhooks/{id}/secret/rotate`. Requires an `Idempotency-Key`; the secret is returned once: a replay with the same key returns the same subscription with `secret` set to `null`.
 
-        See [Webhook Events](/api-reference/webhook-events) for the event catalog and [Webhook Signing](/api-reference/webhook-signing) for verification.
+        See [Webhook Events](/concepts/webhook-events) for the event catalog and [Webhook Signing](/concepts/webhook-signing) for verification.
+
+        **Delivery.** Each delivery is a `POST` with a JSON body and these headers:
+
+        | Header | Value |
+        |---|---|
+        | `X-Webhook-ID` | The event's id. The same on every retry of one event; use it to drop duplicates. |
+        | `X-Webhook-Event` | The event type, such as `payout.completed`. |
+        | `X-Webhook-Timestamp` | When this attempt was signed, in Unix seconds. |
+        | `X-Webhook-Signature` | One or more comma-separated `v1=<hex>` entries. |
+        | `User-Agent` | `AntonPayments-Webhook/1.0`. The version may change; don't match it exactly. |
+
+        Each `v1=` entry is the lowercase hex HMAC-SHA256 of `{X-Webhook-Timestamp}.{raw request body}`, keyed with the endpoint's signing secret. The current secret's signature comes first. During a rotation's grace window, the previous secret's signature follows it. Accept the delivery if any entry matches the one you compute.
+
+        Your endpoint has **30 seconds** to answer. Only a `2xx` counts as delivered. Redirects are not followed, so a `3xx` is a failed attempt, as are any other status, a timeout and a connection error. A failed attempt is retried with backoff.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -8186,7 +8206,7 @@ components:
 
         Tokens expire in **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
 
-        **Scopes** (requested at `POST /oauth/token`, returned in the `scope` response field):
+        **Scopes** (granted to the credential when you register it in the merchant portal; the token request takes no `scope` parameter, and the token response lists the credential's scopes in its `scope` field):
 
         | Scope | Grants |
         |---|---|
@@ -8396,6 +8416,15 @@ components:
                   message: missing or invalid credentials
                   doc_url: https://docs.antonpayments.com/api-reference/errors#unauthorized
                   request_id: req_01JD3XB7Q2
+    Forbidden:
+      description: >-
+        Authenticated, but not permitted for this operation. A sandbox credential used against production is
+        `key_environment_mismatch`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
             wrong_environment:
               summary: Sandbox credential used against production
               value:
@@ -8405,19 +8434,14 @@ components:
                   message: test tokens are not allowed in production
                   doc_url: https://docs.antonpayments.com/api-reference/errors#key_environment_mismatch
                   request_id: req_01JD3XB7Q2
-    Forbidden:
-      description: Authenticated, but not permitted for this operation.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
     CapabilityForbidden:
       description: |
         The account capability or credential scope required by this endpoint is missing.
         `capability_required` — the merchant account does not hold the required capability
         (e.g. an AI-compliance-only account calling a payout endpoint). `insufficient_scope` —
         the account holds it, but this credential was created without the matching scope.
-        Effective access is always `scopes ∩ capabilities`.
+        Effective access is always `scopes ∩ capabilities`. A sandbox credential used against production is
+        `key_environment_mismatch`.
       content:
         application/json:
           schema:
@@ -8440,6 +8464,15 @@ components:
                   code: insufficient_scope
                   message: this endpoint requires a credential with the "payouts" scope
                   doc_url: https://docs.antonpayments.com/api-reference/errors#insufficient_scope
+                  request_id: req_01JD3XB7Q2
+            wrong_environment:
+              summary: Sandbox credential used against production
+              value:
+                error:
+                  type: permission_error
+                  code: key_environment_mismatch
+                  message: test tokens are not allowed in production
+                  doc_url: https://docs.antonpayments.com/api-reference/errors#key_environment_mismatch
                   request_id: req_01JD3XB7Q2
     ModuleNotEnabled:
       description: |
@@ -8531,6 +8564,10 @@ components:
         cannot check the limit for a moment, the request is served without a
         limit check and the three headers are left out rather than guessed:
         treat a response without them as "limit unknown", not "unlimited".
+        The headers are the contract: they report the limit that applies to
+        the request, and the numbers behind them can change. Limits are kept
+        per IP address across the API, and per account on some routes (for
+        example `/v1/intelligence/*`, exports and test deliveries).
       headers:
         Retry-After:
           $ref: '#/components/headers/Retry-After'
@@ -8752,7 +8789,6 @@ components:
             - quote_mismatch
             - quote_not_locked
             - rate_limit_exceeded
-            - rate_limited
             - rate_limited_sandbox_deposit
             - reference_not_allowed
             - resource_id_invalid
@@ -9646,13 +9682,14 @@ components:
         - `sent`: the rail confirmed dispatch.
         - `completed`: the beneficiary received the funds.
         - `returned`: the funds came back after being sent.
-        - `cancelled`: cancelled by you before submission.
+        - `cancelled`: cancelled before submission: by you, or by Anton (an approval that expired, or a held payout Anton closed).
         - `failed`: the payout did not go through, and its status will not change again. `failure_code` says what the rail reported, or is
           `cannot_be_processed` when we could not process the payout (no further detail is given).
 
         Transitions: `created` to `pending_approval`, `processing` or `on_hold`; `pending_approval` to
         `processing` or `cancelled`; `processing` to `on_hold`, `sent`, `failed` or `cancelled`; `on_hold` to
-        `processing`, `cancelled` or `failed`; `sent` to `completed`, `failed` or `returned`. `completed`,
+        `processing`, `cancelled` or `failed` (only Anton moves an `on_hold` payout to `cancelled`; you
+        cannot); `sent` to `completed`, `failed` or `returned`. `completed`,
         `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
       enum:
         - created
@@ -12897,7 +12934,7 @@ components:
       type: object
       description: |
         A person or business you verify. `display_name` is **masked on every read**
-        (`A•• L••••••••`); Anton stores the true name only as a vault token reference, and it is
+        (`A•• L••••••`); Anton stores the true name only as a vault token reference, and it is
         revealable solely through the dashboard's audited, admin-only reveal flow. `status` is the status of the
         current verification. `verifications` is present on create and retrieve (newest first) and absent from
         list rows.

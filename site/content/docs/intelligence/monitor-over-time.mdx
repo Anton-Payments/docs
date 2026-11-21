@@ -46,7 +46,7 @@ The evaluation does not echo `entity`, so nothing on it tells you which subject 
 
 ## Find earlier runs
 
-[`GET /v1/intelligence/evaluations`](/reference/intelligence/list-evaluations) pages your evaluations, newest first. Filter with `event_type=monitoring.evaluate` for monitoring runs, and bound the dates with `created_after` and `created_before`, which must be RFC 3339 UTC with milliseconds and a `Z`, such as `2026-11-01T00:00:00.000Z`. An unknown value is a `400`, never an empty list.
+[`GET /v1/intelligence/evaluations`](/reference/intelligence/list-evaluations) pages your evaluations, newest first. Filter with `event_type=monitoring.evaluate` for monitoring runs, and with `decision` (`approve`, `review` or `decline`, comma-separated) for the outcome, and bound the dates with `created_after` and `created_before`, which must be RFC 3339 UTC with milliseconds and a `Z`, such as `2026-11-01T00:00:00.000Z`. An unknown value is a `400`, never an empty list.
 
 ## Events
 

@@ -48,6 +48,7 @@ Every delivery is the same envelope. The payout is in `data.object`, and the eve
 | --- | --- |
 | `X-Webhook-ID` | The event `id`. Deduplicate on it. |
 | `X-Webhook-Event` | The event type. |
+| `User-Agent` | `AntonPayments-Webhook/1.0`. The version can change, so don't match it exactly. |
 | `X-Webhook-Timestamp` | Unix seconds when the delivery was signed. |
 | `X-Webhook-Signature` | One or more `v1=` HMAC-SHA256 signatures. |
 

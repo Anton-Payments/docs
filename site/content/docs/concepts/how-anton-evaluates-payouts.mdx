@@ -38,7 +38,7 @@ You cannot disable the checks, override them at submission or skip them with a f
 
 | Status | Meaning | What to do |
 |---|---|---|
-| `created` | Accepted; checks have not started. | Nothing. |
+| `created` | Accepted. Screening starts as the payout is created, so a new payout usually reads `processing` already. | Treat it as in progress. |
 | `pending_approval` | Waiting for a second person on your team to approve it, under your own approval policy. | Nothing. |
 | `processing` | Being checked and prepared, or submitted to the rail. | Show it as in flight. |
 | `on_hold` | Held for review. `status_message` is the only text Anton gives. | Show a pending state, not an error. A held payout cannot be cancelled: the request returns `409 payout_on_hold`. |

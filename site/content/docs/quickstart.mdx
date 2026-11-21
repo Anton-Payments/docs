@@ -73,7 +73,6 @@ A payout spends a balance you already hold. In the sandbox, one call credits it;
 USD from your balance, EUR to the payee over SEPA. `fixed_side` says the payee gets exactly the `destination_amount`; Anton prices the other side. Amounts are strings.
 
 <RunStep title="Create the payout" method="POST" path="/v1/payouts"
-  respond={{ status: "created" }}
   headers={{ "Idempotency-Key": "payout-PO-8821" }}
   body={{
     beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",

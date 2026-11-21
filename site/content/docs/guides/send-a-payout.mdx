@@ -29,7 +29,6 @@ Who pays the fee is a separate call. `fee_bearer` defaults to `merchant`; set it
 ## Send the payout
 
 <RunStep title="Create the payout" method="POST" path="/v1/payouts"
-  respond={{ status: "created" }}
   headers={{ "Idempotency-Key": "payout-PO-8821" }}
   body={{
     beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
@@ -45,7 +44,7 @@ Who pays the fee is a separate call. `fee_bearer` defaults to `merchant`; set it
     purpose: "supplier_payment",
     reference: "PO-8821"
   }}>
-  It comes back `created`, or already `processing` when the checks finish fast. It reads `pending_approval` when your own approval rules want a second person first.
+  It usually comes back `processing`, because screening starts as the payout is created, or `on_hold` if it goes to review. When your own approval rules want a second person, it moves to `pending_approval` after screening.
 </RunStep>
 
 The fields that aren't obvious:
@@ -63,10 +62,10 @@ If a person in your product pressed the button, send `session` with their IP, ti
 
 Anton owns the payout until the rail has it. From `sent` on, the bank or the chain sets the pace, and every `status` change reaches you as its own event.
 
-<Lifecycle states="created, processing, sent, completed"
-  notes="Accepted | Checked, then submitted | Rail confirmed dispatch | Payee received funds"
-  edges="Anton starts checks | Rail dispatches | Rail settles">
-  Statuses that can branch off this path: `pending_approval` (a second person on your team must approve), `on_hold`, `failed`, `returned` and `cancelled`. `completed`, `returned`, `cancelled` and `failed` are final.
+<Lifecycle states="processing, sent, completed"
+  notes="Checked, then submitted | Rail confirmed dispatch | Payee received funds"
+  edges="Rail dispatches | Rail settles">
+  Statuses that can branch off this path: `pending_approval` (a second person on your team must approve), `on_hold`, `failed`, `returned` and `cancelled`. `completed`, `returned`, `cancelled` and `failed` are final. A payout that reads `created` is in progress too.
 </Lifecycle>
 
 `on_hold` is a review, and it never comes with a reason. Show your user a pending state, not an error. It resumes as `processing` or ends as `cancelled` or `failed`, and nobody can cancel it while it waits.
@@ -77,7 +76,7 @@ The events worth a handler: `payout.completed`, `payout.failed`, `payout.returne
 
 ## Cancel a payout
 
-Cancel works until Anton hands the payout to a rail: from `created`, from `pending_approval`, and early in `processing`, while the checks are still running. Call [`POST /v1/payouts/{id}/cancel`](/reference/payouts/cancel-payout) with an `Idempotency-Key` and no body, and the amount, fee and buffer all come back. A held payout answers `409 payout_on_hold`; one already on its way answers `409 payout_not_cancellable` and can only finish.
+Cancel works until Anton hands the payout to a rail: from `created`, from `pending_approval`, and early in `processing`. The payout doesn't show whether it has been submitted yet, so a `processing` payout is worth trying and may answer `409`. Call [`POST /v1/payouts/{id}/cancel`](/reference/payouts/cancel-payout) with an `Idempotency-Key` and no body, and the amount, fee and buffer all come back. A held payout answers `409 payout_on_hold`; one already on its way answers `409 payout_not_cancellable` and can only finish.
 
 ## When it goes wrong
 
