@@ -15,13 +15,14 @@ const firstSentence = (s: string) => {
 export function latestEntries(n = 3): LatestEntry[] {
   const src = readFileSync(join(process.cwd(), 'content/docs/changelog.mdx'), 'utf8');
   const out: LatestEntry[] = [];
-  const re = /<Entry\s+date="([^"]+)"\s+title="([^"]+)"[^>]*>([\s\S]*?)<\/Entry>/g;
+  const re = /<Entry\s+date="([^"]+)"\s+title="([^"]+)"([^>]*)>([\s\S]*?)<\/Entry>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) && out.length < n) {
-    const [, date, title, body] = m;
+    const [, date, title, attrs, body] = m;
+    const lede = attrs.match(/lede="([^"]+)"/)?.[1];
     const lines = body.split('\n').map((l) => l.trim()).filter(Boolean);
     const para = lines.find((l) => !/^(#|<|\||```)/.test(l));
-    const summary = para ? firstSentence(clean(para)) : '';
+    const summary = lede ? firstSentence(lede) : para ? firstSentence(clean(para)) : '';
     const id = `${date}-${title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     out.push({ date, title, summary, href: `/changelog#${id}` });
   }

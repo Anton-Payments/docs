@@ -1,12 +1,18 @@
 ---
 title: "Changelog"
-description: "Every change that affects your integration, newest first."
+description: "Nothing you build breaks without a new version date. Everything that did change is here, with what it means for your code."
 kind: changelog
 ---
 
 <ChangelogFilter>
 
-<Entry date="2026-12-01" title="API version 2026-12-01" tags="Versioning">
+<Entry date="2026-12-01" title="API version 2026-12-01" tags="Versioning" feature
+  lede="Versions are dates now, and this is the first one. Every account starts here, and nothing built against it breaks without a new date."
+  action="If you built against earlier documentation, rename the fields and routes above. The full list is in the notes.">
+
+<Diff caption="If you built against earlier documentation" lines={["- dest_amount", "+ destination_amount", "- fixed_side: \"fixed_dest\"", "+ fixed_side: \"fixed_destination\"", "- PUT /v1/beneficiaries/{id}/pii", "+ PATCH /v1/beneficiaries/{id}/pii", "- POST /v1/fx/exchange", "+ POST /v1/fx/exchanges"]} />
+
+<Notes>
 
 This is the first dated version of the Anton API and the one every account starts on. It describes the full `/v1` surface: authentication, beneficiaries and instruments, payouts and batches, balances and accounts, FX, webhooks, verifications and Anton Intelligence. Download the [OpenAPI description](/openapi-merchant.yaml) to generate a client or import the API into a tool such as Postman.
 
@@ -65,25 +71,48 @@ If you built against earlier documentation:
 - A webhook signing secret can no longer be read back; rotate to get a new one.
 - Static API keys are not accepted; use OAuth client credentials with DPoP.
 
+</Notes>
+
 </Entry>
 
-<Entry date="2026-11-18" title="Intelligence requires credentials" tags="Removed">
+<Entry date="2026-11-18" title="Intelligence requires credentials" tags="Removed"
+  lede="Intelligence no longer answers anyone who asks. Every evaluation route needs your credentials and the intelligence scope, sandbox included."
+  action="Call Intelligence with your sandbox credentials. A request without them is a 401.">
+
+<Diff caption="Every /v1/intelligence/evaluations request" lines={["  POST /v1/intelligence/evaluations", "+ Authorization: DPoP <access token>", "+ DPoP: <proof>"]} />
+
+<Notes>
 
 ### Removed
 
 - **The anonymous public test surface for Anton Intelligence.** Every `/v1/intelligence/evaluations` route now requires OAuth + DPoP credentials with the `intelligence` scope, in every environment, sandbox included. A request without credentials returns `401`. Use your sandbox credentials to try the API.
 
+</Notes>
+
 </Entry>
 
-<Entry date="2026-11-09" title="payout.on_hold webhook event" tags="Changed">
+<Entry date="2026-11-09" title="payout.on_hold webhook event" tags="Changed"
+  lede="Same moment, clearer name. The event that fires when a payout is held for review is now payout.on_hold."
+  action="Subscribe to payout.on_hold in place of payout.screening_failed.">
+
+<Diff caption="Your webhook subscription" lines={["  events: [", "-   \"payout.screening_failed\",", "+   \"payout.on_hold\",", "  ]"]} />
+
+<Notes>
 
 ### Changed
 
 - **`payout.screening_failed` is renamed `payout.on_hold`.** The event fires at the same point as before. Subscribe to `payout.on_hold` in place of `payout.screening_failed`. Payout statuses are unchanged.
 
+</Notes>
+
 </Entry>
 
-<Entry date="2026-10-21" title="Filters on the evaluations list" tags="Added,Changed">
+<Entry date="2026-10-21" title="Filters on the evaluations list" tags="Added,Changed"
+  lede="Find the evaluations you care about without paging through all of them. An unknown filter value is now refused, never answered with an empty list.">
+
+<Endpoints items={[["GET", "/v1/intelligence/evaluations", "decision, event_type, risk_level, evaluated_after, evaluated_before"]]} />
+
+<Notes>
 
 ### Added
 
@@ -93,9 +122,17 @@ If you built against earlier documentation:
 
 - **Unknown filter values are rejected** with `400 validation_error`, never an empty list.
 
+</Notes>
+
 </Entry>
 
-<Entry date="2026-10-21" title="Transactions: direction, filters, single reads and export" tags="Added,Changed">
+<Entry date="2026-10-21" title="Transactions: direction, filters, single reads and export" tags="Added,Changed"
+  lede="Every movement now says which way it went and what caused it, and the whole ledger exports as CSV."
+  action="If you held a transactions cursor from before this release, start again from the first page.">
+
+<Endpoints items={[["GET", "/v1/transactions/{id}", "One movement"], ["GET", "/v1/transactions/export", "The ledger as CSV, audited"], ["GET", "/v1/fx/exchanges/{id}", "An exchange with its markup and fee"]]} />
+
+<Notes>
 
 ### Added
 
@@ -113,11 +150,17 @@ If you built against earlier documentation:
 - **Transaction list cursors.** Pages no longer repeat or skip a transaction that arrives while you page. A cursor issued before this change returns `400 cursor_invalid`; start again from the first page.
 - **`GET /v1/fx/exchanges` filters** are documented as what the API accepts: `status` and `currency`.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="2026-09-24" title="Payout holds, cannot_be_processed, and RFI responses" tags="Added,Changed,Deprecated">
+<Entry date="2026-09-24" title="Payout holds, cannot_be_processed, and RFI responses" tags="Added,Changed,Deprecated"
+  lede="A payout under review now says so, and can't be cancelled until the review ends. A payout that can't be processed fails with its own code."
+  action="Treat a held payout as waiting, not failed, and stop cancelling it while it's held.">
+
+<Codes items={[["409", "payout_on_hold", "Cancelling a payout under review"]]} />
+
+<Notes>
 
 ### Added
 
@@ -136,11 +179,16 @@ If you built against earlier documentation:
 
 - **`screening.hit` is no longer sent.** A payout under review shows `on_hold: true` and its status instead. Existing subscriptions keep working but receive no deliveries.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="2026-07-17" title="Machine credentials across the payout surface" tags="Added,Changed">
+<Entry date="2026-07-17" title="Machine credentials across the payout surface" tags="Added,Changed"
+  lede="A credential with the payouts scope can now do everything a payout integration needs, end to end. Reading a payee's personal details stays with people in the dashboard.">
+
+<Endpoints caption="Open to a payouts-scoped credential" items={[["POST", "/v1/payouts"], ["POST", "/v1/payouts/{id}/cancel"], ["POST", "/v1/beneficiaries"], ["POST", "/v1/fx/exchanges"], ["POST", "/v1/webhooks"]]} />
+
+<Notes>
 
 OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-movement mutation surface. Previously, machine callers could read but not mutate on several payout-surface endpoints; credential scopes now map directly to the permissions each endpoint requires, so a `payouts`-scoped credential creates and cancels payouts, manages beneficiaries and instruments, uploads and confirms batches, executes FX, and manages webhook subscriptions — end to end.
 
@@ -154,11 +202,16 @@ OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-
 - **Approval decisions stay human.** Payout approve/reject (maker-checker) rejects machine credentials — an approver must be a signed-in portal user distinct from the creator.
 - **Access tokens without a `scope` claim now grant nothing.** The transitional full-scope default for pre-scope-era tokens has been removed; every legitimately minted token has carried the claim since it shipped, and a claim-less token now fails closed.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="2026-07-16" title="Verifications API" tags="Added">
+<Entry date="2026-07-16" title="Verifications API" tags="Added"
+  lede="Identity checks for your own customers, hosted by Anton and sanctions-screened when they finish. What used to be dashboard-only is now an API.">
+
+<Endpoints items={[["POST", "/v1/verification-subjects", "Start a verification"], ["GET", "/v1/verification-stats", "Where your customers drop off"]]} />
+
+<Notes>
 
 Additive, non-breaking. The verification module — previously reachable only through the merchant dashboard — is now part of the public API for OAuth+DPoP credentials carrying the `intelligence` scope.
 
@@ -171,11 +224,16 @@ Additive, non-breaking. The verification module — previously reachable only th
 
 - **PII-free machine surface.** Subject and owner names are masked on every API read; the audited name-reveal and captured-document viewing remain dashboard-only (admin, per-access audit trail). Hosted links are secret-once: returned only by the response that minted them.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="2026-06-10" title="Capabilities, AI-Compliance tier, authenticated Intelligence" tags="Added,Changed">
+<Entry date="2026-06-10" title="Capabilities, AI-Compliance tier, authenticated Intelligence" tags="Added,Changed"
+  lede="What an account can do and what a credential may do are now two separate things, and Intelligence runs under your own credentials.">
+
+<Codes items={[["403", "capability_required", "The account lacks the capability"], ["403", "insufficient_scope", "The credential lacks the scope"], ["409", "idempotency_in_flight", "The first attempt is still running"]]} />
+
+<Notes>
 
 Additive, non-breaking changes to the v1 contract. Existing integrations are unaffected: every existing account keeps both capabilities, and every existing credential behaves as full-scope.
 
@@ -191,11 +249,16 @@ Additive, non-breaking changes to the v1 contract. Existing integrations are una
 - **`X-RateLimit-*` headers documented in the OpenAPI spec.** `X-RateLimit-Limit` / `-Remaining` / `-Reset` (present on every response since v1.0.0) are now part of the published spec on the `429` response.
 - **OpenAPI 3.1 hygiene.** Nullable fields now use `type: [string, "null"]` per OpenAPI 3.1; the spec lints clean.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="2026-04-18" title="v1.0.0" tags="Added,Changed">
+<Entry date="2026-04-18" title="v1.0.0" tags="Added,Changed" feature
+  lede="The merchant contract froze. Amounts became decimal strings, every list moved to cursors, and a price could be pinned before a payout.">
+
+<Diff caption="Two habits it changed" lines={["- GET /v1/payouts?offset=50", "+ GET /v1/payouts?limit=25&cursor=<next_cursor>", "- 1234.5", "+ \"1234.50\""]} />
+
+<Notes>
 
 The v1.0.0 merchant contract is now frozen. Merchant integrations built against this surface will not break in minor or patch releases.
 
@@ -219,14 +282,12 @@ The v1.0.0 merchant contract is now frozen. Merchant integrations built against 
 - **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity — not even as booleans. Anton-network intelligence is aggregated only into opaque verification signals that are indistinguishable from external-provider outcomes.
 - **PII isolation.** All beneficiary PII and payment instrument details are tokenized in a secure vault. Raw values are returned only to signed-in admin users of the merchant dashboard.
 
----
+</Notes>
 
 </Entry>
 
-<Entry date="" title="Pre-v1.0.0 notes" tags="">
-
-Early access and beta entries are retained in internal changelogs. Anything on the merchant surface prior to 2026-04-18 should be treated as unsupported.
-
+<Entry date="" title="Before v1.0.0" tags=""
+  lede="Early access and beta. Anything on the merchant surface before 2026-04-18 is unsupported.">
 </Entry>
 
 </ChangelogFilter>

@@ -107,7 +107,7 @@ export default async function Page({ params }: Props) {
       <ConsolePage kind={d.kind} target={null} />
       <main className={`main ${twoPane ? 'g2' : ''}`} id="content">
         {routeFor(url) && <RouteBar url={url} />}
-        <div className="main-inner">
+        <div className={`main-inner ${d.kind === 'changelog' ? 'cl-page' : ''}`}>
           <div className="ph">
             <div className="ph-text">
               <div className="ph-top">
@@ -138,7 +138,7 @@ export default async function Page({ params }: Props) {
       </main>
       {twoPane ? (
         <GuidePane />
-      ) : (
+      ) : d.kind === 'changelog' ? null : (
         <Toc items={d.toc.map((t) => ({ title: t.title, url: t.url, depth: t.depth }))}>
           {next && (
             <Link href={next.url} className="next">

@@ -3,7 +3,7 @@ import { Children, cloneElement, isValidElement, type ComponentProps, type React
 import { BulbIcon, CheckIcon, InfoIcon, WarnIcon } from '@/components/shell/icons';
 import { CodeBlock, CodeTabs } from './code';
 import { RunStep } from './run-step';
-import { Entry, ChangelogFilter } from './changelog';
+import { Entry, ChangelogFilter, Notes, Diff, Endpoints, Codes } from './changelog';
 import { BeforeYouBegin } from './before';
 import { Decision, Choice } from './decision';
 
@@ -235,5 +235,5 @@ export const mdxComponents = {
   pre: CodeBlock,
   table: Table,
   Note, Info, Tip, Warning, Danger, Check, Card, CardGroup, Steps, Step, Accordion, AccordionGroup, CodeGroup, Tabs, Tab,
-  Decision, Choice, Lifecycle, Errors, ErrorRow, Endpoint, StatusPill, RunStep, Entry, ChangelogFilter, BeforeYouBegin,
+  Decision, Choice, Lifecycle, Errors, ErrorRow, Endpoint, StatusPill, RunStep, Entry, ChangelogFilter, Notes, Diff, Endpoints, Codes, BeforeYouBegin,
 };
