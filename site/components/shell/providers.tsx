@@ -21,7 +21,7 @@ function write(key: string, v: unknown) {
   }
 }
 
-/* ---------------- theme: light, dark, or follow the system ---------------- */
+/* ---------------- theme: light or dark. Until the reader picks one, it follows their system setting ---------------- */
 type Theme = 'light' | 'dark';
 export type ThemeMode = Theme | 'system';
 type ThemeState = { theme: Theme; mode: ThemeMode; setMode: (m: ThemeMode) => void; toggle: () => void };
