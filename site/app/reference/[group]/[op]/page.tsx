@@ -39,7 +39,7 @@ export default async function OperationPage({ params }: Props) {
     <>
       <ConsolePage
         kind="reference"
-        target={{ kind: 'request', title: op.title, request, response, hint: `Send calls ${op.method.toUpperCase()} ${op.path} in your sandbox. No real money moves.` }}
+        target={{ kind: 'request', title: op.title, request, response }}
       />
       <main className="main g2 ref" id="content">
         <div className="main-inner">

@@ -15,7 +15,6 @@ import { routeFor } from '@/lib/guide-route';
 import { Home, type HrefMap } from '@/components/home/home';
 import { ROUTES } from '@/lib/home-route';
 import { CORE_PATH, DOCS_NAV } from '@/lib/nav';
-import { PREVIEW_ACCOUNT } from '@/lib/mock';
 import { findOperation } from '@/lib/openapi';
 import { formatDate, latestEntries } from '@/lib/changelog';
 
@@ -99,14 +98,13 @@ export default async function Page({ params }: Props) {
   const section = d.section || sectionFor(url);
   const coreIdx = CORE_PATH.indexOf(url);
   const next = coreIdx >= 0 && coreIdx < CORE_PATH.length - 1 ? source.getPage(CORE_PATH[coreIdx + 1].slice(1).split('/')) : null;
-  const consoleTarget = d.kind === 'webhooks' ? { kind: 'stream' as const, title: 'Event stream', endpoint: PREVIEW_ACCOUNT.webhookUrl } : null;
   const crumbs = [section, ...(d.kicker ? d.kicker.split('·').map((s: string) => s.trim()) : [])].filter(Boolean) as string[];
   const pane = d.kind === 'guide' || d.kind === 'webhooks' ? paneInfo(page.path) : { hasCode: false, endpoints: [] };
   const twoPane = pane.hasCode;
 
   return (
     <>
-      <ConsolePage kind={d.kind} target={consoleTarget} />
+      <ConsolePage kind={d.kind} target={null} />
       <main className={`main ${twoPane ? 'g2' : ''}`} id="content">
         {routeFor(url) && <RouteBar url={url} />}
         <div className="main-inner">

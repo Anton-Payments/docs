@@ -19,7 +19,7 @@ export function RunStepClient({ title, request, response, stepId, reference, chi
   const ran = stepId && c.ranSteps.includes(stepId);
   const run = () => {
     c.setOpen(true);
-    c.send({ kind: 'request', title, request, response, stepId, hint: `Runs “${title}” against your sandbox.` });
+    c.send({ kind: 'request', title, request, response, stepId });
   };
   return (
     <div className="runstep" data-pane="run" data-title={title} data-req={JSON.stringify(request)} data-resp={response ? JSON.stringify(response) : undefined} data-step={stepId}>
@@ -29,7 +29,7 @@ export function RunStepClient({ title, request, response, stepId, reference, chi
         <b className="rs-t">{title}</b>
         {children && <div className="rs-d">{children}</div>}
         <div className="rs-actions">
-          <button className="btn sm pri" onClick={run}>Run in console</button>
+          <button className="btn sm pri" onClick={run}>Open in console</button>
           {reference && <Link href={reference} className="btn sm">Reference</Link>}
           <span className="rs-hint">The code is on the right</span>
         </div>

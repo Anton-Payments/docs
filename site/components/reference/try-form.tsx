@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useConsole, useSession } from '@/components/shell/providers';
+import { useConsole } from '@/components/shell/providers';
 import type { SampleInput } from '@/lib/samples';
-import { PREVIEW_ACCOUNT } from '@/lib/mock';
 
 export type FormField = { name: string; in: 'path' | 'query' | 'header' | 'body'; required: boolean; kind: 'string' | 'number' | 'boolean' | 'enum' | 'json'; options?: string[]; description?: string };
 
@@ -17,8 +16,7 @@ function initialValue(f: FormField, req: SampleInput): string {
 }
 
 export function TryForm({ initial, paramFields, bodyFields }: { initial: SampleInput; paramFields: FormField[]; bodyFields: FormField[] }) {
-  const { setRequest, setOpen, open, send, running } = useConsole();
-  const { signedIn } = useSession();
+  const { setRequest, setOpen, open } = useConsole();
   const all = [...paramFields, ...bodyFields];
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(all.map((f) => [f.in + ':' + f.name, initialValue(f, initial)])));
   const [showOptional, setShowOptional] = useState(false);
@@ -79,9 +77,7 @@ export function TryForm({ initial, paramFields, bodyFields }: { initial: SampleI
     <div>
       <div className="callout info" style={{ marginTop: 0 }}>
         <div className="cb">
-          {signedIn
-            ? <>Values come from the spec&apos;s example. When sign-in is connected, they&apos;ll come from your sandbox ({PREVIEW_ACCOUNT.name}), and Send will sign the request in your browser.</>
-            : <>You&apos;re signed out, so the form shows the spec&apos;s example values. Sign in to send requests to your sandbox.</>}
+          The form starts from the documented example. Change any value and the request in the console follows; the response shown is the documented one.
         </div>
       </div>
       {paramFields.length > 0 && (<><div className="form-sec">Parameters</div><div className="form">{paramFields.map(field)}</div></>)}
@@ -96,9 +92,7 @@ export function TryForm({ initial, paramFields, bodyFields }: { initial: SampleI
         </>
       )}
       <div className="row" style={{ marginTop: 20 }}>
-        <button className="btn pri" onClick={() => { setOpen(true); send(); }} disabled={running}>{running ? 'Sending…' : 'Send to sandbox'}</button>
-        {!open && <button className="btn" onClick={() => setOpen(true)}>Show console</button>}
-        <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>Sandbox only. Production keys can&apos;t be used here.</span>
+        {!open && <button className="btn pri" onClick={() => setOpen(true)}>Open in console</button>}
       </div>
     </div>
   );

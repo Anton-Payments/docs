@@ -1,6 +1,7 @@
 import 'server-only';
 import { loadSpec, findOperation } from '@/lib/openapi';
-import { allPages, endpointMarkdown, pageMarkdown } from '@/lib/page-markdown';
+import { endpointMarkdown, pageMarkdown } from '@/lib/page-markdown';
+import { search as searchIndex, snippet } from '@/lib/search-index';
 
 /*
   The docs MCP server: read-only, public, stateless. It speaks MCP's Streamable HTTP transport in
@@ -18,7 +19,7 @@ const TOOLS = [
   {
     name: 'search_docs',
     title: 'Search the Anton docs',
-    description: 'Full-text search across every Anton guide, concept page and API endpoint. Returns titles, URLs and the matching passage. Use read_page or get_endpoint for the full text.',
+    description: 'Full-text search across every Anton guide and concept page, every API endpoint, every error code and every request field. Returns titles, URLs and the matching passage. Use read_page or get_endpoint for the full text.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'What to look for, e.g. "fixed_side", "webhook signature", "422 amount_precision_invalid".' }, limit: { type: 'number', description: 'At most this many results (default 8, max 20).' } },
@@ -53,38 +54,12 @@ const TOOLS = [
   },
 ];
 
-const words = (q: string) => q.toLowerCase().split(/[^a-z0-9_.{}/-]+/).filter((w) => w.length > 1);
-
 function search(query: string, limit: number, origin: string) {
-  const terms = words(query);
-  if (!terms.length) return [];
-  const hits: { score: number; title: string; url: string; text: string }[] = [];
-  for (const p of allPages()) {
-    for (const sec of p.markdown.split(/\n(?=## )/)) {
-      const low = sec.toLowerCase();
-      const n = terms.reduce((a, t) => a + (low.split(t).length - 1), 0);
-      const all = terms.every((t) => low.includes(t));
-      if (!n || (!all && terms.length > 1 && n < 2)) continue;
-      const heading = sec.startsWith('## ') ? sec.slice(3, sec.indexOf('\n') > 0 ? sec.indexOf('\n') : undefined).trim() : '';
-      const anchor = heading ? '#' + heading.toLowerCase().replace(/`/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
-      const titleHit = terms.filter((t) => `${p.title} ${heading}`.toLowerCase().includes(t)).length;
-      const at = Math.max(0, low.indexOf(terms[0]) - 80);
-      hits.push({
-        score: n + (all ? 5 : 0) + titleHit * 4,
-        title: heading ? `${p.title} › ${heading}` : p.title,
-        url: origin + p.url + anchor,
-        text: (at ? '…' : '') + sec.slice(at, at + 320).replace(/\s+/g, ' ').trim() + '…',
-      });
-    }
-  }
-  for (const o of loadSpec().ops) {
-    const hay = `${o.title} ${o.method} ${o.path} ${o.summary || ''} ${o.group} ${o.description || ''}`.toLowerCase();
-    const n = terms.reduce((a, t) => a + (hay.split(t).length - 1), 0);
-    if (!n || !terms.every((t) => hay.includes(t))) continue;
-    hits.push({ score: n + 6, title: `${o.method.toUpperCase()} ${o.path} · ${o.title}`, url: origin + o.href, text: (o.summary || o.description || '').replace(/\s+/g, ' ').slice(0, 240) });
-  }
-  hits.sort((a, b) => b.score - a.score);
-  return hits.slice(0, limit);
+  return searchIndex(query).slice(0, limit).map((h) => ({
+    title: h.group === 'Guides' && h.sub && h.url.includes('#') ? `${h.sub} › ${h.title}` : h.method ? `${h.method.toUpperCase()} ${h.sub} · ${h.title}` : h.group === 'Errors' ? `${h.status} ${h.title} (error)` : h.group === 'Fields' ? `${h.title} (field, ${h.sub})` : h.title,
+    url: origin + h.url,
+    text: snippet(h.text, query, 320),
+  }));
 }
 
 const text = (t: string, isError = false) => ({ content: [{ type: 'text', text: t }], ...(isError ? { isError: true } : {}) });

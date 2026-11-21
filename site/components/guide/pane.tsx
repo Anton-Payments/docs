@@ -357,7 +357,7 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
   const run = () => {
     if (!cur || !req) return;
     c.setOpen(true);
-    c.send({ kind: 'request', title: cur.title, request: req, response: cur.resp, stepId: cur.stepId, hint: `Runs “${cur.title}” against your sandbox.` });
+    c.send({ kind: 'request', title: cur.title, request: req, response: cur.resp, stepId: cur.stepId });
   };
 
   const verb = cur?.req?.method.toLowerCase();
@@ -391,9 +391,9 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
         <div className="gp-foot">
           {cur?.kind === 'run' ? (
             <>
-              <span className="gp-sbx">Runs in your sandbox</span>
+              <span className="gp-id">Example values</span>
               <span style={{ flex: 1 }} />
-              <button type="button" className="btn accent sm" onClick={run}>Run in sandbox <span aria-hidden="true">→</span></button>
+              <button type="button" className="btn accent sm" onClick={run}>Open in console <span aria-hidden="true">→</span></button>
             </>
           ) : (
             <span className="gp-id dim">{items.length ? `${active + 1} of ${items.length} on this page` : ''}</span>

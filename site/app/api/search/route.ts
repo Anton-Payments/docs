@@ -1,38 +1,31 @@
-import { source } from '@/lib/source';
-import { loadSpec } from '@/lib/openapi';
+import { search, snippet, terms, type Group } from '@/lib/search-index';
 
-type Doc = { title: string; url: string; kind: 'page' | 'heading' | 'endpoint'; snippet?: string; method?: string; hay: string; weight: number };
+/*
+  The palette's search: grouped results (Guides, API reference, Errors, Fields), each with one
+  line showing the match and a preview. Groups come in order of their best hit.
+*/
 
-let index: Doc[] | null = null;
-function build(): Doc[] {
-  const docs: Doc[] = [];
-  for (const p of source.getPages()) {
-    const d = p.data;
-    docs.push({ title: d.title, url: p.url, kind: 'page', snippet: d.description, hay: `${d.title} ${d.description || ''}`.toLowerCase(), weight: 3 });
-    for (const t of d.toc || []) {
-      const text = typeof t.title === 'string' ? t.title : '';
-      if (text) docs.push({ title: `${d.title} › ${text}`, url: p.url + t.url, kind: 'heading', hay: text.toLowerCase(), weight: 2 });
-    }
-  }
-  for (const o of loadSpec().ops) {
-    docs.push({ title: o.title, url: o.href, kind: 'endpoint', method: o.method, snippet: `${o.method.toUpperCase()} ${o.path}`, hay: `${o.title} ${o.path} ${o.summary || ''} ${o.group}`.toLowerCase(), weight: 3 });
-  }
-  return docs;
-}
+const GROUPS: Group[] = ['Guides', 'API reference', 'Errors', 'Fields'];
 
 export function GET(req: Request) {
-  index ??= build();
-  const q = (new URL(req.url).searchParams.get('q') || '').toLowerCase().trim();
-  if (!q) return Response.json([]);
-  const terms = q.split(/\s+/);
-  const scored = index
-    .map((d) => {
-      if (!terms.every((t) => d.hay.includes(t))) return null;
-      const title = d.title.toLowerCase();
-      const score = d.weight + (title.startsWith(q) ? 5 : 0) + (title.includes(q) ? 3 : 0) + (d.kind === 'page' ? 1 : 0);
-      return { d, score };
-    })
-    .filter(Boolean) as { d: Doc; score: number }[];
-  scored.sort((a, b) => b.score - a.score);
-  return Response.json(scored.slice(0, 12).map(({ d }) => ({ title: d.title, url: d.url, kind: d.kind, snippet: d.snippet, method: d.method })));
+  const params = new URL(req.url).searchParams;
+  const q = (params.get('q') || '').trim();
+  const s = params.get('scope');
+  const scope = GROUPS.find((g) => g === s);
+  if (!q) return Response.json({ terms: [], groups: [] });
+  const hits = search(q, scope);
+  const per = scope ? 40 : 5;
+  const groups = GROUPS.map((group) => {
+    const all = hits.filter((h) => h.group === group);
+    return {
+      group,
+      total: all.length,
+      best: all[0]?.score ?? -1,
+      hits: all.slice(0, per).map(({ score: _s, text, ...h }) => { void _s; return { ...h, snippet: snippet(text, q) }; }),
+    };
+  })
+    .filter((g) => g.total > 0)
+    .sort((a, b) => b.best - a.best)
+    .map(({ best: _b, ...g }) => { void _b; return g; });
+  return Response.json({ terms: terms(q), groups });
 }

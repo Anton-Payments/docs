@@ -59,23 +59,6 @@ function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeCtx.Provider value={{ theme, mode, setMode, toggle }}>{children}</ThemeCtx.Provider>;
 }
 
-/* ---------------- preview session ---------------- */
-type Session = { signedIn: boolean; toggle: () => void };
-const SessionCtx = createContext<Session>({ signedIn: true, toggle: () => {} });
-export const useSession = () => useContext(SessionCtx);
-
-function SessionProvider({ children }: { children: ReactNode }) {
-  const [signedIn, setSignedIn] = useState(true);
-  useEffect(() => setSignedIn(read('anton-docs-preview-signed-in', true)), []);
-  const toggle = useCallback(() => {
-    setSignedIn((s) => {
-      write('anton-docs-preview-signed-in', !s);
-      return !s;
-    });
-  }, []);
-  return <SessionCtx.Provider value={{ signedIn, toggle }}>{children}</SessionCtx.Provider>;
-}
-
 /* ---------------- console ---------------- */
 export type MockResponse = { status: number; body: unknown; headers?: Record<string, string>; ms?: number };
 export type ConsoleTarget =
@@ -89,7 +72,7 @@ export type ConsoleTarget =
       /** a step id, so a page can mark that step as run */
       stepId?: string;
     }
-  | { kind: 'stream'; title: string; endpoint: string };
+;
 
 type ConsoleState = {
   kind: PageKind;
@@ -184,9 +167,7 @@ function ConsoleProvider({ children }: { children: ReactNode }) {
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
-      <SessionProvider>
         <ConsoleProvider>{children}</ConsoleProvider>
-      </SessionProvider>
     </ThemeProvider>
   );
 }
