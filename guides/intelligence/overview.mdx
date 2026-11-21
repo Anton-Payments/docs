@@ -4,7 +4,7 @@ sidebarTitle: "Overview"
 description: "Create normalized risk intelligence evaluations for payees, instruments, payouts, and merchant onboarding."
 ---
 
-Anton Intelligence turns payment-risk inputs into one concise evaluation result. You send a strict request with a `use_case`, an `entity`, and optional instrument or payout context. Anton normalizes the request internally, calls independent peer systems, applies deterministic policy and a five-dimension scoring model, and returns a final decision.
+Anton Intelligence turns payment-risk inputs into one concise evaluation result. You send a strict request with a `use_case`, an `entity`, and optional instrument or payout context. Anton screens the inputs, scores the risk, and returns a decision.
 
 The create endpoint is intentionally strict. Unknown fields are rejected, enum values are fixed, and sensitive values are used only in memory. Anton persists redacted decision evidence, not raw PII. Every response includes `contract_version: "intelligence-public-v1"` so clients can pin and generate SDKs against a stable schema.
 
@@ -65,22 +65,16 @@ curl -sS -X POST "https://api.antonpayments.dev/v1/intelligence/evaluations/vali
 | Currencies and assets | Uppercase supported currency or asset codes, such as `USD` or `BTC` |
 | Instrument payloads | The nested payload must match `instrument.type` |
 
-## Response summary
+## The evaluation
 
-The full response carries the decision, a five-dimension `scoring` block (Transaction Risk, Onboarding Risk, Transaction Monitoring, Anomaly Detection, Graph Intelligence — each 0–1000), peer statuses, policy outcome, and an audit hash — see the [quickstart](/guides/intelligence/quickstart) for a complete example. The normalized `summary` block:
+The response is an evaluation: `id` (`eval_...`), `object`, `livemode`, `status`, `use_case`, and the result fields below. See the [quickstart](/guides/intelligence/quickstart) for a complete example.
 
-```json
-{
-  "contract_version": "intelligence-public-v1",
-  "decision": "review_auto",
-  "next_action": "request_more_information",
-  "summary": {
-    "screened": ["entity", "instrument"],
-    "use_case": "instrument_screening",
-    "instrument_type": "crypto_wallet",
-    "findings_count": 1,
-    "identity_confidence": "possible",
-    "missing_fields": ["address", "birth_date", "identifier"]
-  }
-}
-```
+| Field | Meaning |
+|---|---|
+| `coverage` | How much of the screening panel answered: `complete`, `partial` or `error`. |
+| `decision` | `approve`, `review` or `decline`. See [Decisions](/guides/intelligence/decisions). |
+| `score` | Risk score from 0 to 1000. Higher is worse. |
+| `tier` | The score's band: `low`, `medium`, `high` or `critical`. |
+| `reasons` | Why the decision is not a plain approval. Empty for a clean approval. |
+| `required_actions` | What you can do about it. |
+

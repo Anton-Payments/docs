@@ -151,3 +151,14 @@ Solana
 
 # Python keywords that appear in code samples and Vale flags
 elif
+firewalled
+Coinbase
+Binance
+POSTs
+Dedup
+PANs
+Mintlify
+[Rr]epo
+[Rr]epo's
+[Rr]epos
+[Nn]amespace

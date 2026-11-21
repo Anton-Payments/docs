@@ -100,7 +100,7 @@ curl https://api.antonpayments.dev/v1/beneficiaries \
       "last_name": "Smith",
       "email": "jane@example.com",
       "phone": "+442079460000",
-      "date_of_birth": "1988-05-12",
+      "birth_date": "1988-05-12",
       "nationality": "GB",
       "address": {
         "street_line_1": "10 Example Street",
@@ -130,7 +130,7 @@ const res = await fetch("https://api.antonpayments.dev/v1/beneficiaries", {
       last_name: "Smith",
       email: "jane@example.com",
       phone: "+442079460000",
-      date_of_birth: "1988-05-12",
+      birth_date: "1988-05-12",
       nationality: "GB",
       address: {
         street_line_1: "10 Example Street",
@@ -164,7 +164,7 @@ curl_setopt_array($ch, [
             "last_name" => "Smith",
             "email" => "jane@example.com",
             "phone" => "+442079460000",
-            "date_of_birth" => "1988-05-12",
+            "birth_date" => "1988-05-12",
             "nationality" => "GB",
             "address" => [
                 "street_line_1" => "10 Example Street",
@@ -190,7 +190,7 @@ body := map[string]any{
         "last_name":     "Smith",
         "email":         "jane@example.com",
         "phone":         "+442079460000",
-        "date_of_birth": "1988-05-12",
+        "birth_date": "1988-05-12",
         "nationality":   "GB",
         "address": map[string]any{
             "street_line_1": "10 Example Street",
@@ -239,7 +239,7 @@ curl https://api.antonpayments.dev/v1/beneficiaries/$BENEFICIARY_ID/instruments 
     "currency": "GBP",
     "country": "GB",
     "label": "Primary GBP account",
-    "is_default": true,
+    "default": true,
     "credentials": {
       "account_number": "12345678",
       "sort_code": "123456"
@@ -263,7 +263,7 @@ const res = await fetch(
       currency: "GBP",
       country: "GB",
       label: "Primary GBP account",
-      is_default: true,
+      default: true,
       credentials: {
         account_number: "12345678",
         sort_code: "123456",
@@ -291,7 +291,7 @@ curl_setopt_array($ch, [
         "currency" => "GBP",
         "country" => "GB",
         "label" => "Primary GBP account",
-        "is_default" => true,
+        "default" => true,
         "credentials" => [
             "account_number" => "12345678",
             "sort_code" => "123456",
@@ -310,7 +310,7 @@ body := map[string]any{
     "currency":   "GBP",
     "country":    "GB",
     "label":      "Primary GBP account",
-    "is_default": true,
+    "default": true,
     "credentials": map[string]any{
         "account_number": "12345678",
         "sort_code":      "123456",
@@ -337,7 +337,7 @@ Save the returned `id` (prefixed `ins_`).
 
 ## Step 4: Send a payout
 
-Now send a payout from your sandbox balance to the beneficiary's instrument. You specify both a `source_amount` (what you pay) and a `dest_amount` (what the beneficiary receives) plus `fixed_side` to tell Anton which is authoritative. For same-currency payouts these are identical.
+Now send a payout from your sandbox balance to the beneficiary's instrument. You specify both a `source_amount` (what you pay) and a `destination_amount` (what the beneficiary receives) plus `fixed_side` to tell Anton which is authoritative. For same-currency payouts these are identical.
 
 <CodeGroup>
 
@@ -353,11 +353,11 @@ curl https://api.antonpayments.dev/v1/payouts \
     "instrument_id": "'"$INSTRUMENT_ID"'",
     "source_amount": "250.00",
     "source_currency": "GBP",
-    "dest_amount": "250.00",
-    "dest_currency": "GBP",
+    "destination_amount": "250.00",
+    "destination_currency": "GBP",
     "method": "faster_payment",
     "rail_type": "fiat",
-    "fixed_side": "fixed_dest",
+    "fixed_side": "fixed_destination",
     "purpose": "contractor_payment",
     "reference": "INV-QS-001"
   }'
@@ -377,11 +377,11 @@ const res = await fetch("https://api.antonpayments.dev/v1/payouts", {
     instrument_id: instrumentId,
     source_amount: "250.00",
     source_currency: "GBP",
-    dest_amount: "250.00",
-    dest_currency: "GBP",
+    destination_amount: "250.00",
+    destination_currency: "GBP",
     method: "faster_payment",
     rail_type: "fiat",
-    fixed_side: "fixed_dest",
+    fixed_side: "fixed_destination",
     purpose: "contractor_payment",
     reference: "INV-QS-001",
   }),
@@ -405,11 +405,11 @@ curl_setopt_array($ch, [
         "instrument_id"  => $instrumentId,
         "source_amount"  => "250.00",
         "source_currency"=> "GBP",
-        "dest_amount"    => "250.00",
-        "dest_currency"  => "GBP",
+        "destination_amount"    => "250.00",
+        "destination_currency"  => "GBP",
         "method"         => "faster_payment",
         "rail_type"      => "fiat",
-        "fixed_side"     => "fixed_dest",
+        "fixed_side"     => "fixed_destination",
         "purpose"        => "contractor_payment",
         "reference"      => "INV-QS-001",
     ]),
@@ -425,11 +425,11 @@ body := map[string]any{
     "instrument_id":    instrumentID,
     "source_amount":    "250.00",
     "source_currency":  "GBP",
-    "dest_amount":      "250.00",
-    "dest_currency":    "GBP",
+    "destination_amount":      "250.00",
+    "destination_currency":    "GBP",
     "method":           "faster_payment",
     "rail_type":        "fiat",
-    "fixed_side":       "fixed_dest",
+    "fixed_side":       "fixed_destination",
     "purpose":          "contractor_payment",
     "reference":        "INV-QS-001",
 }
@@ -500,7 +500,7 @@ The response includes a one-time `secret` (`whsec_...`). Store it securely — y
     Deduplication, PII updates, archive/restore, and ops workflows.
   </Card>
   <Card title="How Anton evaluates payouts" icon="shield-halved" href="/how-anton-evaluates-payouts">
-    Screening, velocity, and the Anton Engine — what each state means.
+    Screening and risk scoring — what each state means.
   </Card>
   <Card title="Batch payouts" icon="layer-group" href="/guides/batch-payouts">
     Upload a CSV and send thousands of payouts in one call.

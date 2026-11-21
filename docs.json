@@ -87,7 +87,6 @@
               "guides/intelligence/payout-screening",
               "guides/intelligence/merchant-onboarding",
               "guides/intelligence/decisions",
-              "guides/intelligence/evidence",
               "guides/intelligence/reviews",
               "guides/intelligence/pii-and-vault",
               "guides/intelligence/idempotency-retries",
@@ -110,6 +109,13 @@
           {
             "group": "Overview",
             "pages": ["api-reference/introduction"]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "api-reference/authentication/create-access-token",
+              "api-reference/authentication/get-jwks"
+            ]
           },
           {
             "group": "Cross-Cutting",
@@ -142,18 +148,17 @@
               "api-reference/beneficiaries/update-beneficiary-pii",
               "api-reference/beneficiaries/archive-beneficiary",
               "api-reference/beneficiaries/restore-beneficiary",
-              "api-reference/beneficiaries/rescore-beneficiary",
               "api-reference/beneficiaries/rescreen-beneficiary",
               "api-reference/beneficiaries/download-beneficiary-import-template",
               "api-reference/beneficiaries/import-beneficiaries",
-              "api-reference/beneficiaries/confirm-beneficiary-import"
+              "api-reference/beneficiaries/confirm-beneficiary-import",
+              "api-reference/beneficiaries/get-beneficiary-pii"
             ]
           },
           {
             "group": "Instruments",
             "pages": [
-              "api-reference/instruments/create-instrument-for-beneficiary",
-              "api-reference/instruments/list-instruments-for-beneficiary",
+              "api-reference/instruments/create-instrument",
               "api-reference/instruments/list-instruments",
               "api-reference/instruments/list-instrument-countries",
               "api-reference/instruments/list-instrument-methods",
@@ -168,8 +173,7 @@
               "api-reference/intelligence/create-evaluation",
               "api-reference/intelligence/validate-evaluation",
               "api-reference/intelligence/list-evaluations",
-              "api-reference/intelligence/get-evaluation",
-              "api-reference/intelligence/get-evidence"
+              "api-reference/intelligence/get-evaluation"
             ]
           },
           {
@@ -196,7 +200,8 @@
               "api-reference/verifications/regenerate-verification",
               "api-reference/verifications/revoke-verification",
               "api-reference/verifications/resend-owner-link",
-              "api-reference/verifications/get-verification-stats"
+              "api-reference/verifications/get-verification-stats",
+              "api-reference/verifications/rescreen-verification"
             ]
           },
           {
@@ -206,7 +211,8 @@
               "api-reference/payouts/list-payouts",
               "api-reference/payouts/get-payout",
               "api-reference/payouts/list-payout-events",
-              "api-reference/payouts/cancel-payout"
+              "api-reference/payouts/cancel-payout",
+              "api-reference/payouts/cancel-payouts"
             ]
           },
           {
@@ -237,8 +243,9 @@
               "api-reference/accounts/list-accounts",
               "api-reference/accounts/get-account",
               "api-reference/accounts/get-account-details",
-              "api-reference/accounts/list-account-transactions",
-              "api-reference/accounts/list-transactions"
+              "api-reference/accounts/list-transactions",
+              "api-reference/accounts/export-transactions",
+              "api-reference/accounts/get-transaction"
             ]
           },
           {
@@ -249,13 +256,16 @@
               "api-reference/webhooks/get-webhook-subscription",
               "api-reference/webhooks/update-webhook-subscription",
               "api-reference/webhooks/delete-webhook-subscription",
-              "api-reference/webhooks/get-webhook-secret",
               "api-reference/webhooks/rotate-webhook-secret",
               "api-reference/webhooks/test-webhook-subscription",
               "api-reference/webhooks/deactivate-webhook-subscription",
               "api-reference/webhooks/list-webhook-events",
               "api-reference/webhooks/get-webhook-event",
-              "api-reference/webhooks/list-webhook-deliveries"
+              "api-reference/webhooks/list-webhook-deliveries",
+              "api-reference/webhooks/activate-webhook-subscription",
+              "api-reference/webhooks/get-webhook-delivery-summary",
+              "api-reference/webhooks/list-webhook-event-types",
+              "api-reference/webhooks/list-webhook-subscription-deliveries"
             ]
           },
           {
@@ -269,14 +279,19 @@
             "group": "FX",
             "pages": [
               "api-reference/fx/create-fx-quote",
-              "api-reference/fx/get-indicative-fx-rate",
-              "api-reference/fx/execute-fx-exchange",
-              "api-reference/fx/list-fx-exchanges"
+              "api-reference/fx/list-indicative-fx-rates",
+              "api-reference/fx/create-fx-exchange",
+              "api-reference/fx/list-fx-exchanges",
+              "api-reference/fx/get-fx-exchange"
             ]
           },
           {
             "group": "Corridors",
             "pages": ["api-reference/corridors/list-corridors"]
+          },
+          {
+            "group": "Sandbox",
+            "pages": ["api-reference/sandbox/create-sandbox-deposit"]
           }
         ]
       }
@@ -305,11 +320,15 @@
       {
         "label": "Dashboard",
         "href": "https://app.antonpayments.com"
+      },
+      {
+        "label": "Download OpenAPI",
+        "href": "/openapi-merchant.yaml"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Get API Keys",
+      "label": "Get credentials",
       "href": "https://app.antonpayments.com"
     }
   },
@@ -324,5 +343,39 @@
   },
   "seo": {
     "indexing": "navigable"
-  }
+  },
+  "redirects": [
+    {
+      "source": "/api-reference/fx/get-indicative-fx-rate",
+      "destination": "/api-reference/fx/list-indicative-fx-rates"
+    },
+    {
+      "source": "/api-reference/fx/execute-fx-exchange",
+      "destination": "/api-reference/fx/create-fx-exchange"
+    },
+    {
+      "source": "/api-reference/instruments/create-instrument-for-beneficiary",
+      "destination": "/api-reference/instruments/create-instrument"
+    },
+    {
+      "source": "/api-reference/beneficiaries/rescore-beneficiary",
+      "destination": "/api-reference/beneficiaries/rescreen-beneficiary"
+    },
+    {
+      "source": "/api-reference/instruments/list-instruments-for-beneficiary",
+      "destination": "/api-reference/instruments/list-instruments"
+    },
+    {
+      "source": "/api-reference/intelligence/get-evidence",
+      "destination": "/api-reference/intelligence/get-evaluation"
+    },
+    {
+      "source": "/api-reference/webhooks/get-webhook-secret",
+      "destination": "/api-reference/webhooks/rotate-webhook-secret"
+    },
+    {
+      "source": "/guides/intelligence/evidence",
+      "destination": "/guides/intelligence/decisions"
+    }
+  ]
 }
