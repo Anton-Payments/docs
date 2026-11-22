@@ -161,7 +161,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | `forbidden` | 403 | `permission_error` | A general 403, sent only when no more specific code applies. Permission failures on `/v1` use `insufficient_permissions`. |
 | `insufficient_permissions` | 403 | `permission_error` | The credential or signed-in user is not allowed to perform this action. |
 | `insufficient_scope` | 403 | `permission_error` | The credential was created without the scope this endpoint needs. Create a credential with the right scope. |
-| `key_environment_mismatch` | 403 | `permission_error` | A sandbox credential was used against production, or the reverse. |
+| `key_environment_mismatch` | 403 | `permission_error` | A sandbox token was sent to the production API. |
 | `merchant_not_active` | 403 | `permission_error` | Your account is not yet active. |
 | `merchant_suspended` | 403 | `permission_error` | Your account is suspended and cannot perform this action. Contact support. |
 | `merchant_terminated` | 403 | `permission_error` | Your account is closed and cannot perform this action. |
