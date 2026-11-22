@@ -10,7 +10,7 @@ kind: guide
 
 ## Choose how the details reach Anton
 
-The subject is the `entity`. Either you send the details in the request, or you send a `vault_token_id` and Anton reads them in memory from your vault. One of `name` or `vault_token_id` is required; without either the call is a `422 validation_error`.
+The subject is the `entity`. Either you send the details in the request, or you send a `vault_token_id` and Anton reads them in memory from your vault. One of `name`, `vault_token_id` or `document.number` is required; without either the call is a `422 validation_error`.
 
 <Decision>
   <Choice title="Send the details" value='entity.name' fields="name, country, birth_date" set={{ entity: { type: "person", reference_id: "payee-john-doe", name: "John Doe", country: "US", birth_date: "1979-12-30" } }} picked>

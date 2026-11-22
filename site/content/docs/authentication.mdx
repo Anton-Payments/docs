@@ -20,7 +20,7 @@ The dashboard creates the credential and generates an ES256 or Ed25519 DPoP keyp
 
 Each credential also carries scopes, `payouts` and `intelligence`, checked against your account's capabilities when the credential is created. A call outside the credential's scopes is `403 insufficient_scope`. A call outside your account's capabilities is `403 capability_required`. [Capabilities and scopes](/concepts/capabilities) has the detail.
 
-Sandbox credentials belong to `api.antonpayments.dev` and production credentials to `api.antonpayments.com`. A sandbox token sent to the production API is `403 key_environment_mismatch`, and a sandbox client asking the production token endpoint for a token gets `403 invalid_client`.
+Sandbox credentials belong to `api.antonpayments.dev` and production credentials to `api.antonpayments.com`. A sandbox token sent to the production API is `403 key_environment_mismatch`, and a sandbox client asking the production token endpoint for a token gets `403 invalid_client`. A production token sent to the sandbox returns `401 invalid_token`, because each environment signs tokens with its own key.
 
 ## Mint a token
 
