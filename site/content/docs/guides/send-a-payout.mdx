@@ -56,7 +56,7 @@ The fields that aren't obvious:
 
 Amounts are decimal strings, and they carry at most the currency's precision: 2 places for USD, 0 for JPY, 6 for USDC. More places is `422 amount_precision_invalid`. Responses always show exactly that many places.
 
-If a person in your product pressed the button, send `session` with their IP, timezone and user agent as your edge saw them. None of it can fail the payout; only a malformed `ip` is rejected, and the rest is graded in `session_quality`. A payout that sits in a believable session is less likely to be held.
+If a person in your product pressed the button, send `session` with their IP, timezone and user agent as your edge saw them. A malformed `ip` is rejected, and so is an oversized field with `422`: `user_agent` over 512 characters, `accept_language` or `timezone` over 64, `device_hash` over 128, or `started_at` over 40. Within those limits, nothing else can fail the payout, and the rest is graded in `session_quality`. A payout that sits in a believable session is less likely to be held.
 
 ## What happens next
 

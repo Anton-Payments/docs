@@ -12,6 +12,4 @@ Idempotency-Key: intel-payee-crm-84012-v1
 
 After a network timeout, retry the same request with the same key. If the first attempt finished, Anton returns the original response. If it is still being processed, you get `409 idempotency_in_flight`: wait and retry with the same key.
 
-The body also accepts `idempotency_key` as a fallback for testing. If both are sent, the header wins.
-
 The usual rules apply: keys are kept for 24 hours, reusing one with a different body is `422 idempotency_key_reused`, and a replay carries `Idempotent-Replayed: true`. See [Idempotency](/concepts/idempotency). `POST /v1/intelligence/evaluations/validate` stores nothing and needs no key.
