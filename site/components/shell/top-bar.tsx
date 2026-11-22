@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useTheme } from './providers';
 import { MenuIcon, SearchIcon } from './icons';
 import { openSearch } from './search';
+import { useProduct } from './use-product';
 
 /*
   The header: logo, the four sections, search, the Dashboard and the theme. Nothing else.
@@ -25,7 +26,8 @@ export function TopBar() {
     document.addEventListener('click', away);
     return () => document.removeEventListener('click', away);
   }, []);
-  const tab = path.startsWith('/reference') ? 'ref' : path.startsWith('/changelog') ? 'log' : path.startsWith('/intelligence') ? 'intel' : 'guides';
+  const [product] = useProduct();
+  const tab = path.startsWith('/reference') ? 'ref' : path.startsWith('/changelog') ? 'log' : product === 'intelligence' ? 'intel' : 'guides';
   return (
     <header className={`top ${home ? 'home' : ''}`}>
       {!home && (
@@ -39,9 +41,9 @@ export function TopBar() {
         <small>Docs</small>
       </Link>
       <nav className="navtabs" aria-label="Sections">
-        <Link href="/guides/register-a-payee" aria-current={tab === 'guides' && !home ? 'page' : undefined}>Guides</Link>
+        <Link href="/quickstart" aria-current={tab === 'guides' && !home ? 'page' : undefined}>Payouts</Link>
+        <Link href="/intelligence/overview" aria-current={tab === 'intel' && !home ? 'page' : undefined}>Intelligence</Link>
         <Link href="/reference" aria-current={tab === 'ref' ? 'page' : undefined}>API reference</Link>
-        <Link href="/intelligence/overview" aria-current={tab === 'intel' ? 'page' : undefined}>Intelligence</Link>
         <Link href="/changelog" aria-current={tab === 'log' ? 'page' : undefined}>Changelog</Link>
       </nav>
       <div className="spacer" />

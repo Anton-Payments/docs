@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
-export type SideSection = { title: string; collapsed?: boolean; steps?: number; items: { title: string; href: string; method?: string }[] };
+export type SideSection = { title: string; collapsed?: boolean; numbered?: boolean; items: { title: string; href: string; method?: string }[] };
 
-export function Sidebar({ sections }: { sections: SideSection[] }) {
+export function Sidebar({ sections, top }: { sections: SideSection[]; top?: ReactNode }) {
   const path = usePathname();
   useEffect(() => {
     document.querySelector('.side')?.classList.remove('open');
@@ -15,10 +15,9 @@ export function Sidebar({ sections }: { sections: SideSection[] }) {
   return (
     <aside className="side" aria-label="Navigation">
       <div className="side-scroll">
+        {top}
         {sections.flatMap((s) => {
-          const k = s.steps || 0;
-          // a numbered sequence at the top of a section is drawn as its own group: the core path
-          const groups = k ? [{ title: 'Core path', items: s.items.slice(0, k), numbered: true }, { title: 'Go further', items: s.items.slice(k), numbered: false }] : [{ title: s.title, items: s.items, numbered: false }];
+          const groups = [{ title: s.title, items: s.items, numbered: !!s.numbered }];
           return groups.map((g) => {
             const active = g.items.some((i) => i.href === path);
             const list = (

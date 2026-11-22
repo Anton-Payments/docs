@@ -14,15 +14,12 @@ import { RouteBar } from '@/components/guide/route-bar';
 import { routeFor } from '@/lib/guide-route';
 import { Home, type HrefMap } from '@/components/home/home';
 import { ROUTES } from '@/lib/home-route';
-import { CORE_PATH, DOCS_NAV } from '@/lib/nav';
+import { nextOnCorePath, sectionOf } from '@/lib/nav';
 import { findOperation } from '@/lib/openapi';
 import { formatDate, latestEntries } from '@/lib/changelog';
 
 type Props = { params: Promise<{ slug?: string[] }> };
 
-function sectionFor(url: string) {
-  return DOCS_NAV.find((s) => s.items.some((i) => i.href === url))?.title;
-}
 
 /** What a guide's code pane can show, read from the page source: its runnable steps and code blocks. */
 type PaneEndpoint = { method: string; path: string; href?: string };
@@ -95,9 +92,9 @@ export default async function Page({ params }: Props) {
     );
   }
 
-  const section = d.section || sectionFor(url);
-  const coreIdx = CORE_PATH.indexOf(url);
-  const next = coreIdx >= 0 && coreIdx < CORE_PATH.length - 1 ? source.getPage(CORE_PATH[coreIdx + 1].slice(1).split('/')) : null;
+  const section = d.section || sectionOf(url);
+  const nextHref = nextOnCorePath(url);
+  const next = nextHref ? source.getPage(nextHref.slice(1).split('/')) : null;
   const crumbs = [section, ...(d.kicker ? d.kicker.split('·').map((s: string) => s.trim()) : [])].filter(Boolean) as string[];
   const pane = d.kind === 'guide' || d.kind === 'webhooks' ? paneInfo(page.path) : { hasCode: false, endpoints: [] };
   const twoPane = pane.hasCode;

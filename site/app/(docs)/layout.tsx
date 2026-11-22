@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Frame } from '@/components/shell/frame';
-import { DOCS_NAV } from '@/lib/nav';
+import { ProductSidebar } from '@/components/shell/product-sidebar';
 
 export default function DocsLayout({ children }: { children: ReactNode }) {
-  return <Frame sections={DOCS_NAV}>{children}</Frame>;
+  return <Frame sidebar={<ProductSidebar />}>{children}</Frame>;
 }
