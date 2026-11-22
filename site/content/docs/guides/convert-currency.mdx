@@ -22,8 +22,8 @@ You need an account in the destination currency. Without one, an exchange fails 
   <Choice title="Locked" value="locked: true" fields="stored, expires_at, executable" set={{ locked: true }} picked>
     The quote is stored with an `expires_at` and can be executed once at its rate until then. This is the default.
   </Choice>
-  <Choice title="Indicative" value="locked: false" fields="not stored, expires_at: null, not executable" set={{ locked: false }}>
-    A price for display. Nothing is stored, the rate can move, and executing it fails with `422 quote_not_locked`.
+  <Choice title="Indicative" value="locked: false" fields="price only, expires_at: null, not executable" set={{ locked: false }}>
+    A price for display. The rate can move, and executing it fails with `422 quote_not_locked`.
   </Choice>
 </Decision>
 
