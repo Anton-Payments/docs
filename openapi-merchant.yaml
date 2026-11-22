@@ -1,35 +1,35 @@
-# anton-spec-sync sha256=195887486ac671e550e420879b1e9bbbf0e222e38ecf0b816b3349c21f1eef5e
+# anton-spec-sync sha256=80bf3699768127cd661a1e44be1382f80b0a17eb3883b3e6521c79c3ddf00f5b
 openapi: 3.1.0
 
 info:
   title: Anton Payments API
   version: "2026-12-01"
-  summary: Cross-border payout infrastructure. Fiat, stablecoin, and crypto.
-  description: |
+  summary: Cross-border payouts in fiat, stablecoin, and crypto.
+  description: |-
     The Anton Payments merchant API. Versioned, idempotent, cursor-paginated.
 
-    - **Authentication**: OAuth 2.0 client_credentials with DPoP proof-of-possession (RFC 6749 §4.4 + RFC 9449). Programmatic clients exchange `(client_id, client_secret)` for a short-lived access token at `POST /oauth/token`, then send each request with `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. Static API keys are not accepted on v1.
+    - **Authentication**: OAuth 2.0 client_credentials with DPoP proof-of-possession (RFC 6749 §4.4 + RFC 9449). Programmatic clients exchange `(client_id, client_secret)` for a short-lived access token at `POST /oauth/token`, then send each request with `Authorization: DPoP <access_token>` plus a per-request `DPoP: <proof>` header. v1 does not accept static API keys.
     - Base URLs: `https://api.antonpayments.com` (production), `https://api.antonpayments.dev` (sandbox).
     - **Versioning**: the API is versioned by date (`Anton-Version: 2026-12-01`). Your account is pinned to the latest version when you create your first OAuth client; send `Anton-Version` to try another version on one request. Every `/v1` response carries an `Anton-Version` header with the version it was produced at, including idempotent replays (which keep the original's) and a `401` (where the merchant is not yet known, the launch version). An unknown version is `400 invalid_api_version`.
     - **Responses.** A single resource is the object itself at the top level, with no `data` wrapper. A delete returns `{"id", "object", "deleted": true}`. Lists are the list object below. A field is either always present (`null` when empty) or documented as conditional.
     - **Requests.** A request with a body must send `Content-Type: application/json` (an upload route takes `multipart/form-data`), otherwise `400 invalid_content_type`. A route that takes no body rejects a non-empty one; an unknown query parameter is `400 unknown_parameter`.
-    - Monetary amounts are decimal strings. Never floats.
+    - Monetary amounts are decimal strings, never floats.
     - Timestamps are RFC 3339 UTC.
-    - Every `POST` that creates or changes something requires the `Idempotency-Key` header. `PATCH` and `DELETE` accept one but do not require it. A `POST` that is a pure calculation and stores nothing (`POST /v1/intelligence/evaluations/validate`) is exempt.
+    - Every `POST` that creates or changes something requires the `Idempotency-Key` header. `PATCH` and `DELETE` accept one but do not require it. A `POST` that only calculates and stores nothing (`POST /v1/intelligence/evaluations/validate`) is exempt.
     - Anton's OAuth public signing key is published at `GET /.well-known/jwks.json` (5-minute cache; RFC 8615).
 
     **Capabilities and scopes.** Every account carries a capability set (`payouts`, `intelligence`) and every
     credential carries a scope set validated against it at creation. AI-compliance-only accounts hold only
-    `intelligence` — all payout-surface endpoints return `403 capability_required` for them. A credential
+    `intelligence`, and every payout endpoint returns `403 capability_required` for them. A credential
     minted without a scope returns `403 insufficient_scope` on that surface. Effective access is
     `scopes ∩ capabilities`. Access tokens embed the grants as a space-delimited `scope` claim, echoed in the
     token response.
 
-    **What machine credentials can never do.** Approval decisions (payout approve/reject — maker-checker
+    **What machine credentials can never do.** Approval decisions (payout approve and reject, because maker-checker
     requires a human identity) and detokenized PII readback (beneficiary PII, verification name reveal,
     captured-document viewing) are dashboard-only: those operations require a signed-in portal user with the
-    right role, and every access is audit-logged. Machine credentials can deposit and replace PII — your
-    system is its source — but can never read it back, so a leaked credential cannot harvest identities.
+    right role, and every access is audit-logged. Machine credentials can deposit and replace PII, since your
+    system is its source, but can never read it back, so a leaked credential cannot harvest identities.
 
     **Errors.** Every error response from `/v1` has one shape, whatever the status:
     `{"error": {"type", "code", "message", "param"?, "doc_url", "request_id", "details"?}}`. Branch on `code`
@@ -61,7 +61,7 @@ info:
     as ours. An idempotent replay (`Idempotent-Replayed: true`) returns the original body unchanged, so its
     `error.request_id`, if any, is the original request's; its `Request-Id` header is the replay's own.
 
-    See the Cross-Cutting section of the docs for idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
+    The Cross-Cutting section of the docs covers idempotency, pagination, rate limits, errors, webhook events, and webhook signing.
   contact:
     name: Anton Payments Support
     url: https://help.antonpayments.com
@@ -87,31 +87,31 @@ tags:
   - name: Beneficiaries
     description: Create and manage the people and businesses you pay.
   - name: Instruments
-    description: Payment instruments attached to beneficiaries — bank accounts, wallets, cards.
+    description: "Your payees' payment instruments: bank accounts, wallets, and cards."
   - name: Payouts
-    description: Initiate and track payouts.
+    description: Send payouts and track them.
   - name: Batches
-    description: CSV-driven bulk payout processing.
+    description: Process bulk payouts from a CSV file.
   - name: Balances
-    description: Merchant balance by currency.
+    description: Your balance in each currency.
   - name: Accounts
-    description: Virtual accounts for merchant funding.
+    description: Virtual accounts for funding your balance.
   - name: Webhooks
     description: Subscribe to event notifications.
   - name: Pricing
-    description: Read merchant pricing plans and quote fees.
+    description: Read your pricing plans and quote fees.
   - name: FX
     description: Quote, lock, and execute currency exchanges between balances.
   - name: Corridors
-    description: Active cross-border corridors for your merchant.
+    description: The active cross-border corridors for your account.
   - name: Sandbox
-    description: Reset and seed your sandbox environment.
+    description: Reset and seed your sandbox.
   - name: Intelligence
-    description: Normalized payee, instrument, payout, and merchant risk intelligence evaluations.
+    description: Risk evaluations of payees, instruments, payouts, and merchants, with normalized results.
   - name: Reviews
-    description: Your team's own compliance reviews over the API, with webhooks and exports for your own auditors. Needs the Reviews API and Webhooks add-on; exports need the Audit Pack.
+    description: Run your team's own compliance reviews over the API, with webhooks and exports for your auditors. Needs the Reviews API and Webhooks add-on. Exports need the Audit Pack.
   - name: Verifications
-    description: KYC/KYB-as-a-service — verify the identity of your customers and their businesses through Anton-hosted flows, with screening built in.
+    description: Verify the identity of your customers and their businesses (KYC and KYB) through Anton-hosted flows, with screening built in.
 
 paths:
   /v1/intelligence/evaluations:
@@ -119,38 +119,27 @@ paths:
       - $ref: '#/components/parameters/AntonVersion'
     post:
       tags: [Intelligence]
-      summary: Create an intelligence evaluation
+      summary: Create an evaluation
       operationId: createIntelligenceEvaluation
-      description: |
-        Evaluates payee, instrument, payout, merchant onboarding, or monitoring inputs through Anton Intelligence.
+      description: |-
+        Run payee, instrument, payout, merchant onboarding, or monitoring inputs through Anton Intelligence. A `payout_screening` evaluation returns before it finishes; every other use case returns the finished evaluation.
 
-        The request contract is strict and uses fixed enums so enterprise clients can generate SDKs safely.
-        Direct PII may be supplied over TLS or recovered from a vault token; Anton uses it in memory for the evaluation and persists only redacted decision evidence.
+        The request contract is strict and uses fixed enums, so you can generate SDKs safely. You can send direct PII over TLS or have Anton recover it from a vault token. Anton uses it in memory for the evaluation and persists only redacted decision evidence.
 
-        **Per-use-case required fields.** Beyond the always-required `use_case` and `entity.type`, each
-        use case imposes additional requirements (a `422 validation_error` otherwise):
+        **Required fields per use case.** Beyond the always-required `use_case` and `entity.type`, each use case adds requirements (a `422 validation_error` otherwise):
         - `payee_registration`: `entity.name` OR `entity.vault_token_id`.
         - `merchant_onboarding`: `entity.type` must be `business`, plus `entity.name` OR `entity.vault_token_id`.
         - `instrument_screening`: an `instrument` block.
         - `payout_screening`: a `payout` block, plus searchable `entity` or `instrument` data.
         - `monitoring`: searchable `entity` or `instrument` data.
-        These conditional requirements can't be expressed in the static `required` arrays below, so they are
-        enumerated here.
 
-        **Authentication.** OAuth+DPoP credentials are required; a request without them is refused with `401`.
-        The evaluation is persisted under YOUR merchant account (retrievable via the scoped reads below) and
-        the `Idempotency-Key` header is REQUIRED. The credential must carry the `intelligence` scope and the
-        account the `intelligence` capability. Vault-token enrichment only accepts tokens owned by the calling merchant.
+        The static `required` arrays below can't express these conditions, so they are listed here.
 
-        **Status follows the use case.** A `payout_screening` evaluation runs the full AI panel and can take up
-        to ~20 seconds, so it is accepted asynchronously: `202 Accepted` with the evaluation in `status: pending`
-        and a `Location` header. Poll `GET /v1/intelligence/evaluations/{id}` until `status` is `completed` or
-        `failed`, or subscribe to the `intelligence.evaluation.completed` / `intelligence.evaluation.failed`
-        webhook events. Every other use case is decided before the response: `201 Created` with the completed
-        evaluation. The status never depends on how you authenticate.
+        **Authentication.** You need OAuth+DPoP credentials; a request without them is refused with `401`. The evaluation is stored under YOUR merchant account (retrievable through the scoped reads below), and the `Idempotency-Key` header is REQUIRED. The credential must carry the `intelligence` scope and the account the `intelligence` capability. Vault-token enrichment only accepts tokens owned by the calling merchant.
 
-        `metadata` is yours: up to 50 keys (keys up to 40 characters, values up to 500), strings only. It is
-        stored and returned on the evaluation, never searched, and never sent to screening.
+        **The status follows the use case.** A `payout_screening` evaluation runs the full AI panel and can take up to ~20 seconds, so it is accepted asynchronously: `202 Accepted` with the evaluation in `status: pending` and a `Location` header. Poll `GET /v1/intelligence/evaluations/{id}` until `status` is `completed` or `failed`, or subscribe to the `intelligence.evaluation.completed` and `intelligence.evaluation.failed` webhook events. Every other use case is decided before the response: `201 Created` with the completed evaluation. How you authenticate never changes the status.
+
+        `metadata` is yours: up to 50 keys (keys up to 40 characters, values up to 500), strings only. It is stored and returned on the evaluation, never searched, and never sent to screening.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -253,12 +242,9 @@ paths:
           $ref: '#/components/responses/InternalError'
     get:
       tags: [Intelligence]
-      summary: List your intelligence evaluations
+      summary: List evaluations
       operationId: listIntelligenceEvaluations
-      description: |
-        Pages the authenticated merchant's evaluations, newest first. Strictly merchant-scoped: only evaluations
-        created under your account appear. Requires the `intelligence` credential scope and account capability.
-        Every filter is optional; an unknown value or parameter is a 400, never an empty list.
+      description: List your evaluations, newest first. Only evaluations created under your account appear. You need the `intelligence` credential scope and account capability. Every filter is optional; an unknown value or parameter is a 400, never an empty list.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -288,13 +274,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: Inclusive lower bound on when the evaluation was decided, RFC 3339. `evaluated_after` is the same filter; send one. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Inclusive lower bound on when the evaluation was decided, RFC 3339. `evaluated_after` is the same filter; send one. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
           required: false
-          description: Exclusive upper bound, RFC 3339. `evaluated_before` is the same filter; send one. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Exclusive upper bound, RFC 3339. `evaluated_before` is the same filter; send one. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: evaluated_after
@@ -347,9 +333,9 @@ paths:
       - $ref: '#/components/parameters/AntonVersion'
     post:
       tags: [Intelligence]
-      summary: Validate an intelligence evaluation request
+      summary: Validate an evaluation request
       operationId: validateIntelligenceEvaluation
-      description: Validates the strict request contract without creating or persisting an evaluation. This is a calculation that stores nothing, so it is exempt from `Idempotency-Key` (the header is not required). Requires OAuth+DPoP credentials, like every evaluation route. The answer is a dry-run result, not a stored resource, so it has no `id`.
+      description: Check a request against the strict evaluation contract without creating or storing anything. The answer is a dry-run result, not a stored resource, so it has no `id`. Because it stores nothing, it is exempt from `Idempotency-Key` (the header is not required). Like every evaluation route, it needs OAuth+DPoP credentials.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -386,13 +372,9 @@ paths:
       - $ref: '#/components/parameters/AntonVersion'
     get:
       tags: [Intelligence]
-      summary: Retrieve an intelligence evaluation
+      summary: Get an evaluation
       operationId: getIntelligenceEvaluation
-      description: |
-        Strictly scoped to the caller: you can only retrieve evaluations created under your own merchant account.
-        A foreign evaluation ID is a 404, indistinguishable from a nonexistent one. An evaluation still being
-        decided is returned with `status: pending` (or `processing`); a failed one with `status: failed` and a
-        `failure_reason`. Result fields are present once `status` is `completed`.
+      description: "Fetch one of your evaluations. A foreign evaluation ID is a 404, the same as a nonexistent one. An evaluation still being decided has `status: pending` (or `processing`). A failed one has `status: failed` and a `failure_reason`. Result fields are present once `status` is `completed`."
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -426,13 +408,7 @@ paths:
       tags: [Reviews]
       summary: List reviews
       operationId: listIntelligenceReviews
-      description: |
-        Your team's compliance reviews, newest first. Needs the **Reviews API and Webhooks** add-on
-        (`403 module_not_enabled` otherwise), the `intelligence` scope and `reviews.view`.
-        The API returns the masked subject and your own reference for it, never names, dates of birth,
-        contact details or note text.
-        Anton's own screening of your payouts never appears here.
-        An unknown `status` or `kind`, a bad timestamp or an unknown parameter is a 400.
+      description: List your team's compliance reviews, newest first. You need the **Reviews API and Webhooks** add-on (`403 module_not_enabled` otherwise), the `intelligence` scope and `reviews.view`. The API returns the masked subject and your own reference for it, never names, dates of birth, contact details or note text. Anton's own screening of your payouts never appears here. An unknown `status` or `kind`, a bad timestamp or an unknown parameter is a 400.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -452,13 +428,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: RFC 3339 timestamp, inclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp, inclusive. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: created_before
           in: query
           required: false
-          description: RFC 3339 timestamp, exclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp, exclusive. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - $ref: '#/components/parameters/Limit'
@@ -503,9 +479,7 @@ paths:
       tags: [Reviews]
       summary: Retrieve review settings
       operationId: getIntelligenceReviewSettings
-      description: |
-        Your review settings, read only (change them in the portal; Admin only). `api_clearance_requires_approval`
-        is always `true`: a decision your API credential proposes that clears the subject waits for a person.
+      description: "Read your review settings. You change them in the portal (Admin only). `api_clearance_requires_approval` is always `true`: a decision your API credential proposes that clears the subject waits for a person."
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -535,12 +509,7 @@ paths:
       tags: [Reviews]
       summary: Export reviews as CSV
       operationId: exportIntelligenceReviews
-      description: |
-        Your reviews opened in `[created_after, created_before)` (at most 366 days, at most 10,000 reviews) as a
-        CSV file, for your own auditors. Needs the **Audit Pack** add-on and `reviews.view`. Codes, ids and the
-        masked subject only. The file is rendered on the fly and never stored. Each call is recorded in your audit
-        log with the range, row count and a SHA-256 of the file. Works for any review your account still holds,
-        whatever its status and whatever other add-ons you hold.
+      description: Download your reviews opened in `[created_after, created_before)` as a CSV file for your auditors. The range is at most 366 days and the file at most 10,000 reviews. You need the **Audit Pack** add-on and `reviews.view`. The file holds codes, ids and the masked subject only. It is rendered on the fly and never stored. Each call is recorded in your audit log with the range, row count and a SHA-256 of the file. It works for any review your account still holds, whatever its status and whatever other add-ons you hold.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -548,13 +517,13 @@ paths:
         - name: created_after
           in: query
           required: true
-          description: RFC 3339 timestamp, inclusive. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp, inclusive. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: created_before
           in: query
           required: true
-          description: RFC 3339 timestamp, exclusive. At most 366 days after `created_after`. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp, exclusive. At most 366 days after `created_after`. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
         - name: status
@@ -599,9 +568,7 @@ paths:
       tags: [Reviews]
       summary: Retrieve a review
       operationId: getIntelligenceReview
-      description: |
-        A review with its decisions, approvals, notes and activity. Notes appear as presence only: their text
-        is never returned by the API. Another account's review is a 404.
+      description: A review with its decisions, approvals, notes and activity. Notes appear as presence only; the API never returns their text. Another account's review is a 404.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -635,11 +602,7 @@ paths:
       tags: [Reviews]
       summary: Export a case file (PDF)
       operationId: exportIntelligenceReviewCaseFile
-      description: |
-        The review's formal record as a PDF, for your own auditors and regulators. Needs the **Audit Pack**
-        add-on and `reviews.view`. The file is rendered on the fly and never stored. Each call is recorded in your
-        audit log (and once more when the file is rendered, with its size and SHA-256). A file exported with an API
-        credential never contains note text or your team members' names.
+      description: Download the review's formal record as a PDF for your auditors and regulators. You need the **Audit Pack** add-on and `reviews.view`. The file is rendered on the fly and never stored. Each call is recorded in your audit log, and once more when the file is rendered, with its size and SHA-256. A file exported with an API credential never contains note text or your team members' names.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -684,16 +647,10 @@ paths:
       tags: [Reviews]
       summary: Record a decision
       operationId: createIntelligenceReviewDecision
-      description: |
-        Records a decision with a reason code (`reviews.decide`). `waiting_on_customer` pauses the due time.
-        A decision your second-approver setting covers waits for a person to approve it in the portal.
-        A decision your **API credential** proposes that clears the subject (`not_a_match`, `no_concern`)
-        **always** waits for a person, whatever the setting (`approval_rule: api_clearance`), and that person
-        must be independent of your API credentials: not the one who created the credential, and not in a role
-        that can create, rotate or revoke credentials (Admin, Technical), in practice your Compliance role.
-        With no such person on your team the decision is refused (`409 second_approver_unavailable`).
-        Approving, sending back and withdrawing are done by people in the portal.
-        The response is the decision; fetch the review for its new status.
+      description: |-
+        Record a decision with a reason code (`reviews.decide`). `waiting_on_customer` pauses the due time. The response is the decision; fetch the review for its new status.
+
+        A decision your second-approver setting covers waits for a person to approve it in the portal. A decision your **API credential** proposes that clears the subject (`not_a_match`, `no_concern`) **always** waits for a person, whatever the setting (`approval_rule: api_clearance`). That person must be independent of your API credentials: not the one who created the credential, and not in a role that can create, rotate or revoke credentials (Admin, Technical). In practice that is your Compliance role. With no such person on your team the decision is refused (`409 second_approver_unavailable`). People approve, send back and withdraw in the portal.
 
         | Review kind | Decisions |
         |---|---|
@@ -754,7 +711,7 @@ paths:
       tags: [Reviews]
       summary: Resume a review
       operationId: resumeIntelligenceReview
-      description: Ends a wait on your customer. The due time moves out by the time spent waiting. Takes no body.
+      description: End a wait on your customer. The due time moves out by the time spent waiting. Takes no body.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -795,10 +752,7 @@ paths:
       tags: [Reviews]
       summary: Add a note
       operationId: createIntelligenceReviewNote
-      description: |
-        Adds a note to an open review. The text is stored in a vault, separately for your account, and is
-        never returned by the API: your team reads it in the portal, and it appears in the case file your
-        people export.
+      description: "Add a note to an open review. The text is stored in a vault, separately for your account. The API never returns it: your team reads it in the portal, and it appears in the case file your people export."
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -858,15 +812,12 @@ paths:
       tags: [Verifications]
       summary: List verification subjects
       operationId: listVerificationSubjects
-      description: |
-        Pages the merchant's verification subjects, newest first. Each row carries a summary of its
-        current verification.
+      description: |-
+        List your verification subjects, newest first. Each row carries a summary of its current verification.
 
-        `display_name` is **masked** on every read (`J•••••• D••`). The true name is available only
-        through the dashboard's audited reveal flow — it is never returned on this surface.
+        `display_name` is **masked** on every read (`J•••••• D••`). The true name is available only through the dashboard's audited reveal flow, never through the API.
 
-        Requires the `intelligence` credential scope and account capability. An unknown `type`,
-        `status` or query parameter is a 400, never an empty list.
+        You need the `intelligence` credential scope and account capability. An unknown `type`, `status` or query parameter is a 400, never an empty list.
       parameters:
         - name: type
           in: query
@@ -887,7 +838,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Search by your own reference (case-insensitive prefix) or the subject id (exact). Names aren't searchable. Up to 100 characters. The search sits in the request URL, so use references that don't contain personal data (no names or email addresses).
+          description: Search by your own reference (case-insensitive prefix) or the subject id (exact). Names aren't searchable. Up to 100 characters. The search goes in the request URL, so use references that contain no personal data (no names or email addresses).
           schema:
             type: string
             maxLength: 100
@@ -895,13 +846,13 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: Inclusive lower bound on `created_at`, RFC 3339. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Inclusive lower bound on `created_at`, RFC 3339. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
           required: false
-          description: Exclusive upper bound on `created_at`, RFC 3339. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Exclusive upper bound on `created_at`, RFC 3339. Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - $ref: '#/components/parameters/Limit'
@@ -942,24 +893,14 @@ paths:
       tags: [Verifications]
       summary: Create a verification subject
       operationId: createVerificationSubject
-      description: |
-        Creates a verification subject (a person or a business) and opens its first verification.
-        The response is the subject, with that verification in `verifications` carrying the one-time `hosted_link`. Anton mints a **hosted verification link** — a one-time identity verification
-        flow where the subject submits their government ID and selfie (person) or business details plus a UBO
-        cascade (business). Identity documents live with the verification provider and Anton's
-        vault; they never touch your systems.
+      description: |-
+        Create a verification subject (a person or a business) and open its first verification. The response is the subject, with that verification in `verifications` carrying the one-time `hosted_link`. Anton mints a **hosted verification link**, a one-time identity verification flow. A person submits a government ID and selfie. A business submits business details plus a UBO cascade. Identity documents live with the verification provider and Anton's vault; they never touch your systems.
 
-        **Link delivery.** With `delivery: "email"`, Anton emails the link to the subject and the
-        verification is created with status `sent`. If the environment cannot deliver email — or you
-        choose `delivery: "manual"` — the status is `created` and YOU deliver the returned
-        `hosted_link` through your own channel. Only trust `sent` as proof an email went out.
+        **Link delivery.** With `delivery: "email"`, Anton emails the link to the subject and the verification is created with status `sent`. If the environment cannot deliver email, or you choose `delivery: "manual"`, the status is `created` and YOU deliver the returned `hosted_link` through your own channel. Only trust `sent` as proof an email went out.
 
-        **`hosted_link` is secret-once.** It appears in this response (and on resend / regenerate /
-        re-verify responses) and is never readable again. Treat it like a credential: it opens a
-        flow that collects your customer's identity documents.
+        **`hosted_link` is secret-once.** It appears in this response (and on resend, regenerate and re-verify responses) and is never readable again. Treat it like a credential: it opens a flow that collects your customer's identity documents.
 
-        Track progress via the `verification.*` webhook events or by polling the subject.
-        Requires the `intelligence` credential scope and account capability.
+        Track progress through the `verification.*` webhook events or by polling the subject. You need the `intelligence` credential scope and account capability.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1035,10 +976,7 @@ paths:
       tags: [Verifications]
       summary: Get a verification subject
       operationId: getVerificationSubject
-      description: |
-        Returns the subject with its **full verification history** in `verifications` — every verification opened for this
-        person or business, newest first, each with its screening result and (for
-        businesses) the UBO cascade. `hosted_link` is never present on reads.
+      description: "Fetch a subject with its **full verification history** in `verifications`: every verification opened for this person or business, newest first, each with its screening result and, for businesses, the UBO cascade. `hosted_link` is never present on reads."
       parameters:
         - $ref: '#/components/parameters/VerificationSubjectID'
       responses:
@@ -1069,12 +1007,7 @@ paths:
       tags: [Verifications]
       summary: Re-verify a subject
       operationId: reverifySubject
-      description: |
-        Opens a **new verification** for an existing subject (periodic KYC refresh, or a
-        material change in the subject's details). The prior verification history is preserved; the
-        subject's current status now tracks the new verification. The response carries the new verification
-        with its secret-once `hosted_link`; when the subject has an email on file, Anton also
-        re-delivers the link (status `sent`).
+      description: Open a **new verification** for an existing subject, for a periodic KYC refresh or a material change in the subject's details. The prior verification history is preserved, and the subject's current status now tracks the new verification. The response carries the new verification with its secret-once `hosted_link`. When the subject has an email on file, Anton also re-delivers the link (status `sent`).
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1133,11 +1066,7 @@ paths:
       tags: [Verifications]
       summary: Resend a verification link
       operationId: resendVerificationLink
-      description: |
-        Mints a fresh one-time hosted link for the **same verification** and re-delivers it to the
-        subject's email when one is on file. Use when the previous link expired unused or never
-        arrived. Fails with `409 invalid_verification_state` on verifications in a terminal state (approved,
-        declined, expired, revoked) — open a new verification via re-verify instead.
+      description: Mint a fresh one-time hosted link for the **same verification** and re-deliver it to the subject's email when one is on file. Use it when the previous link expired unused or never arrived. It fails with `409 invalid_verification_state` on verifications in a terminal state (approved, declined, expired, revoked); open a new verification through re-verify instead.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1187,11 +1116,7 @@ paths:
       tags: [Verifications]
       summary: Regenerate a verification
       operationId: regenerateVerification
-      description: |
-        **Invalidates the prior link and inquiry** and opens a fresh verification for the same subject
-        (reason `regenerated`). Use when a link may have been forwarded or exposed — the old flow
-        is dead the moment this returns. Responds `201` with the new verification and its secret-once
-        `hosted_link`.
+      description: "**Invalidate the prior link and inquiry** and open a fresh verification for the same subject (reason `regenerated`). Use it when a link may have been forwarded or exposed: the old flow is dead the moment this returns. Responds `201` with the new verification and its secret-once `hosted_link`."
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1200,7 +1125,7 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '201':
-          description: Fresh verification opened; prior link invalidated.
+          description: A new verification is open and the previous link no longer works.
           content:
             application/json:
               example: {"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"created","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":null,"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"hosted_link":"https://verify.example.com/v/conf","metadata":{},"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}
@@ -1215,7 +1140,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          description: "`invalid_verification_state` (the verification's current state does not allow this action) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still running)."
           content:
             application/json:
               schema:
@@ -1243,10 +1168,10 @@ paths:
       tags: [Verifications]
       summary: Revoke a verification
       operationId: revokeVerification
-      description: |
-        Terminally cancels an in-flight verification and expires its hosted link. The verification moves to
-        `revoked` and cannot be resumed — open a new verification via re-verify if the subject should
-        be verified later. Fails with `409 invalid_verification_state` when the verification is already approved, declined or expired. Revoking one that is already revoked returns it unchanged.
+      description: |-
+        Cancel an in-flight verification and expire its hosted link. The verification moves to `revoked` and cannot be resumed. To verify the subject later, open a new verification via re-verify.
+
+        Revoking a verification that is already approved, declined or expired fails with `409 invalid_verification_state`. Revoking one that is already revoked returns it unchanged.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1270,7 +1195,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          description: "`invalid_verification_state` (the verification's current state does not allow this action) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still running)."
           content:
             application/json:
               schema:
@@ -1287,17 +1212,14 @@ paths:
       tags: [Verifications]
       summary: Re-screen a verification
       operationId: rescreenVerification
-      description: |
-        Re-runs Anton's intelligence screening for an existing
-        verification against its current data, producing a **fresh evaluation** and an updated
-        `screening` block. Use to refresh the compliance verdict on record — e.g. after a
-        watchlist update. This refreshes the screening only; it does **not** re-open the verification
-        or change its status (the prior decision is preserved in the audit trail). Responds `200`
-        with the verification, whose embedded `screening` carries the fresh `status`, `evaluation_id`,
-        score, tier and reasons. Fails with `409 invalid_verification_state` on verifications that have not
-        been screened yet (created, sent, in_progress) or are terminally cancelled (revoked, expired).
+      description: |-
+        Re-run Anton's intelligence screening on an existing verification against its current data. The call produces a **fresh evaluation** and an updated `screening` block, so you can refresh the compliance verdict on record, for example after a watchlist update.
 
-        Not the same as re-verify, which opens a new verification and re-collects identity.
+        It refreshes the screening only. It does **not** re-open the verification or change its status, and the prior decision stays in the audit trail. The call responds `200` with the verification, whose embedded `screening` carries the fresh `status`, `evaluation_id`, score, tier and reasons.
+
+        It fails with `409 invalid_verification_state` on verifications that have not been screened yet (created, sent, in_progress) or are terminally cancelled (revoked, expired).
+
+        Re-screening is not re-verify, which opens a new verification and re-collects identity.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1306,7 +1228,7 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
-          description: Screening re-run; the verification carries the refreshed `screening` block.
+          description: Screening re-run. The verification carries the refreshed `screening` block.
           content:
             application/json:
               example: {"id":"vrf_dbvqrpqukoh470i0begg","object":"verification","livemode":false,"status":"review","subject_id":"vsub_dbvqrpqukoh470i0be60","reason":"regenerated","screening":{"status":"clear","evaluation_id":"eval_new","score":140,"tier":"low","reasons":[]},"owners":[],"link_expires_at":"2026-11-27T02:18:15.257Z","completed_at":null,"metadata":{},"created_at":"2026-11-20T02:18:15.257Z","updated_at":"2026-11-20T02:18:15.257Z"}
@@ -1321,7 +1243,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          description: "`invalid_verification_state` (the verification's current state does not allow this action) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still running)."
           content:
             application/json:
               schema:
@@ -1347,13 +1269,12 @@ paths:
       tags: [Verifications]
       summary: Resend an owner's verification link
       operationId: resendVerificationOwnerLink
-      description: |
-        Business verifications cascade to each controlling owner, who completes an individual KYC flow.
-        This mints a fresh one-time link for a single owner. Name the owner by exactly one of `owner_id`
-        (an entry in the verification's `owners`; the address on file receives the link) or `email` (the
-        address of an owner on the case; it must belong to an owner of THIS verification, or the call is a
-        404, so a link is never minted for an arbitrary address). With `email`, `deliver: false` returns the
-        link without emailing it, for you to pass on. The link is returned secret-once and never stored.
+      description: |-
+        Mint a fresh one-time link for a single owner. Business verifications cascade to each controlling owner, who completes an individual KYC flow.
+
+        Name the owner with exactly one of `owner_id` (an entry in the verification's `owners`; the link goes to the address on file) or `email` (the address of an owner on the case). An `email` that does not belong to an owner of THIS verification returns a 404, so a link is never minted for an arbitrary address. With `email`, `deliver: false` returns the link without emailing it, so you can pass it on.
+
+        The link is returned once, as a secret, and never stored.
       security:
         - oauthDPoP: []
           dpopHeader: []
@@ -1391,7 +1312,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`invalid_verification_state` (the action is not allowed in the verification''s current state) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still being processed).'
+          description: "`invalid_verification_state` (the verification's current state does not allow this action) or `idempotency_in_flight` (another request with the same `Idempotency-Key` is still running)."
           content:
             application/json:
               schema:
@@ -1423,10 +1344,7 @@ paths:
       tags: [Verifications]
       summary: Verification overview stats
       operationId: getVerificationStats
-      description: |
-        Aggregates across the merchant's verification subjects: totals by outcome, pass rate,
-        median completion time, and weekly started counts. Powers the dashboard overview; useful
-        for your own monitoring.
+      description: Totals by outcome, pass rate, median completion time and weekly started counts, aggregated across your verification subjects. The dashboard overview uses it, and it is useful for your own monitoring.
       responses:
         '200':
           description: Aggregates.
@@ -1451,12 +1369,12 @@ paths:
       tags: [Authentication]
       summary: Mint a DPoP-bound access token
       operationId: createAccessToken
-      description: |
-        Exchange `(client_id, client_secret)` plus a DPoP proof for an OAuth 2.0 access token bound to the merchant's registered DPoP keypair. RFC 6749 §4.4 (client_credentials) + RFC 9449 §5.
+      description: |-
+        Exchange `(client_id, client_secret)` plus a DPoP proof for an OAuth 2.0 access token bound to your registered DPoP keypair. RFC 6749 §4.4 (client_credentials) + RFC 9449 §5.
 
-        Send credentials via HTTP Basic auth (`Authorization: Basic <base64(client_id:client_secret)>`) — body fallback is also accepted. The `DPoP` header is required and MUST carry a proof JWT signed by the merchant's private DPoP key with `htm=POST`, `htu=https://api.../oauth/token`, fresh `iat` / `jti`, and NO `ath` claim (the access token does not exist yet).
+        Send credentials with HTTP Basic auth (`Authorization: Basic <base64(client_id:client_secret)>`). The body is also accepted. The `DPoP` header is required and MUST carry a proof JWT signed with your private DPoP key, with `htm=POST`, `htu=https://api.../oauth/token`, a fresh `iat` and `jti`, and NO `ath` claim (the access token does not exist yet).
 
-        Token TTL is **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call this endpoint again to mint a fresh token.
+        A token lasts **1 hour** in production and staging, and **8 hours** in sandbox. There are no refresh tokens: call `POST /oauth/token` again for a fresh token.
       security: []
       parameters:
         - in: header
@@ -1505,20 +1423,17 @@ paths:
                     description: Token lifetime in seconds.
                   scope:
                     type: string
-                    description: |
-                      Space-delimited granted scopes (RFC 6749 §3.3), echoing the
-                      credential's grants — the same values embedded in the access
-                      token's `scope` claim. e.g. `payouts intelligence`.
+                    description: Space-delimited granted scopes (RFC 6749 §3.3). They echo your credential's grants and match the values in the access token's `scope` claim, for example `payouts intelligence`.
         '400':
           description: Invalid request, unsupported_grant_type, or invalid DPoP proof.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OAuthError' }
         '401':
-          description: 'invalid_client (unknown client_id or wrong secret). Carries the `WWW-Authenticate` header (RFC 6749 section 5.2); the body stays in the RFC 6749 format.'
+          description: "`invalid_client`: the `client_id` is unknown or the secret is wrong. The response carries the `WWW-Authenticate` header (RFC 6749 section 5.2), and the body stays in the RFC 6749 format."
           headers:
             WWW-Authenticate:
-              description: '`Basic realm="anton"`: the token endpoint authenticates clients with their id and secret.'
+              description: "`Basic realm=\"anton\"`. The token endpoint authenticates clients with their id and secret."
               schema:
                 type: string
                 example: 'Basic realm="anton"'
@@ -1536,8 +1451,7 @@ paths:
       tags: [Authentication]
       summary: Public OAuth signing key set
       operationId: getJwks
-      description: |
-        Serves the public half of Anton's OAuth signing key (or keys, during a 24h rotation overlap) as a JSON Web Key Set. SDKs and external verifiers fetch this to verify access tokens locally without a DB hit. Cached 5 minutes.
+      description: Get the public half of Anton's OAuth signing key as a JSON Web Key Set. During a 24h rotation overlap it holds both keys. SDKs and external verifiers fetch it to verify access tokens locally without a DB hit. The response is cached for 5 minutes.
       security: []
       responses:
         '200':
@@ -1565,8 +1479,7 @@ paths:
       tags: [Reference Data]
       summary: List currencies
       operationId: listCurrencies
-      description: |
-        Every currency and asset Anton can move, with the `precision` (decimal places) its amounts carry everywhere in the API: CAD has 2, JPY 0, USDC 6. A request amount with more places is refused with `422 amount_precision_invalid`; responses always render exactly that many. The list is complete and is not paged. It takes no query parameters.
+      description: "List every currency and asset Anton can move, with the `precision` (decimal places) its amounts carry everywhere in the API: CAD has 2, JPY 0, USDC 6. A request amount with more places is refused with `422 amount_precision_invalid`, and responses always render exactly that many. The list is complete and is not paged. It takes no query parameters."
       responses:
         '200':
           description: A list of currencies.
@@ -1916,8 +1829,7 @@ paths:
       tags: [Reference Data]
       summary: List countries
       operationId: listCountries
-      description: |
-        Every destination country, with `payout_supported` saying whether an active payout corridor reaches it. The list is complete and is not paged. It takes no query parameters.
+      description: List every destination country, with `payout_supported` saying whether an active payout corridor reaches it. The list is complete and is not paged. It takes no query parameters.
       responses:
         '200':
           description: A list of countries.
@@ -2294,8 +2206,7 @@ paths:
       tags: [Reference Data]
       summary: List payment methods
       operationId: listPaymentMethods
-      description: |
-        Every payout method, with the countries it reaches. The list is complete and is not paged. It takes no query parameters.
+      description: List every payout method, with the countries it reaches. The list is complete and is not paged. It takes no query parameters.
       responses:
         '200':
           description: A list of payment methods.
@@ -2370,18 +2281,12 @@ paths:
       tags: [Beneficiaries]
       summary: Create a beneficiary
       operationId: createBeneficiary
-      description: |
-        Create a person (`individual`) or business (`business`) you want to pay. PII
-        submitted in the request body is tokenized in a secure vault on creation — only
-        a display name, country, and opaque token reference are stored in the Anton
-        database.
+      description: |-
+        Create a person (`individual`) or business (`business`) you want to pay. Personal details in the request body are tokenized in a secure vault on creation. Anton stores only a display name, country and opaque token reference.
 
-        To retrieve the PII you submitted, use `GET /v1/beneficiaries/{id}/pii`.
+        To read back the details you submitted, use `GET /v1/beneficiaries/{id}/pii`.
 
-        This endpoint requires an `Idempotency-Key` header. Duplicate calls with the
-        same key return the original beneficiary; different bodies with the same key
-        return `422 idempotency_key_reused`. An identity you already hold returns
-        `409 duplicate_beneficiary`.
+        The call requires an `Idempotency-Key` header. Repeating a call with the same key returns the original beneficiary, and a different body with the same key returns `422 idempotency_key_reused`. An identity you already hold returns `409 duplicate_beneficiary`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2452,18 +2357,13 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: >-
-            `duplicate_beneficiary` — this identity already exists for your merchant — or
-            `idempotency_in_flight`.
+          description: "`duplicate_beneficiary` (this identity already exists for your merchant) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: >-
-            The request failed validation (`validation_error`, with `details` listing every
-            failing field) or a business rule (`invalid_credentials`, `method_not_supported`), or
-            `idempotency_key_reused`.
+          description: The request failed validation (`validation_error`, with `details` listing every failing field), broke a business rule (`invalid_credentials`, `method_not_supported`), or reused a key (`idempotency_key_reused`).
           content:
             application/json:
               schema:
@@ -2476,14 +2376,10 @@ paths:
       tags: [Beneficiaries]
       summary: List beneficiaries
       operationId: listBeneficiaries
-      description: |
-        List beneficiaries scoped to your merchant, newest first (ties broken by ID).
-        Results are cursor-paginated.
+      description: |-
+        List your beneficiaries, newest first (ties broken by ID). Results are cursor-paginated.
 
-        Filters are exact-match and validated: an unknown query parameter, a filter
-        value outside its allowed set, an out-of-range `limit` or a bad `cursor` is a
-        `400`, never an empty list. `created_after` is inclusive and `created_before`
-        exclusive; both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request`.
+        Filters are exact-match and validated. An unknown query parameter, a filter value outside its allowed set, an out-of-range `limit` or a bad `cursor` is a `400`, never an empty list. `created_after` is inclusive and `created_before` is exclusive. Both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -2522,8 +2418,7 @@ paths:
             enum: [api, batch, portal, import]
         - name: source_batch_id
           in: query
-          description: |
-            Filter to beneficiaries a specific batch created. A batch ID, prefixed `bat_`.
+          description: Only beneficiaries a specific batch created. A batch ID, prefixed `bat_`.
           required: false
           schema:
             type: string
@@ -2586,7 +2481,7 @@ paths:
       tags: [Beneficiaries]
       summary: Retrieve a beneficiary
       operationId: getBeneficiary
-      description: Return a single beneficiary by ID. Returns `404` if the beneficiary does not exist or belongs to a different merchant.
+      description: Get a beneficiary by ID. Returns `404` if the beneficiary does not exist or belongs to a different merchant.
       responses:
         '200':
           description: Beneficiary.
@@ -2611,13 +2506,10 @@ paths:
       tags: [Beneficiaries]
       summary: Update a beneficiary
       operationId: updateBeneficiary
-      description: |
-        Partially update a beneficiary: `display_name`, `country`, `external_ref` and
-        `metadata`. A field you leave out is left unchanged; `null` clears `external_ref`
-        and `metadata`. `display_name` and `country` cannot be cleared. `metadata`, when
-        sent, replaces the whole map.
+      description: |-
+        Update a beneficiary's `display_name`, `country`, `external_ref` and `metadata`. A field you leave out stays unchanged. `null` clears `external_ref` and `metadata`, but `display_name` and `country` cannot be cleared. When you send `metadata`, it replaces the whole map.
 
-        Personal details cannot be changed here: use `PATCH /v1/beneficiaries/{id}/pii`.
+        To change personal details, use `PATCH /v1/beneficiaries/{id}/pii`.
 
         Accepts an `Idempotency-Key` but does not require one.
       parameters:
@@ -2660,18 +2552,12 @@ paths:
       tags: [Beneficiaries]
       summary: Delete a beneficiary
       operationId: deleteBeneficiary
-      description: |
-        Soft-deletes a beneficiary and removes its personal details from the vault.
-        The record is removed from listings and can no longer be used to initiate
-        new payouts. Historical payouts referencing this beneficiary remain
-        unchanged and accessible.
+      description: |-
+        Soft-delete a beneficiary and remove its personal details from the vault. The beneficiary disappears from listings and can no longer start new payouts. Historical payouts that reference it stay unchanged and accessible.
 
-        Archiving is typically preferred over deletion — see
-        `POST /v1/beneficiaries/{id}/archive`. Archiving keeps the beneficiary and
-        its details, and it can be restored later.
+        Archiving is usually the better choice: see `POST /v1/beneficiaries/{id}/archive`. Archiving keeps the beneficiary and its details, and you can restore it later.
 
-        The body is optional; when sent it may carry only `end_user_ip`. Accepts an
-        `Idempotency-Key` but does not require one.
+        The body is optional and may carry only `end_user_ip`. Accepts an `Idempotency-Key` but does not require one.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyOptional'
       requestBody:
@@ -2718,13 +2604,10 @@ paths:
       tags: [Beneficiaries]
       summary: Retrieve a beneficiary's personal details
       operationId: getBeneficiaryPII
-      description: |
-        Reads the beneficiary's personal details back from the secure vault, in the
-        same shape `PATCH /v1/beneficiaries/{id}/pii` accepts.
+      description: |-
+        Read the beneficiary's personal details back from the secure vault, in the same shape `PATCH /v1/beneficiaries/{id}/pii` accepts.
 
-        **Human users only.** No OAuth scope grants this read: it is available to
-        signed-in admin users of the merchant dashboard, and a machine credential
-        always gets `403`. Every read is recorded in the audit log (PCI DSS 10.2.1).
+        **Human users only.** No OAuth scope grants this read. Signed-in admin users of the merchant dashboard can make it, and a machine credential always gets `403`. Every read is recorded in the audit log (PCI DSS 10.2.1).
       responses:
         '200':
           description: The beneficiary's personal details.
@@ -2749,17 +2632,12 @@ paths:
       tags: [Beneficiaries]
       summary: Update a beneficiary's personal details
       operationId: updateBeneficiaryPII
-      description: |
-        Replaces the personal details stored in the secure vault for this beneficiary.
-        Send the detail block matching the beneficiary's `type` (`individual` or
-        `business`); the other block is refused. The block you send **replaces the
-        stored block as a whole**: vault tokens are immutable, so a field you leave out
-        of the block is cleared, not kept, and the block must be complete. The
-        `display_name` on the beneficiary is re-derived from the new details.
+      description: |-
+        Replace the personal details stored in the secure vault for this beneficiary. Send the detail block that matches the beneficiary's `type` (`individual` or `business`). The other block is refused.
 
-        PII is write-only for machine credentials: your system is the source of the
-        data, so it can replace it without being able to read it back (see
-        `GET /v1/beneficiaries/{id}/pii`).
+        The block you send **replaces the stored block as a whole**. Vault tokens are immutable, so a field you leave out of the block is cleared, not kept, and the block must be complete. The `display_name` on the beneficiary is re-derived from the new details.
+
+        Personal details are write-only for machine credentials: your system is the source of the data, so it can replace it without reading it back (see `GET /v1/beneficiaries/{id}/pii`).
 
         Accepts an `Idempotency-Key` but does not require one.
       parameters:
@@ -2808,15 +2686,12 @@ paths:
       tags: [Beneficiaries]
       summary: Archive a beneficiary
       operationId: archiveBeneficiary
-      description: |
-        Soft-disables a beneficiary. The record is preserved and can be restored later,
-        but it cannot be used to initiate new payouts while archived. PII remains
-        tokenized and accessible. Archiving an archived beneficiary returns it
-        unchanged. A beneficiary that cannot be used for payouts (`blocked`) cannot
-        be archived: `409 beneficiary_not_active`.
+      description: |-
+        Soft-disable a beneficiary. The record is kept and you can restore it later, but it cannot start new payouts while archived. Personal details stay tokenized and accessible. Archiving an archived beneficiary returns it unchanged.
 
-        The body is optional; when sent it may carry only `end_user_ip`. Requires an
-        `Idempotency-Key` header.
+        A beneficiary that cannot be used for payouts (`blocked`) cannot be archived: `409 beneficiary_not_active`.
+
+        The body is optional and may carry only `end_user_ip`. Requires an `Idempotency-Key` header.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2843,9 +2718,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: >-
-            `beneficiary_not_active` — the beneficiary is in a state that does not allow this
-            change — or `idempotency_in_flight`.
+          description: "`beneficiary_not_active` (the beneficiary's state does not allow this change) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
@@ -2871,14 +2744,12 @@ paths:
       tags: [Beneficiaries]
       summary: Restore an archived beneficiary
       operationId: restoreBeneficiary
-      description: |
-        Restores a previously archived beneficiary to active status. Restoring an
-        active beneficiary returns it unchanged. A beneficiary that cannot be used
-        for payouts (`blocked`) cannot be restored through the API:
-        `409 beneficiary_not_active`.
+      description: |-
+        Restore an archived beneficiary to active status. Restoring an active beneficiary returns it unchanged.
 
-        The body is optional; when sent it may carry only `end_user_ip`. Requires an
-        `Idempotency-Key` header.
+        A beneficiary that cannot be used for payouts (`blocked`) cannot be restored through the API: `409 beneficiary_not_active`.
+
+        The body is optional and may carry only `end_user_ip`. Requires an `Idempotency-Key` header.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2905,9 +2776,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: >-
-            `beneficiary_not_active` — the beneficiary is in a state that does not allow this
-            change — or `idempotency_in_flight`.
+          description: "`beneficiary_not_active` (the beneficiary's state does not allow this change) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
@@ -2933,12 +2802,8 @@ paths:
       tags: [Beneficiaries]
       summary: Re-screen a beneficiary
       operationId: rescreenBeneficiary
-      description: |
-        Queue a fresh check of an active beneficiary. Asynchronous: responds `202`
-        immediately with the beneficiary, whose `status` stays `active` until the
-        check completes. The beneficiary may then become unavailable for payouts
-        (`blocked`, with the `beneficiary.blocked` webhook event); otherwise nothing
-        changes. Both the request and the outcome are audited.
+      description: |-
+        Queue a fresh check of an active beneficiary. The call is asynchronous and responds `202` immediately with the beneficiary, whose `status` stays `active` until the check completes. The beneficiary may then become unavailable for payouts (`blocked`, with the `beneficiary.blocked` webhook event); otherwise nothing changes. Both the request and the outcome are audited.
 
         Takes no request body. Requires an `Idempotency-Key` header.
       parameters:
@@ -2960,9 +2825,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: >-
-            `beneficiary_not_active` — only active beneficiaries can be re-screened — or
-            `idempotency_in_flight`.
+          description: "`beneficiary_not_active` (only active beneficiaries can be re-screened) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
@@ -2988,30 +2851,16 @@ paths:
       tags: [Payouts]
       summary: Create a payout
       operationId: createPayout
-      description: |
-        Initiate a payout from your merchant balance to a beneficiary's payment
-        instrument. The payout goes through compliance screening and risk
-        evaluation before it is submitted to a rail — see
-        [How Anton Evaluates Payouts](/concepts/how-anton-evaluates-payouts).
+      description: |-
+        Send money from your merchant balance to a beneficiary's payment instrument. The payout goes through compliance screening and risk evaluation before it is submitted to a rail. See [How Anton Evaluates Payouts](/concepts/how-anton-evaluates-payouts).
 
-        The payout is usually returned in status `processing`: screening starts
-        as it is created. It is `on_hold` when it goes to review. When your own
-        approval policy needs a second person, it moves to `pending_approval`
-        after screening. Treat `created` the same way: in progress. It moves on
-        asynchronously, and its status changes are delivered as `payout.*`
-        webhook events. Do not poll.
+        The payout usually comes back in status `processing`, because screening starts as it is created. It is `on_hold` when it goes to review. When your own approval policy needs a second person, it moves to `pending_approval` after screening. Treat `created` the same way: in progress. The payout moves on asynchronously, and its status changes arrive as `payout.*` webhook events. Do not poll.
 
-        Both `source_amount` and `destination_amount` are required, with
-        `fixed_side` (`fixed_source` or `fixed_destination`) saying which one is
-        authoritative; the other is recomputed from current corridor pricing.
-        Amounts are decimal strings with at most the currency's precision
-        (2 places for USD, 0 for JPY, 6 for USDC); more is `422
-        amount_precision_invalid`. Pin the fee and rate first with `POST /v1/pricing/quotes`
-        and pass its `id` as `quote_id`.
+        Both `source_amount` and `destination_amount` are required. `fixed_side` (`fixed_source` or `fixed_destination`) says which one is authoritative, and the other is recomputed from current corridor pricing. Amounts are decimal strings with at most the currency's precision (2 places for USD, 0 for JPY, 6 for USDC). More is `422
+        amount_precision_invalid`. To pin the fee and rate, call `POST /v1/pricing/quotes` first and pass its `id` as `quote_id`.
 
         A payout that cannot be processed is refused with `422
-        cannot_be_processed`; the response never says why. A payout your own
-        approval policy blocks is `422 policy_blocked`.
+        cannot_be_processed`, and the response never says why. A payout your own approval policy blocks is `422 policy_blocked`.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -3070,7 +2919,7 @@ paths:
                   reference: INV-1042
       responses:
         '201':
-          description: Payout created. Its later lifecycle is reported by webhooks.
+          description: Payout created. Webhooks report its later lifecycle.
           headers:
             Idempotent-Replayed:
               $ref: '#/components/headers/Idempotent-Replayed'
@@ -3086,7 +2935,7 @@ paths:
         '403':
           $ref: '#/components/responses/CapabilityForbidden'
         '404':
-          description: '`resource_missing` — `beneficiary_id` or `quote_id` names no beneficiary or pricing quote of yours.'
+          description: "`resource_missing`: `beneficiary_id` or `quote_id` names no beneficiary or pricing quote of yours."
           content:
             application/json:
               schema:
@@ -3098,13 +2947,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: |
-            Well-formed but refused. Codes: `validation_error` (a field fails validation; `details` lists every
-            one, including `metadata` over its limits), `amount_precision_invalid`, `insufficient_balance`,
-            `amount_invalid` (an amount is zero or negative; `param` names it), `payout_rejected`,
-            `policy_blocked` (your own approval policy blocks the payout),
-            `cannot_be_processed` (the payout cannot be processed; no further detail is given),
-            `quote_expired`, `quote_mismatch`, and `idempotency_key_reused`.
+          description: "Well-formed but refused. Codes: `validation_error` (a field fails validation; `details` lists every one, including `metadata` over its limits), `amount_precision_invalid`, `insufficient_balance`, `amount_invalid` (an amount is zero or negative; `param` names it), `payout_rejected`, `policy_blocked` (your own approval policy blocks the payout), `cannot_be_processed` (the payout cannot be processed; no further detail is given), `quote_expired`, `quote_mismatch`, and `idempotency_key_reused`."
           content:
             application/json:
               schema:
@@ -3134,12 +2977,10 @@ paths:
       tags: [Payouts]
       summary: List payouts
       operationId: listPayouts
-      description: |
-        Cursor-paginated list of your payouts, newest first. Every filter value is validated: an unknown
-        status, a malformed ID or timestamp, or an unknown query parameter is a `400`, never an empty list.
+      description: |-
+        List your payouts, newest first, with cursor pagination. Every filter value is validated. An unknown status, a malformed ID or timestamp, or an unknown query parameter is a `400`, never an empty list.
 
-        The `status` filter takes the public statuses and returns exactly the payouts whose `status` shows
-        that value.
+        The `status` filter takes the public statuses and returns exactly the payouts whose `status` shows that value.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -3188,12 +3029,12 @@ paths:
             type: string
         - name: created_after
           in: query
-          description: RFC 3339 timestamp. Returns payouts with `created_at` at or after it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp. Returns payouts with `created_at` at or after it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
-          description: RFC 3339 timestamp. Returns payouts with `created_at` before it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: RFC 3339 timestamp. Returns payouts with `created_at` before it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
       responses:
@@ -3229,11 +3070,8 @@ paths:
       tags: [Payouts]
       summary: Cancel several payouts
       operationId: cancelPayouts
-      description: |
-        Cancel up to 200 payouts in one call. Each payout is cancelled on its own, under the same rules as
-        `POST /v1/payouts/{id}/cancel`: the call is not atomic, and the response lists, per ID, which were
-        cancelled and which were not and why. A payout that is on hold or has already been submitted to a rail
-        is reported under `failed`, not as an error of the call.
+      description: |-
+        Cancel up to 200 payouts in one call. Each payout is cancelled on its own, under the same rules as `POST /v1/payouts/{id}/cancel`. The call is not atomic: the response lists, per ID, which payouts were cancelled and which were not, and why. A payout that is on hold or already submitted to a rail is reported under `failed`, not as an error of the call.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -3290,11 +3128,10 @@ paths:
       tags: [Payouts]
       summary: Retrieve a payout
       operationId: getPayout
-      description: |
-        Return a payout. `404` if it does not exist or belongs to another merchant; `400 resource_id_invalid` if the ID
-        is not a payout ID. The response is the same payout object a `payout.*` webhook event carries. `risk` (the
-        payout's score and tier) and `delivery` (corridor timing, when known and the payout is in flight) are always
-        present and `null` when they do not apply; both are `null` for a payout that is `on_hold` or `failed`.
+      description: |-
+        Get a payout. Returns `404` if it does not exist or belongs to another merchant, and `400 resource_id_invalid` if the ID is not a payout ID. The response is the same payout object a `payout.*` webhook event carries.
+
+        `risk` (the payout's score and tier) and `delivery` (corridor timing, when known and the payout is in flight) are always present, and `null` when they do not apply. Both are `null` for a payout that is `on_hold` or `failed`.
       responses:
         '200':
           description: The payout.
@@ -3330,11 +3167,10 @@ paths:
       tags: [Payouts]
       summary: List a payout's status changes
       operationId: listPayoutEvents
-      description: |
-        The payout's timeline, oldest first, in the same public statuses as the payout. A change of internal
-        state that does not change the public status is not an event. The last event is always the payout's
-        current status. The preferred way to follow a payout is
-        its webhooks; polling this wastes rate limit.
+      description: |-
+        Get the payout's timeline, oldest first, in the same public statuses as the payout. A change of internal state that does not change the public status is not an event. The last event is always the payout's current status.
+
+        Follow a payout through its webhooks instead of this call. Polling wastes rate limit.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -3380,16 +3216,13 @@ paths:
       tags: [Payouts]
       summary: Cancel a payout
       operationId: cancelPayout
-      description: |
-        Cancel a payout that has not been submitted to a rail. A payout can be cancelled while its status is
-        `created` or `pending_approval`, and while it is `processing` early on: up to the point it is
-        submitted to the rail, which the response does not show, so a `processing` payout may or may not be
-        cancellable. A payout that is `on_hold` cannot be cancelled until the hold ends (`409
-        payout_on_hold`). One that is already past submission, or that is `sent`, `completed`, `returned`,
-        `cancelled` or `failed`, is `409 payout_not_cancellable`, and so is one that failed with
-        `cannot_be_processed`, always with the same wording whatever the reason. The request takes no body.
+      description: |-
+        Cancel a payout that has not been submitted to a rail. You can cancel while the status is `created` or `pending_approval`, and while it is `processing` early on, up to the point it is submitted to the rail. The response does not show that point, so a `processing` payout may or may not be cancellable.
 
-        Any debited source funds (source amount, fee and buffer) return to your balance on success.
+        A payout that is `on_hold` cannot be cancelled until the hold ends (`409
+        payout_on_hold`). One that is already past submission, or that is `sent`, `completed`, `returned`, `cancelled` or `failed`, is `409 payout_not_cancellable`. So is one that failed with `cannot_be_processed`, always with the same wording whatever the reason. The request takes no body.
+
+        On success, any debited source funds (source amount, fee and buffer) return to your balance.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -3411,9 +3244,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: |
-            State conflict: `payout_not_cancellable` (the payout is past the point of cancelling, or failed),
-            `payout_on_hold` (the payout is under review), or `idempotency_in_flight`.
+          description: "State conflict: `payout_not_cancellable` (the payout is past the point of cancelling, or failed), `payout_on_hold` (the payout is under review), or `idempotency_in_flight`."
           content:
             application/json:
               schema:
@@ -3441,22 +3272,14 @@ paths:
       tags: [Beneficiaries]
       summary: Preview a bulk beneficiary import
       operationId: previewBeneficiaryImport
-      description: |
-        Upload a CSV file of beneficiaries (individual OR business — one type per
-        file). The server parses every row, runs the same validation as
-        `POST /v1/beneficiaries`, and returns the import with per-row results.
-        **No beneficiaries are created at this phase.** The import is a resource of
-        its own (`imp_…`, status `preview`) and expires 24 hours after it is created.
+      description: |-
+        Upload a CSV file of beneficiaries, all individuals or all businesses (one type per file), and check it before anything is created. The server parses every row, runs the same validation as `POST /v1/beneficiaries`, and returns the import with per-row results. **No beneficiaries are created at this phase.** The import is a resource of its own (`imp_…`, status `preview`) and expires 24 hours after it is created.
 
-        After reviewing the per-row errors, call
-        `POST /v1/beneficiaries/import/{import_id}/confirm` to create the beneficiaries
-        for the rows that passed validation.
+        Review the per-row errors, then call `POST /v1/beneficiaries/import/{import_id}/confirm` to create the beneficiaries for the rows that passed validation.
 
-        Distinct from the `POST /v1/batches` flow, which creates beneficiaries,
-        instruments and payouts in one shot. This endpoint creates only beneficiaries.
+        This differs from the `POST /v1/batches` flow, which creates beneficiaries, instruments and payouts in one shot. This flow creates only beneficiaries.
 
-        Requires an `Idempotency-Key` header. Maximum file size: 8 MB. Only `.csv` is
-        accepted. The route takes no query parameters.
+        Requires an `Idempotency-Key` header. Maximum file size: 8 MB. Only `.csv` is accepted. The route takes no query parameters.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -3473,11 +3296,7 @@ paths:
                   description: CSV file matching the individual or business template.
                 metadata:
                   type: string
-                  description: >-
-                    Optional. Your own key/value pairs for the import as a JSON object string, such as
-                    `{"order_ref":"A-1042"}`. Strings only, at most 50 keys, keys up to 40 characters and values
-                    up to 500; never personal data. Not JSON is `400 malformed_json`, not an object of strings is
-                    `400 type_mismatch`, both with `param` `metadata`; breaking the caps is `422`.
+                  description: Optional. Your own key/value pairs for the import, as a JSON object string such as `{"order_ref":"A-1042"}`. Strings only, at most 50 keys, keys up to 40 characters and values up to 500. Never put personal data here. Invalid JSON is `400 malformed_json`, and an object that is not all strings is `400 type_mismatch`, both with `param` `metadata`. Breaking the caps is `422`.
       responses:
         '201':
           description: Import created, with per-row validation results.
@@ -3487,14 +3306,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/BeneficiaryImport'
         '400':
-          description: |
+          description: |-
             Malformed upload. One of:
-            - `invalid_multipart_form` — request body is not valid multipart/form-data.
-            - `invalid_file` — the `file` form field was missing or unreadable.
-            - `invalid_file_format` — unsupported extension (only `.csv` is accepted).
-            - `invalid_csv` — the file could not be parsed, or the header row does not
-              match the individual or business template.
-            - `unknown_parameter` — the request carried a query parameter.
+
+            - `invalid_multipart_form`: the request body is not valid multipart/form-data.
+            - `invalid_file`: the `file` form field was missing or unreadable.
+            - `invalid_file_format`: unsupported extension (only `.csv` is accepted).
+            - `invalid_csv`: the file could not be parsed, or the header row does not match the individual or business template.
+            - `unknown_parameter`: the request carried a query parameter.
             - `missing_idempotency_key`.
           content:
             application/json:
@@ -3505,13 +3324,13 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '413':
-          description: '`file_too_large` — file exceeds the 8 MB limit.'
+          description: "`file_too_large`: the file exceeds the 8 MB limit."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`import_too_large` — the file has more than 1,000 data rows; split it and upload each part.'
+          description: "`import_too_large`: the file has more than 1,000 data rows. Split it and upload each part."
           content:
             application/json:
               schema:
@@ -3521,7 +3340,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
-          description: '`service_unavailable` — the vault could not take the rows; nothing was stored. Upload the file again.'
+          description: "`service_unavailable`: the vault could not take the rows, and nothing was stored. Upload the file again."
           headers:
             Retry-After:
               $ref: '#/components/headers/Retry-After'
@@ -3544,14 +3363,10 @@ paths:
       tags: [Beneficiaries]
       summary: Confirm a beneficiary import
       operationId: confirmBeneficiaryImport
-      description: |
-        Creates a beneficiary for every row that passed preview validation. Rows that
-        failed validation are skipped; rows that pass preview but fail at create time
-        (duplicate identity, vault failure) are listed in `result.errors`.
+      description: |-
+        Create a beneficiary for every row that passed preview validation. Rows that failed validation are skipped. Rows that pass preview but fail at create time (duplicate identity, vault failure) are listed in `result.errors`.
 
-        Answers `200` with the import, now `confirmed`, and its `result`. The import is
-        marked `confirmed` once this call completes, even on partial failure: to re-run
-        a subset, edit the source CSV and upload a fresh import.
+        The call answers `200` with the import, now `confirmed`, and its `result`. The import is marked `confirmed` once the call completes, even on partial failure. To re-run a subset, edit the source CSV and upload a fresh import.
 
         Takes no request body. Requires an `Idempotency-Key` header.
       parameters:
@@ -3565,9 +3380,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/BeneficiaryImport'
         '400':
-          description: |
-            `resource_id_invalid` — the path parameter does not look like an `imp_` ID — or
-            `invalid_request` — a request body was sent — or `missing_idempotency_key`.
+          description: "`resource_id_invalid` (the path parameter does not look like an `imp_` ID), `invalid_request` (a request body was sent), or `missing_idempotency_key`."
           content:
             application/json:
               schema:
@@ -3577,16 +3390,16 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`resource_missing` — no import matches this ID for your merchant.'
+          description: "`resource_missing`: no import matches this ID for your merchant."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: |
+          description: |-
             Confirm cannot proceed. One of:
-            - `import_already_confirmed` — a previous call created the beneficiaries, or another confirm is creating them now.
-            - `import_expired` — the 24-hour window has elapsed; re-upload the file.
+            - `import_already_confirmed`: a previous call created the beneficiaries, or another confirm is creating them now.
+            - `import_expired`: the 24-hour window has elapsed. Re-upload the file.
             - `idempotency_in_flight`.
           content:
             application/json:
@@ -3597,7 +3410,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
-          description: '`service_unavailable` — the vault could not answer. Nothing was discarded and the import is open again: confirm again.'
+          description: "`service_unavailable`: the vault could not answer. Nothing was discarded and the import is open again, so confirm again."
           headers:
             Retry-After:
               $ref: '#/components/headers/Retry-After'
@@ -3611,17 +3424,14 @@ paths:
       - $ref: '#/components/parameters/AntonVersion'
     get:
       tags: [Beneficiaries]
-      summary: Download the beneficiary import CSV template
+      summary: Download the payee import CSV template
       operationId: downloadBeneficiaryImportTemplate
-      description: |
-        Returns a ready-to-fill CSV template with the canonical header row and
-        one or two example rows (`text/csv`). Use it to anchor your import format —
-        column order and casing matter.
+      description: Get a ready-to-fill CSV template (`text/csv`) with the canonical header row and one or two example rows. Use it to set up your import file. Column order and casing matter.
       parameters:
         - name: type
           in: query
           required: true
-          description: Which template to serve.
+          description: Which template to download.
           schema:
             type: string
             enum: [individual, business]
@@ -3642,11 +3452,11 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: |
+          description: |-
             One of:
-            - `invalid_template_type` — `type` must be `individual` or `business`.
-            - `invalid_template_format` — only `csv` is supported.
-            - `unknown_parameter` — a query parameter other than `type` and `format`.
+            - `invalid_template_type`: `type` must be `individual` or `business`.
+            - `invalid_template_format`: only `csv` is supported.
+            - `unknown_parameter`: you sent a query parameter other than `type` and `format`.
           content:
             application/json:
               schema:
@@ -3667,9 +3477,7 @@ paths:
       tags: [Batches]
       summary: Download the batch template
       operationId: downloadBatchTemplate
-      description: |
-        A ready-to-fill template file with the canonical header row and a few example rows. Column order and
-        casing matter. This is a file download, not a JSON resource.
+      description: Get a ready-to-fill template file with the canonical header row and a few example rows. Column order and casing matter. The response is a file download, not JSON.
       parameters:
         - name: format
           in: query
@@ -3690,7 +3498,7 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: '`invalid_template_format` (`format` must be `xlsx` or `csv`) or an unknown query parameter.'
+          description: "`invalid_template_format` (`format` must be `xlsx` or `csv`), or you sent an unknown query parameter."
           content:
             application/json:
               schema:
@@ -3700,7 +3508,7 @@ paths:
         '403':
           $ref: '#/components/responses/CapabilityForbidden'
         '404':
-          description: '`resource_missing` — the template could not be located.'
+          description: "`resource_missing`: the template could not be found."
           content:
             application/json:
               schema:
@@ -3717,13 +3525,10 @@ paths:
       tags: [Batches]
       summary: Upload a batch
       operationId: uploadBatch
-      description: |
-        Upload a batch file (CSV or XLSX) of payout rows, up to 32 MB. The file is stored, hashed for duplicate
-        detection and validated asynchronously. The batch is returned in `uploaded`; it then becomes `validating`
-        and `validated` (or `validation_failed`), reported by webhook.
+      description: |-
+        Upload a batch file (CSV or XLSX) of payout rows, up to 32 MB. Anton stores the file, hashes it to detect duplicates and validates it asynchronously. The call returns the batch as `uploaded`. It then becomes `validating` and `validated` (or `validation_failed`), and a webhook reports each change.
 
-        Once `validated`, review the batch and its summary, then `POST /v1/batches/{id}/confirm` to create the
-        payouts. Confirmation expires: see `expires_at`.
+        Once the batch is `validated`, review it and its summary, then call `POST /v1/batches/{id}/confirm` to create the payouts. Confirmation expires; see `expires_at`.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -3742,14 +3547,10 @@ paths:
                   description: The CSV or XLSX file.
                 file_hash:
                   type: string
-                  description: Optional `sha256:`-prefixed hash of the file; the upload is refused if it does not match.
+                  description: Optional `sha256:`-prefixed hash of the file. The upload is refused if it does not match.
                 metadata:
                   type: string
-                  description: >-
-                    Optional. Your own key/value pairs for the batch as a JSON object string, such as
-                    `{"payroll_run":"2026-11"}`. Strings only, at most 50 keys, keys up to 40 characters and values
-                    up to 500; never personal data. Not JSON is `400 malformed_json`, not an object of strings is
-                    `400 type_mismatch`, both with `param` `metadata`; breaking the caps is `422`.
+                  description: Optional. Your own key/value pairs for the batch, as a JSON object string such as `{"payroll_run":"2026-11"}`. Strings only, at most 50 keys, keys up to 40 characters and values up to 500. Never put personal data here. A value that is not JSON is `400 malformed_json`, and one that is not an object of strings is `400 type_mismatch`, both with `param` `metadata`. Going over the limits is `422`.
       responses:
         '201':
           description: Batch accepted and queued for validation.
@@ -3759,9 +3560,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/BatchUpload'
         '400':
-          description: |
-            Malformed upload: `invalid_multipart_form`, `invalid_file` (the `file` field is missing),
-            `invalid_file_format` (only `.csv` and `.xlsx`) or `file_hash_mismatch`.
+          description: "The upload is malformed: `invalid_multipart_form`, `invalid_file` (the `file` field is missing), `invalid_file_format` (only `.csv` and `.xlsx`) or `file_hash_mismatch`."
           content:
             application/json:
               schema:
@@ -3777,7 +3576,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '413':
-          description: '`file_too_large` — the file exceeds 32 MB.'
+          description: "`file_too_large`: the file is over 32 MB."
           content:
             application/json:
               schema:
@@ -3796,9 +3595,7 @@ paths:
       tags: [Batches]
       summary: List batches
       operationId: listBatches
-      description: |
-        Cursor-paginated list of your batches, newest first. An unknown `status`, a malformed timestamp or an
-        unknown query parameter is a `400`.
+      description: List your batches, newest first, with cursor pagination. An unknown `status`, a malformed timestamp or an unknown query parameter is a `400`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -3809,12 +3606,12 @@ paths:
           description: Only batches in this status.
         - name: created_after
           in: query
-          description: RFC 3339 timestamp. Returns batches with `created_at` at or after it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only batches with `created_at` at or after this time. Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
         - name: created_before
           in: query
-          description: RFC 3339 timestamp. Returns batches with `created_at` before it. It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only batches with `created_at` before this time. Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             $ref: '#/components/schemas/Timestamp'
       responses:
@@ -3857,7 +3654,7 @@ paths:
       tags: [Batches]
       summary: Retrieve a batch
       operationId: getBatch
-      description: Return a batch with its counts and validation summary. `404` if it does not exist or belongs to another merchant.
+      description: Get a batch with its counts and validation summary. Returns `404` if the batch does not exist or belongs to another merchant.
       responses:
         '200':
           description: The batch.
@@ -3893,12 +3690,10 @@ paths:
       tags: [Batches]
       summary: Confirm a validated batch
       operationId: confirmBatch
-      description: |
-        Confirm a `validated` batch for processing. It becomes `confirmed`, then `processing` as payouts are
-        created from the valid rows. Confirmation cannot be undone, but individual payouts can still be cancelled
-        (`POST /v1/payouts/{id}/cancel`) until they are submitted to a rail.
+      description: |-
+        Confirm a `validated` batch so it can be processed. It becomes `confirmed`, then `processing` as payouts are created from the valid rows. You cannot undo a confirmation, but you can still cancel individual payouts (`POST /v1/payouts/{id}/cancel`) until they are submitted to a rail.
 
-        The body is optional; when sent it is strict JSON and an unknown field is a `400`.
+        The body is optional. When you send one, it is strict JSON and an unknown field is a `400`.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -3963,10 +3758,8 @@ paths:
       tags: [Batches]
       summary: Cancel a batch
       operationId: cancelBatch
-      description: |
-        Cancel a batch before processing begins: from `uploaded`, `validating`, `validated`,
-        `validation_failed` or `confirmed`. Once `processing` has begun, cancel payouts individually. The
-        request takes no body.
+      description: |-
+        Cancel a batch before processing begins, from `uploaded`, `validating`, `validated`, `validation_failed` or `confirmed`. Once `processing` has begun, cancel payouts one by one instead. The request takes no body.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -4018,7 +3811,7 @@ paths:
       tags: [Batches]
       summary: List payouts created from a batch
       operationId: listBatchPayouts
-      description: Cursor-paginated list of the payouts this batch created, newest first. `404` for a batch of another merchant.
+      description: List the payouts this batch created, newest first, with cursor pagination. Returns `404` for a batch that belongs to another merchant.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -4062,11 +3855,9 @@ paths:
         description: The batch ID (`bat_...`).
     get:
       tags: [Batches]
-      summary: List beneficiaries created or referenced by a batch
+      summary: List payees created or referenced by a batch
       operationId: listBatchBeneficiaries
-      description: |
-        Cursor-paginated list of the beneficiaries this batch created or first referenced. `404` for a batch of
-        another merchant.
+      description: List the payees this batch created or first referenced, with cursor pagination. Returns `404` for a batch that belongs to another merchant.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -4098,7 +3889,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
-          description: Batch beneficiary listing is not available on this API (`service_unavailable`).
+          description: Listing a batch's payees is not available on this API (`service_unavailable`).
           headers:
             Retry-After:
               $ref: '#/components/headers/Retry-After'
@@ -4121,11 +3912,7 @@ paths:
       tags: [Batches]
       summary: List the problems found in a batch file
       operationId: listBatchErrors
-      description: |
-        The row-level errors and warnings found while the batch was `validating`, errors first, as a list. Each
-        carries the row number so you can point back to your file. Validation checks the file itself (format,
-        amounts, methods, credentials, beneficiary resolution); each payout a confirmed batch creates is checked
-        separately before it is sent.
+      description: List the row-level errors and warnings found while the batch was `validating`, errors first. Each one carries the row number so you can find it in your file. Validation checks the file itself (format, amounts, methods, credentials, payee resolution). Each payout a confirmed batch creates is checked again before it is sent.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -4171,9 +3958,7 @@ paths:
       tags: [Batches]
       summary: List per-row processing results
       operationId: listBatchResults
-      description: |
-        The per-row outcome of `processing`: the row number, the outcome (`success`, `failed`, `skipped`,
-        `pending`), the created `payout_id`, and a message for any row that did not succeed.
+      description: "List what happened to each row during `processing`: the row number, the outcome (`success`, `failed`, `skipped`, `pending`), the created `payout_id`, and a message for any row that did not succeed."
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -4212,19 +3997,10 @@ paths:
       tags: [Instruments]
       summary: Create an instrument
       operationId: createInstrument
-      description: |
-        Attach a payment instrument to a beneficiary, named by `beneficiary_id` in the
-        body. The credentials you submit (bank account numbers, wallet addresses, card
-        PANs) are tokenized in the secure vault on receipt — Anton's core database
-        stores only a token reference, display-only masked values, and a content
-        fingerprint used for deduplication.
+      description: |-
+        Add a payment instrument to a payee, named by `beneficiary_id` in the body. Anton tokenizes the credentials you submit (bank account numbers, wallet addresses, card PANs) in the secure vault on receipt. Its core database keeps only a token reference, display-only masked values, and a content fingerprint used for deduplication.
 
-        The `credentials` shape depends on the `method`: call
-        `GET /v1/instruments/methods` for the per-country catalog with the exact
-        fields each method asks for. A method that is not available in the beneficiary's
-        country is `422 method_not_supported`; credentials that fail the method's
-        format rules are `422 invalid_credentials`; an instrument you already hold for
-        the beneficiary is `409 duplicate_instrument`.
+        The shape of `credentials` depends on the `method`. Call `GET /v1/instruments/methods` for the per-country catalog with the exact fields each method asks for. A method that is not available in the payee's country is `422 method_not_supported`. Credentials that fail the method's format rules are `422 invalid_credentials`. An instrument you already hold for the payee is `409 duplicate_instrument`.
 
         Requires an `Idempotency-Key` header.
       parameters:
@@ -4267,22 +4043,19 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`resource_missing` — `beneficiary_id` names no beneficiary of yours.'
+          description: "`resource_missing`: `beneficiary_id` names no payee of yours."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: '`duplicate_instrument` — you already hold this instrument for the beneficiary — or `idempotency_in_flight`.'
+          description: "`duplicate_instrument` (you already hold this instrument for the payee) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: >-
-            The request failed validation (`validation_error`, with `details` listing every
-            failing field) or a business rule (`invalid_credentials`, `method_not_supported`), or
-            `idempotency_key_reused`.
+          description: The request failed validation (`validation_error`, with `details` listing every failing field) or a business rule (`invalid_credentials`, `method_not_supported`), or it is `idempotency_key_reused`.
           content:
             application/json:
               schema:
@@ -4295,22 +4068,16 @@ paths:
       tags: [Instruments]
       summary: List instruments
       operationId: listInstruments
-      description: |
-        List payment instruments across all beneficiaries in your merchant scope, newest
-        first (ties broken by ID). Use `beneficiary_id` to list one beneficiary's
-        instruments.
+      description: |-
+        List payment instruments across all your payees, newest first (ties broken by ID). Use `beneficiary_id` to list one payee's instruments.
 
-        Filters are exact-match and validated: an unknown query parameter, a filter value
-        outside its allowed set, an out-of-range `limit` or a bad `cursor` is a `400`,
-        never an empty list. A `beneficiary_id` that names no beneficiary of yours is
-        `404 resource_missing`. `created_after` is inclusive and `created_before`
-        exclusive; both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request`.
+        Filters are exact-match and validated. An unknown query parameter, a filter value outside its allowed set, an out-of-range `limit` or a bad `cursor` is a `400`, never an empty list. A `beneficiary_id` that names no payee of yours is `404 resource_missing`. `created_after` is inclusive and `created_before` is exclusive. Both are RFC 3339 UTC timestamps with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
         - name: beneficiary_id
           in: query
-          description: Only this beneficiary's instruments.
+          description: Only this payee's instruments.
           schema:
             type: string
             pattern: '^ben_[a-zA-Z0-9]+$'
@@ -4377,7 +4144,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: '`resource_missing` — `beneficiary_id` names no beneficiary of yours.'
+          description: "`resource_missing`: `beneficiary_id` names no payee of yours."
           content:
             application/json:
               schema:
@@ -4394,13 +4161,10 @@ paths:
       tags: [Instruments]
       summary: List countries available for instrument creation
       operationId: listInstrumentCountries
-      description: |
-        The countries Anton can deliver payouts to, with the number of payment methods
-        available in each. Use it to populate a country picker in an instrument-creation
-        form, paired with `GET /v1/instruments/methods`. A list of all entries on one page.
+      description: |-
+        List the countries Anton can pay out to, with the number of payment methods available in each. Use it with `GET /v1/instruments/methods` to fill a country picker in an instrument-creation form. All entries come back on one page.
 
-        For the full reference catalog (ISO 3166 codes and currencies), use
-        `GET /v1/countries`.
+        For the full reference catalog (ISO 3166 codes and currencies), use `GET /v1/countries`.
       responses:
         '200':
           description: Supported instrument countries.
@@ -4434,12 +4198,7 @@ paths:
       tags: [Instruments]
       summary: List payment methods per country
       operationId: listInstrumentMethods
-      description: |
-        The payment methods available per country, one entry per country and method,
-        each with the credential fields to collect. Use it to drive an instrument-creation
-        form that asks for the right fields for the selected country and method.
-        `country` narrows the list; a value that is not an alpha-2 code Anton delivers
-        to is `400 invalid_request`. A list of all entries on one page.
+      description: List the payment methods available in each country, one entry per country and method, with the credential fields to collect. Use it to build an instrument-creation form that asks for the right fields for the selected country and method. `country` narrows the list. A value that is not an alpha-2 code Anton delivers to is `400 invalid_request`. All entries come back on one page.
       parameters:
         - name: country
           in: query
@@ -4487,7 +4246,7 @@ paths:
       tags: [Instruments]
       summary: Retrieve an instrument
       operationId: getInstrument
-      description: Return a single instrument by ID. Returns `404` if it does not exist or belongs to a different merchant.
+      description: Get one instrument by ID. Returns `404` if it does not exist or belongs to a different merchant.
       responses:
         '200':
           description: Instrument.
@@ -4512,13 +4271,8 @@ paths:
       tags: [Instruments]
       summary: Update an instrument
       operationId: updateInstrument
-      description: |
-        Partially update an instrument: `label`, `default`, `status` and `metadata`.
-        A field you leave out is left unchanged; `null` clears `label` and `metadata`
-        and sets `default` to `false`. `status` cannot be cleared. `metadata`, when
-        sent, replaces the whole map. Making an instrument the default unflags the
-        beneficiary's previous default. Credentials cannot be updated: create a new
-        instrument and delete the old one.
+      description: |-
+        Update an instrument's `label`, `default`, `status` and `metadata`. A field you leave out stays unchanged. `null` clears `label` and `metadata`, and sets `default` to `false`. `status` cannot be cleared. When you send `metadata`, it replaces the whole map. Making an instrument the default unflags the payee's previous default. You cannot update credentials: create a new instrument and delete the old one.
 
         Accepts an `Idempotency-Key` but does not require one.
       parameters:
@@ -4556,13 +4310,10 @@ paths:
       tags: [Instruments]
       summary: Delete an instrument
       operationId: deleteInstrument
-      description: |
-        Soft-delete an instrument and remove its credentials from the vault. The
-        instrument is removed from listings and cannot be used on new payouts.
-        Historical payouts referencing it remain accessible and unchanged.
+      description: |-
+        Delete an instrument and remove its credentials from the vault. The instrument disappears from listings and cannot be used on new payouts. Past payouts that used it stay accessible and unchanged.
 
-        The body is optional; when sent it may carry only `end_user_ip`. Accepts an
-        `Idempotency-Key` but does not require one.
+        The body is optional. When you send one, it may carry only `end_user_ip`. Accepts an `Idempotency-Key` but does not require one.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyOptional'
       requestBody:
@@ -4602,8 +4353,7 @@ paths:
       tags: [Balances]
       summary: List balances
       operationId: listBalances
-      description: |
-        Your balance in every currency you hold. Each balance has `available` (usable for new payouts), `pending` (reserved for in-flight payouts) and `total`. The list is complete and is not paged.
+      description: Get your balance in every currency you hold. Each balance has `available` (usable for new payouts), `pending` (reserved for in-flight payouts) and `total`. The list is complete and not paged.
       responses:
         '200':
           description: A list of balances.
@@ -4622,10 +4372,10 @@ paths:
                       $ref: '#/components/schemas/Balance'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -4664,7 +4414,7 @@ paths:
       - name: currency
         in: path
         required: true
-        description: Currency code, 3 to 5 letters. A malformed one is `400 invalid_request`.
+        description: Currency code, 3 to 5 letters. A malformed code is `400 invalid_request`.
         schema:
           $ref: '#/components/schemas/CurrencyCode'
     get:
@@ -4701,7 +4451,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: No balance exists for this currency on your account (`resource_missing`).
+          description: You have no balance in this currency (`resource_missing`).
           content:
             application/json:
               schema:
@@ -4718,10 +4468,10 @@ paths:
       tags: [Sandbox]
       summary: Fund a sandbox balance
       operationId: createSandboxDeposit
-      description: |
-        **Sandbox only.** Credit your sandbox balance in a currency so you can run the payout flow end to end from the API, with no dashboard step and no real money. The credit is additive: repeated calls stack. If you hold no account in the currency yet, one is created holding the deposit.
+      description: |-
+        **Sandbox only.** Credit your sandbox balance in a currency so you can run the payout flow end to end from the API, with no dashboard step and no real money. The credit is additive, so repeated calls stack. If you hold no account in the currency yet, Anton creates one holding the deposit.
 
-        The endpoint exists only in the sandbox (`https://api.antonpayments.dev`); in production it answers `404`. Requires an `Idempotency-Key`. Rate limited per merchant.
+        The endpoint exists only in the sandbox (`https://api.antonpayments.dev`). In production it answers `404`. Requires an `Idempotency-Key`. Rate limited per merchant.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -4736,7 +4486,7 @@ paths:
                   $ref: '#/components/schemas/CurrencyCode'
                 amount:
                   $ref: '#/components/schemas/Money'
-                  description: Amount to credit, positive, at the currency's precision.
+                  description: Amount to credit. Must be positive, at the currency's precision.
             example:
               {
                 "currency": "USD",
@@ -4770,16 +4520,13 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: >-
-            Not the sandbox: this endpoint does not exist in production.
+          description: Not the sandbox. The endpoint does not exist in production.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: >-
-            The amount has too many decimal places for the currency (`amount_precision_invalid`), is not
-            positive, or the currency has no sandbox account (`unsupported_sandbox_currency`).
+          description: The amount has too many decimal places for the currency (`amount_precision_invalid`) or is not positive, or the currency has no sandbox account (`unsupported_sandbox_currency`).
           content:
             application/json:
               schema:
@@ -4810,8 +4557,7 @@ paths:
       tags: [Accounts]
       summary: List accounts
       operationId: listAccounts
-      description: |
-        Your funding accounts, one per currency. The list is complete and is not paged.
+      description: Get your funding accounts, one per currency. The list is complete and not paged.
       responses:
         '200':
           description: A list of accounts.
@@ -4830,10 +4576,10 @@ paths:
                       $ref: '#/components/schemas/MerchantAccount'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -4875,7 +4621,7 @@ paths:
       - name: currency
         in: path
         required: true
-        description: Currency code, 3 to 5 letters. A malformed one is `400 invalid_request`.
+        description: Currency code, 3 to 5 letters. A malformed code is `400 invalid_request`.
         schema:
           $ref: '#/components/schemas/CurrencyCode'
     get:
@@ -4931,15 +4677,14 @@ paths:
       - name: currency
         in: path
         required: true
-        description: Currency code, 3 to 5 letters. A malformed one is `400 invalid_request`.
+        description: Currency code, 3 to 5 letters. A malformed code is `400 invalid_request`.
         schema:
           $ref: '#/components/schemas/CurrencyCode'
     get:
       tags: [Accounts]
       summary: Retrieve account details
       operationId: getAccountDetails
-      description: |
-        The bank details to pay money into your account in one currency.
+      description: Get the bank details for paying money into your account in one currency.
       responses:
         '200':
           description: The bank details.
@@ -4989,8 +4734,7 @@ paths:
       tags: [Accounts]
       summary: List transactions
       operationId: listTransactions
-      description: |
-        Movements on your balances across all accounts, newest first (ties break on `id`). Filter by type, direction, status, currency and creation time. `created_after` is inclusive, `created_before` exclusive. Pages use an opaque `cursor`; `next_cursor` is `null` on the last page.
+      description: List movements on your balances across all accounts, newest first (ties break on `id`). Filter by type, direction, status, currency and creation time. `created_after` is inclusive and `created_before` is exclusive. Pages use an opaque `cursor`, and `next_cursor` is `null` on the last page.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -5004,7 +4748,7 @@ paths:
         - name: direction
           in: query
           required: false
-          description: Only money in (`credit`) or out (`debit`).
+          description: Only money in (`credit`) or money out (`debit`).
           schema:
             type: string
             enum: [credit, debit]
@@ -5024,16 +4768,14 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: >-
-            Only objects created at or after this timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
+          description: Only transactions created at or after this time (inclusive), such as `2026-11-01T00:00:00.000Z`. Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only transactions created before this time (exclusive). Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -5055,10 +4797,10 @@ paths:
                       $ref: '#/components/schemas/MerchantTransaction'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -5088,10 +4830,7 @@ paths:
                       "next_cursor": "eyJsYXN0X2lkIjoiKyIsImxhc3RfdHMiOiIxOTcwLTAxLTAxVDAwOjAwOjAxWiJ9"
                     }
         '400':
-          description: >-
-            An unknown query parameter (`unknown_parameter`), a filter value that is not valid or a timestamp
-            that does not parse (`invalid_request`), a `limit` outside 1 to 100 (`invalid_limit`) or a malformed
-            `cursor` (`cursor_invalid`).
+          description: An unknown query parameter (`unknown_parameter`), an invalid filter value or a timestamp that does not parse (`invalid_request`), a `limit` outside 1 to 100 (`invalid_limit`), or a malformed `cursor` (`cursor_invalid`).
           content:
             application/json:
               schema:
@@ -5126,8 +4865,7 @@ paths:
       tags: [Accounts]
       summary: Export transactions
       operationId: exportTransactions
-      description: |
-        Download your transactions as CSV (`text/csv`), newest first. Takes the same filters as `GET /v1/transactions`. Debits are written with a negative amount. The export is a bulk copy of your ledger, so it needs the report-download permission, is rate limited per merchant and is audited before any byte is sent. It is refused with `422 export_too_large` past 10,000 rows: narrow the dates and export again.
+      description: "Download your transactions as CSV (`text/csv`), newest first. It takes the same filters as `GET /v1/transactions`. Debits are written with a negative amount. The export is a bulk copy of your ledger, so it needs the report-download permission, is rate limited per merchant and is audited before any byte is sent. Past 10,000 rows it is refused with `422 export_too_large`: narrow the dates and export again."
       parameters:
         - name: type
           in: query
@@ -5139,7 +4877,7 @@ paths:
         - name: direction
           in: query
           required: false
-          description: Only money in (`credit`) or out (`debit`).
+          description: Only money in (`credit`) or money out (`debit`).
           schema:
             type: string
             enum: [credit, debit]
@@ -5159,16 +4897,14 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: >-
-            Only objects created at or after this timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
+          description: Only transactions created at or after this time (inclusive), such as `2026-11-01T00:00:00.000Z`. Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only transactions created before this time (exclusive). Use an RFC 3339 UTC timestamp with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is a `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -5183,9 +4919,7 @@ paths:
                 id,created_at,type,direction,status,amount,currency,reference,counterparty,payout_id,exchange_id
                 stx_01,2026-11-19T14:03:22.104Z,payout,debit,completed,-40.00,USD,INV-1042,,pay_01,
         '400':
-          description: >-
-            An unknown query parameter (`unknown_parameter`), or a filter value that is not valid or a
-            timestamp that does not parse (`invalid_request`).
+          description: An unknown query parameter (`unknown_parameter`), an invalid filter value or a timestamp that does not parse (`invalid_request`).
           content:
             application/json:
               schema:
@@ -5263,7 +4997,7 @@ paths:
                       "updated_at": "2026-01-02T09:00:00.000Z"
                     }
         '400':
-          description: A malformed id (`resource_id_invalid`).
+          description: The id is malformed (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -5290,8 +5024,7 @@ paths:
       tags: [Pricing]
       summary: List pricing plans
       operationId: listPricingPlans
-      description: |
-        The fee rules that apply to you. The list is complete and is not paged. It takes no query parameters.
+      description: List the fee rules that apply to you. The list is complete and not paged. It takes no query parameters.
       responses:
         '200':
           description: A list of pricing plans.
@@ -5310,10 +5043,10 @@ paths:
                       $ref: '#/components/schemas/PricingPlan'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -5380,10 +5113,10 @@ paths:
       tags: [Pricing]
       summary: Create a pricing quote
       operationId: createPricingQuote
-      description: |
-        Price a proposed payout and store the quote. The quote carries the fee and rate; pass its `id` as `quote_id` on `POST /v1/payouts` within `expires_at` (five minutes) to pin them. Each quote binds to one payout.
+      description: |-
+        Price a proposed payout and store the quote. The quote carries the fee and rate. To pin them, pass its `id` as `quote_id` on `POST /v1/payouts` before `expires_at` (five minutes). Each quote binds to one payout.
 
-        Requires an `Idempotency-Key`: the call creates a stored quote, and a retry with the same key and body returns the original. Amounts carry the currency's precision: more places is `422 amount_precision_invalid`.
+        Requires an `Idempotency-Key`. The call creates a stored quote, and a retry with the same key and body returns the original. Amounts carry the currency's precision: more places is `422 amount_precision_invalid`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -5489,7 +5222,7 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
         '502':
-          description: FX rates are temporarily unavailable (`fx_rates_unavailable`). Safe to retry with the same `Idempotency-Key`.
+          description: FX rates are temporarily unavailable (`fx_rates_unavailable`). Retry with the same `Idempotency-Key`; it is safe.
           content:
             application/json:
               schema:
@@ -5504,8 +5237,7 @@ paths:
       tags: [Corridors]
       summary: List corridors
       operationId: listCorridors
-      description: |
-        The active corridors Anton pays out through. Filter by destination currency, destination country or rail type. A filter value that is not valid is a `400`, never an empty list. The list is complete and is not paged.
+      description: List the active corridors Anton pays out through. Filter by destination currency, destination country or rail type. An invalid filter value is a `400`, never an empty list. The list is complete and not paged.
       parameters:
         - name: destination_currency
           in: query
@@ -5544,10 +5276,10 @@ paths:
                       $ref: '#/components/schemas/Corridor'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -5594,7 +5326,7 @@ paths:
                       "next_cursor": null
                     }
         '400':
-          description: An unknown query parameter (`unknown_parameter`) or a filter value that is not valid (`invalid_request`).
+          description: An unknown query parameter (`unknown_parameter`) or an invalid filter value (`invalid_request`).
           content:
             application/json:
               schema:
@@ -5629,10 +5361,10 @@ paths:
       tags: [Webhooks]
       summary: Create a webhook subscription
       operationId: createWebhookSubscription
-      description: |
+      description: |-
         Register an HTTPS endpoint to receive event notifications. Anton POSTs signed JSON deliveries to the URL for every event in `events` that fires on your account.
 
-        The URL must use `https://` (enforced outside development) and be publicly reachable: private, loopback and metadata addresses are refused. The response carries the signing `secret`, shown once: store it now, Anton cannot show it again. Rotate it any time with `POST /v1/webhooks/{id}/secret/rotate`. Requires an `Idempotency-Key`; the secret is returned once: a replay with the same key returns the same subscription with `secret` set to `null`.
+        The URL must use `https://` (enforced outside development) and be publicly reachable. Private, loopback and metadata addresses are refused. The response carries the signing `secret`, shown once. Store it now, because Anton cannot show it again. Rotate it any time with `POST /v1/webhooks/{id}/secret/rotate`. Requires an `Idempotency-Key`. Because the secret is returned once, a replay with the same key returns the same subscription with `secret` set to `null`.
 
         See [Webhook Events](/concepts/webhook-events) for the event catalog and [Webhook Signing](/concepts/webhook-signing) for verification.
 
@@ -5648,7 +5380,7 @@ paths:
 
         Each `v1=` entry is the lowercase hex HMAC-SHA256 of `{X-Webhook-Timestamp}.{raw request body}`, keyed with the endpoint's signing secret. The current secret's signature comes first. During a rotation's grace window, the previous secret's signature follows it. Accept the delivery if any entry matches the one you compute.
 
-        Your endpoint has **30 seconds** to answer. Only a `2xx` counts as delivered. Redirects are not followed, so a `3xx` is a failed attempt, as are any other status, a timeout and a connection error. A failed attempt is retried with backoff.
+        Your endpoint has **30 seconds** to answer. Only a `2xx` counts as delivered. Redirects are not followed, so a `3xx` is a failed attempt, as are any other status, a timeout and a connection error. Anton retries a failed attempt with backoff.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -5722,9 +5454,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '422':
-          description: >-
-            An event type is unknown (a retired name points at its replacement) or metadata is over its
-            limits.
+          description: An event type is unknown (a retired name points to its replacement), or metadata is over its limits.
           content:
             application/json:
               schema:
@@ -5759,8 +5489,7 @@ paths:
       tags: [Webhooks]
       summary: List webhook subscriptions
       operationId: listWebhookSubscriptions
-      description: |
-        Your webhook subscriptions, newest first. Pages use an opaque `cursor`; `next_cursor` is `null` on the last page.
+      description: List your webhook subscriptions, newest first. Pages use an opaque `cursor`, and `next_cursor` is `null` on the last page.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -5782,10 +5511,10 @@ paths:
                       $ref: '#/components/schemas/WebhookSubscription'
                   has_more:
                     type: boolean
-                    description: Whether more results exist beyond this page.
+                    description: Whether more results exist after this page.
                   next_cursor:
                     type: [string, 'null']
-                    description: Opaque cursor for the next page, `null` on the last page.
+                    description: Opaque cursor for the next page. `null` on the last page.
               examples:
                 response:
                   summary: Response
@@ -5813,7 +5542,7 @@ paths:
                       "next_cursor": "eyJsYXN0X2lkIjoid2hrXzAxIiwibGFzdF90cyI6IjIwMjYtMTEtMTlUMTQ6MDM6MjIuMTA0WiJ9"
                     }
         '400':
-          description: An unknown query parameter, a `limit` outside 1 to 100 or a malformed `cursor`.
+          description: An unknown query parameter, a `limit` outside 1 to 100, or a malformed `cursor`.
           content:
             application/json:
               schema:
@@ -5841,8 +5570,7 @@ paths:
       tags: [Webhooks]
       summary: Retrieve a webhook subscription
       operationId: getWebhookSubscription
-      description: |
-        One subscription. The signing secret is never returned.
+      description: Get one subscription. The signing secret is never returned.
       responses:
         '200':
           description: The subscription.
@@ -5870,7 +5598,7 @@ paths:
                       "updated_at": "2026-11-19T14:03:22.104Z"
                     }
         '400':
-          description: A malformed id (`resource_id_invalid`).
+          description: The id is malformed (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -5908,8 +5636,7 @@ paths:
       tags: [Webhooks]
       summary: Update a webhook subscription
       operationId: updateWebhookSubscription
-      description: |
-        Change the URL, the events or the metadata. Only fields you send change; `metadata` replaces the whole map and `null` clears it. `url` and `events` cannot be cleared. Status and secret have their own actions. Accepts an `Idempotency-Key` but does not require one.
+      description: Change the URL, the events or the metadata. Only the fields you send change. `metadata` replaces the whole map, and `null` clears it. `url` and `events` cannot be cleared. Status and secret have their own actions. Accepts an `Idempotency-Key` but does not require one.
       requestBody:
         required: true
         content:
@@ -5945,9 +5672,7 @@ paths:
                       "updated_at": "2026-11-19T20:46:21.202Z"
                     }
         '400':
-          description: >-
-            Malformed JSON, an unknown field, an empty body, an id that is malformed or a URL that is not
-            accepted.
+          description: Malformed JSON, an unknown field, an empty body, a malformed id, or a URL that is not accepted.
           content:
             application/json:
               schema:
@@ -5996,7 +5721,7 @@ paths:
                       "deleted": true
                     }
         '400':
-          description: A malformed id (`resource_id_invalid`).
+          description: The id is malformed (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6044,8 +5769,7 @@ paths:
       tags: [Webhooks]
       summary: Rotate a webhook signing secret
       operationId: rotateWebhookSecret
-      description: |
-        Issue a new signing secret. For 24 hours the old secret keeps signing too, so deliveries carry two `v1=` signatures and a verifier that has not switched yet keeps working. Pass `immediate=true` to end the old secret at once, for a leaked secret. The new secret is in the response and is not shown again. Requires an `Idempotency-Key`; the secret is returned once: a replay with the same key returns the same subscription with `secret` set to `null`.
+      description: Issue a new signing secret. For 24 hours the old secret keeps signing too, so deliveries carry two `v1=` signatures and a verifier that has not switched yet keeps working. Pass `immediate=true` to end the old secret at once, for example when it has leaked. The new secret is in the response and is not shown again. Requires an `Idempotency-Key`. Because the secret is returned once, a replay with the same key returns the same subscription with `secret` set to `null`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - name: immediate
@@ -6081,7 +5805,7 @@ paths:
                       "previous_secret_expires_at": "2026-11-20T20:46:21.203Z"
                     }
         '400':
-          description: A malformed id (`resource_id_invalid`).
+          description: The id is malformed (`resource_id_invalid`).
           content:
             application/json:
               schema:
@@ -6129,8 +5853,7 @@ paths:
       tags: [Webhooks]
       summary: Send a test delivery
       operationId: testWebhookSubscription
-      description: |
-        Queue a test event (`type: test`) for delivery to the endpoint. The answer is the event in its pending state; follow its delivery on `GET /v1/webhooks/{id}/deliveries`. Rate limited. Requires an `Idempotency-Key`.
+      description: "Queue a test event (`type: test`) for delivery to the endpoint. The call returns the event as pending; follow its delivery on `GET /v1/webhooks/{id}/deliveries`. Rate limited. Requires an `Idempotency-Key`."
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -6369,30 +6092,27 @@ paths:
       tags: [Webhooks]
       summary: List webhook events
       operationId: listWebhookEvents
-      description: |
-        Events recorded for your account, newest first. `created_after` is inclusive, `created_before` exclusive; without them the list reaches back to the first event. Pages use an opaque `cursor`.
+      description: Events recorded for your account, newest first. `created_after` is inclusive and `created_before` is exclusive. Without them, the list reaches back to the first event. Pages use an opaque `cursor`.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
         - name: type
           in: query
           required: false
-          description: Only events of this type. A type that is not in the catalog is `400 invalid_request`.
+          description: Only events of this type. A type that is not in the catalog returns `400 invalid_request`.
           schema:
             $ref: '#/components/schemas/WebhookEventType'
         - name: created_after
           in: query
           required: false
-          description: >-
-            Only objects created at or after this timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
+          description: Only objects created at or after this timestamp (inclusive), such as `2026-11-01T00:00:00.000Z`. Use RFC 3339 UTC with millisecond precision and a Z suffix. Anything else returns `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only objects created before this timestamp (exclusive). Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else returns `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -6496,9 +6216,7 @@ paths:
                       "next_cursor": null
                     }
         '400':
-          description: >-
-            An unknown query parameter or event type, a timestamp that does not parse, a `limit` outside 1
-            to 100 or a malformed `cursor`.
+          description: An unknown query parameter or event type, a timestamp that does not parse, a `limit` outside 1 to 100, or a malformed `cursor`.
           content:
             application/json:
               schema:
@@ -6883,8 +6601,7 @@ paths:
       tags: [Webhooks]
       summary: Summarise webhook deliveries
       operationId: getWebhookDeliverySummary
-      description: |
-        Delivery outcomes over the last 30 days for every live endpoint, or for one with `subscription_id`, with the retry schedule deliveries follow.
+      description: Delivery outcomes over the last 30 days for every live endpoint, or for one with `subscription_id`. Also returns the retry schedule deliveries follow.
       parameters:
         - name: subscription_id
           in: query
@@ -6954,8 +6671,7 @@ paths:
       tags: [Webhooks]
       summary: List webhook event types
       operationId: listWebhookEventTypes
-      description: |
-        The event types a subscription can name, in presentation order, each with its label and category. Generated from the event catalog in code, so it is always the list the API accepts. The list is complete and is not paged.
+      description: The event types a subscription can name, in presentation order, each with its label and category. The list comes from the event catalog in code, so it is always what the API accepts. It is complete and not paged.
       responses:
         '200':
           description: The event types.
@@ -7575,10 +7291,10 @@ paths:
       tags: [FX]
       summary: Create an FX quote
       operationId: createFXQuote
-      description: |
-        Quote a conversion between two of your currencies. `source` is the currency you give up and `destination` the one you receive (the old `sell` and `buy`). Fix one side with `source_amount` or `destination_amount`; the other is computed.
+      description: |-
+        Quote a conversion between two of your currencies. `source` is the currency you give up and `destination` is the one you receive (the old `sell` and `buy`). Fix one side with `source_amount` or `destination_amount`, and the other is computed.
 
-        A locked quote (the default) is stored and can be executed on `POST /v1/fx/exchanges` until `expires_at`. `locked: false` returns an indicative, non-binding price that is not stored. Requires an `Idempotency-Key`: a retry with the same key and body returns the original quote.
+        A locked quote (the default) is stored, and you can execute it on `POST /v1/fx/exchanges` until `expires_at`. `locked: false` returns an indicative, non-binding price that is not stored. Requires an `Idempotency-Key`; a retry with the same key and body returns the original quote.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -7977,16 +7693,14 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: >-
-            Only objects created at or after this timestamp (inclusive), such as
-            `2026-11-01T00:00:00.000Z`. It must be RFC 3339 UTC with millisecond precision and a Z suffix; anything else is a `400 invalid_request` with `param` set.
+          description: Only objects created at or after this timestamp (inclusive), such as `2026-11-01T00:00:00.000Z`. Use RFC 3339 UTC with millisecond precision and a Z suffix. Anything else returns `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Only objects created before this RFC 3339 timestamp (exclusive). It must be RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`; anything else is a `400 invalid_request` with `param` set.
+          description: Only objects created before this timestamp (exclusive). Use RFC 3339 UTC with millisecond precision and a Z suffix, such as `2026-11-01T00:00:00.000Z`. Anything else returns `400 invalid_request` with `param` set.
           schema:
             type: string
             format: date-time
@@ -8046,9 +7760,7 @@ paths:
                       "next_cursor": null
                     }
         '400':
-          description: >-
-            An unknown query parameter, an unknown filter value, a timestamp that does not parse, a `limit`
-            outside 1 to 100 or a malformed `cursor`.
+          description: An unknown query parameter, an unknown filter value, a timestamp that does not parse, a `limit` outside 1 to 100, or a malformed `cursor`.
           content:
             application/json:
               schema:
@@ -8195,41 +7907,37 @@ components:
       # and both scopes are documented in full below.
       type: http
       scheme: DPoP
-      description: |
-        OAuth 2.0 client_credentials grant (RFC 6749 §4.4) bound to a DPoP keypair (RFC 9449).
+      description: |-
+        OAuth 2.0 `client_credentials` grant (RFC 6749 §4.4) bound to a DPoP keypair (RFC 9449).
 
-        **Flow** (every authenticated `/v1` call requires both an access token AND a fresh per-request DPoP proof):
+        **Flow.** Every authenticated `/v1` call needs both an access token and a fresh per-request DPoP proof.
 
-        1. Register a credential via the merchant portal. Anton issues a `client_id` (`ant_oc_<env>_<32hex>`) and a `client_secret` (`ant_ocs_<env>_<48hex>`, shown ONCE). The portal generates an ES256 or Ed25519 DPoP keypair in your browser; you store the private half.
-        2. Mint an access token: `POST /oauth/token` with `Authorization: Basic <client_id:client_secret>` and `Content-Type: application/x-www-form-urlencoded`. Body: `grant_type=client_credentials`. A `DPoP` header carrying a proof signed for the token endpoint is required (no `ath` claim on this proof).
-        3. Use the token: send `Authorization: DPoP <access_token>` plus a fresh `DPoP: <proof>` header on every `/v1` request. The proof JWT MUST carry `htm` (request method), `htu` (request URL, no query/fragment), `iat` (within ±60s), `jti` (unique within 5 min), and `ath` (SHA-256 of the access token, base64url).
+        1. Register a credential in the merchant portal. Anton issues a `client_id` (`ant_oc_<env>_<32hex>`) and a `client_secret` (`ant_ocs_<env>_<48hex>`, shown once). The portal generates an ES256 or Ed25519 DPoP keypair in your browser, and you store the private half.
+        2. Mint an access token with `POST /oauth/token`, using `Authorization: Basic <client_id:client_secret>` and `Content-Type: application/x-www-form-urlencoded`. The body is `grant_type=client_credentials`. A `DPoP` header carrying a proof signed for the token endpoint is required (no `ath` claim on this proof).
+        3. Use the token. Send `Authorization: DPoP <access_token>` plus a fresh `DPoP: <proof>` header on every `/v1` request. The proof JWT must carry `htm` (request method), `htu` (request URL, no query or fragment), `iat` (within ±60s), `jti` (unique within 5 min), and `ath` (SHA-256 of the access token, base64url).
 
-        Tokens expire in **1 hour** in production / staging and **8 hours** in sandbox. There are no refresh tokens — call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
+        Tokens expire in **1 hour** in production and staging and **8 hours** in sandbox. There are no refresh tokens, so call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
 
-        **Scopes** (granted to the credential when you register it in the merchant portal; the token request takes no `scope` parameter, and the token response lists the credential's scopes in its `scope` field):
+        **Scopes** are granted to the credential when you register it in the merchant portal. The token request takes no `scope` parameter, and the token response lists the credential's scopes in its `scope` field.
 
         | Scope | Grants |
         |---|---|
-        | `payouts` | Money movement — payouts, batches, beneficiaries, instruments, balances, funding, FX. |
-        | `intelligence` | Anton Intelligence — screening evaluations. |
+        | `payouts` | Money movement: payouts, batches, beneficiaries, instruments, balances, funding, FX. |
+        | `intelligence` | Anton Intelligence: screening evaluations. |
 
-        This scheme is declared as `http`/`DPoP` rather than `oauth2` so that generated examples show the correct `Authorization: DPoP <access_token>` header. Sending `Authorization: Bearer <access_token>` returns `401 unauthorized` — the token is sender-constrained and the scheme is not interchangeable.
+        This scheme is declared as `http`/`DPoP` rather than `oauth2` so that generated examples show the correct `Authorization: DPoP <access_token>` header. Sending `Authorization: Bearer <access_token>` returns `401 unauthorized`. The token is sender-constrained, and the two schemes are not interchangeable.
     dpopHeader:
       type: apiKey
       in: header
       name: DPoP
-      description: |
-        Per-request DPoP proof JWT (RFC 9449). MUST accompany the `Authorization: DPoP <access_token>` header on every protected operation. The proof is signed by the merchant's private DPoP key and carries `htm`, `htu`, `iat`, `jti`, and `ath` claims.
+      description: "Per-request DPoP proof JWT (RFC 9449). Send it with the `Authorization: DPoP <access_token>` header on every protected operation. You sign the proof with your private DPoP key, and it carries the `htm`, `htu`, `iat`, `jti` and `ath` claims."
 
   parameters:
     ClientRequestId:
       name: X-Client-Request-Id
       in: header
       required: false
-      description: >-
-        Your own correlation ID for the request, up to 128 characters from `A-Z a-z 0-9 . _ : -`
-        (anything else is ignored, never rejected). Logged by us as a separate field and never used as our
-        request ID. Accepted on every `/v1` operation.
+      description: "Your own correlation ID for the request, up to 128 characters from `A-Z a-z 0-9 . _ : -`. Anything else is ignored, never rejected. We log it as a separate field and never use it as our request ID. Accepted on every `/v1` operation."
       schema:
         type: string
         maxLength: 128
@@ -8237,7 +7945,7 @@ components:
     Limit:
       name: limit
       in: query
-      description: Items per page, 1 to 100. Out of range is `400 invalid_limit`.
+      description: Items per page, 1 to 100. A value outside that range returns `400 invalid_limit`.
       required: false
       schema:
         type: integer
@@ -8254,14 +7962,7 @@ components:
     AntonVersion:
       name: Anton-Version
       in: header
-      description: |
-        The API version to use for this request, a date such as `2026-12-01`. Optional. When omitted,
-        the request runs on your account's pinned version: the latest version at the time you created
-        your first OAuth client, or the launch version (`2026-12-01`) if you have not created one.
-        An unknown value is rejected with `400 invalid_api_version`. The header applies per request
-        and never changes your pinned version; move the pin from the dashboard. It does not apply to
-        webhooks, which follow your pinned version. The version used is echoed in the `Anton-Version`
-        response header.
+      description: "The API version for this request, a date such as `2026-12-01`. Optional. Without it, the request runs on your account's pinned version: the latest version when you created your first OAuth client, or the launch version (`2026-12-01`) if you have not created one. An unknown value returns `400 invalid_api_version`. The header applies to one request and never changes your pinned version; move the pin from the dashboard. It does not apply to webhooks, which follow your pinned version. The response echoes the version used in the `Anton-Version` header."
       required: false
       schema:
         type: string
@@ -8280,9 +7981,7 @@ components:
     IdempotencyKeyOptional:
       name: Idempotency-Key
       in: header
-      description: |
-        Optional on PATCH and DELETE. When sent, the same key with the same request returns the
-        original response instead of repeating the change. Keys are retained for 24 hours.
+      description: Optional on PATCH and DELETE. Sending the same key with the same request returns the original response instead of repeating the change. Keys are kept for 24 hours.
       required: false
       schema:
         type: string
@@ -8322,10 +8021,7 @@ components:
 
   headers:
     Request-Id:
-      description: >-
-        Our identifier for this request (`req_...`), on every response and the same value as
-        `error.request_id`. Always generated by us. Include it when contacting support. On an
-        idempotent replay it is the replay's own ID, not the original's.
+      description: Our identifier for this request (`req_...`), on every response and the same value as `error.request_id`. Always generated by us. Include it when you contact support. On an idempotent replay it is the replay's own ID, not the original's.
       schema:
         type: string
         pattern: '^req_[a-z0-9]+$'
@@ -8435,13 +8131,10 @@ components:
                   doc_url: https://docs.antonpayments.com/api-reference/errors#key_environment_mismatch
                   request_id: req_01JD3XB7Q2
     CapabilityForbidden:
-      description: |
-        The account capability or credential scope required by this endpoint is missing.
-        `capability_required` — the merchant account does not hold the required capability
-        (e.g. an AI-compliance-only account calling a payout endpoint). `insufficient_scope` —
-        the account holds it, but this credential was created without the matching scope.
-        Effective access is always `scopes ∩ capabilities`. A sandbox credential used against production is
-        `key_environment_mismatch`.
+      description: |-
+        The account capability or credential scope the call needs is missing.
+
+        `capability_required`: the merchant account does not hold the required capability (for example, an AI-compliance-only account calling a payout endpoint). `insufficient_scope`: the account holds it, but this credential was created without the matching scope. Effective access is always `scopes ∩ capabilities`. A sandbox credential used against production is `key_environment_mismatch`.
       content:
         application/json:
           schema:
@@ -8475,10 +8168,7 @@ components:
                   doc_url: https://docs.antonpayments.com/api-reference/errors#key_environment_mismatch
                   request_id: req_01JD3XB7Q2
     ModuleNotEnabled:
-      description: |
-        `module_not_enabled` — your account does not have the add-on this endpoint needs (the Reviews API and
-        Webhooks add-on, or the Audit Pack for exports). Also `capability_required` / `insufficient_scope`
-        (the `intelligence` scope) and `insufficient_permissions`.
+      description: "`module_not_enabled`: your account does not have the add-on the call needs (the Reviews API and Webhooks add-on, or the Audit Pack for exports). Also used for `capability_required` / `insufficient_scope` (the `intelligence` scope) and `insufficient_permissions`."
       content:
         application/json:
           schema:
@@ -8508,9 +8198,7 @@ components:
           schema:
             $ref: '#/components/schemas/ValidationErrorEnvelope'
     IdempotencyConflict:
-      description: >-
-        `idempotency_in_flight` — another request with the same `Idempotency-Key` is still being processed.
-        Retry after it completes; the completed response is then replayed.
+      description: "`idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed. Retry after it completes, and the completed response is replayed."
       content:
         application/json:
           schema:
@@ -8525,9 +8213,7 @@ components:
                   doc_url: https://docs.antonpayments.com/api-reference/errors#idempotency_in_flight
                   request_id: req_01JD3XB7Q2
     IdempotencyKeyReused:
-      description: >-
-        `idempotency_key_reused` — the same `Idempotency-Key` was used with a different request body. Send a
-        new key for a new request.
+      description: "`idempotency_key_reused`: you used the same `Idempotency-Key` with a different request body. Send a new key for a new request."
       content:
         application/json:
           schema:
@@ -8542,7 +8228,7 @@ components:
                   doc_url: https://docs.antonpayments.com/api-reference/errors#idempotency_key_reused
                   request_id: req_01JD3XB7Q2
     MissingIdempotencyKey:
-      description: '`missing_idempotency_key` — this operation requires an `Idempotency-Key` header.'
+      description: "`missing_idempotency_key`: this operation requires an `Idempotency-Key` header."
       content:
         application/json:
           schema:
@@ -8607,8 +8293,7 @@ components:
   schemas:
     OAuthError:
       type: object
-      description: |
-        RFC 6749 §5.2 / RFC 9449 error envelope. Distinct from Anton's standard `ErrorEnvelope` — the OAuth endpoints (`/oauth/token`) return this flat shape so any OAuth-conformant SDK can branch on `error` without learning Anton-specific shapes.
+      description: "Error envelope from RFC 6749 §5.2 and RFC 9449. It differs from Anton's standard `ErrorEnvelope`: the OAuth endpoints (`/oauth/token`) return this flat shape so any OAuth-conformant SDK can branch on `error` without learning Anton-specific shapes."
       required: [error]
       properties:
         error:
@@ -8905,7 +8590,7 @@ components:
         data:
           type: array
           items: {}
-          description: Array of results for this page. Element schema varies by endpoint.
+          description: Results for this page. The element schema varies by endpoint.
         has_more:
           type: boolean
           description: Whether more results exist beyond this page.
@@ -8957,7 +8642,7 @@ components:
           example: London
         state:
           type: string
-          description: State, province, or region. Required in some countries (e.g. US, CA, AU).
+          description: State, province or region. Required in some countries (for example US, CA, AU).
           example: Greater London
         postal_code:
           type: string
@@ -8996,10 +8681,7 @@ components:
           $ref: '#/components/schemas/CountryCode'
         tax_id:
           type: string
-          description: |
-            Tax identification number (e.g. US SSN/ITIN, UK NINO, foreign-equivalent).
-            Tokenized in the PII vault on creation — never stored in plaintext on
-            the beneficiary record. Optional.
+          description: Tax identification number (for example US SSN/ITIN, UK NINO, or a foreign equivalent). Tokenized in the PII vault on creation and never stored in plaintext on the beneficiary record. Optional.
           example: "123-45-6789"
         address:
           $ref: '#/components/schemas/Address'
@@ -9014,7 +8696,7 @@ components:
           example: Example GmbH
         trading_name:
           type: string
-          description: Name the business trades as, if different from legal name.
+          description: Name the business trades as, if different from its legal name.
           example: Example
         registration_number:
           type: string
@@ -9048,12 +8730,8 @@ components:
 
     Metadata:
       type: object
-      description: |
-        Your own key/value pairs, stored and returned as-is. At most 50 keys; keys up to 40
-        characters and values up to 500, all strings. On a beneficiary the key `block_reason` is reserved and is
-        refused with `422`. Anton never reads it, never logs or audits it,
-        and never sends it to screening or risk checks, so it is not searchable. Never put personal
-        data in it.
+      description: |-
+        Your own key/value pairs, stored and returned as-is. At most 50 keys; keys up to 40 characters and values up to 500, all strings. On a beneficiary the key `block_reason` is reserved and is refused with `422`. Anton never reads it, never logs or audits it, and never sends it to screening or risk checks, so it is not searchable. Never put personal data in it.
 
         Do not store personal information, account numbers or credentials in metadata. Use the resource's own fields, which are tokenized.
       maxProperties: 50
@@ -9074,22 +8752,18 @@ components:
       properties:
         end_user_ip:
           type: string
-          description: |
-            IP address of your end user who initiated this action, IPv4 or IPv6. Used for risk
-            signals. Optional but recommended.
+          description: IP address of your end user who started this action, IPv4 or IPv6. Used for risk signals. Optional but recommended.
           example: 203.0.113.42
 
     BeneficiaryCreateRequest:
       type: object
       required: [type, country]
-      description: |
-        Create a beneficiary. Supply exactly one of `individual` or `business` matching
-        the declared `type`.
+      description: Create a beneficiary. Supply exactly one of `individual` or `business`, matching the declared `type`.
       properties:
         type:
           type: string
           enum: [individual, business]
-          description: Whether this beneficiary is a person or a business.
+          description: Whether the payee is a person or a business.
         country:
           $ref: '#/components/schemas/CountryCode'
         external_ref:
@@ -9105,9 +8779,7 @@ components:
           $ref: '#/components/schemas/BusinessDetails'
         end_user_ip:
           type: string
-          description: |
-            IP address of the merchant's end-user who initiated this action. Used for
-            risk signals. Accepts IPv4 or IPv6. Optional but recommended.
+          description: IP address of your end user who started this action, IPv4 or IPv6. Used for risk signals. Optional but recommended.
           example: 203.0.113.42
 
     Beneficiary:
@@ -9131,19 +8803,18 @@ components:
         status:
           type: string
           enum: [active, archived, blocked]
-          description: |
-            - `active` — usable for payouts.
-            - `archived` — soft-disabled by you; not usable. Can be restored.
-            - `blocked` — cannot be used for payouts and cannot be restored through the API.
+          description: |-
+            - `active`: usable for payouts.
+            - `archived`: disabled by you and not usable. You can restore it.
+            - `blocked`: cannot be used for payouts and cannot be restored through the API.
+
             New values may be added.
         type:
           type: string
           enum: [individual, business]
         display_name:
           type: string
-          description: |
-            Derived from the tokenized details on creation. For individuals, the name fields
-            joined; for businesses, the legal name.
+          description: "Built from the tokenized details on creation: the joined name fields for individuals, the legal name for businesses."
           example: Jane Smith
         country:
           $ref: '#/components/schemas/CountryCode'
@@ -9154,30 +8825,18 @@ components:
           type: [integer, 'null']
           minimum: 0
           maximum: 1000
-          description: |
-            Payee risk score, 0–1000 integer. Higher is always worse. Reflects the payee and
-            recent payouts to it, and is refreshed over time. `null` until the payee's first
-            score, shortly after it is created.
+          description: Payee risk score, an integer from 0 to 1000. Higher is always worse. Reflects the payee and recent payouts to it, and is refreshed over time. `null` until the payee's first score, shortly after it is created.
         risk_tier:
           type: [string, 'null']
           enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
-          description: >-
-            Risk band for `risk_score` — `>= 900` CRITICAL, `>= 700` HIGH,
-            `>= 400` MEDIUM, else LOW. `null` while unscored.
+          description: "Risk band for `risk_score`: `>= 900` CRITICAL, `>= 700` HIGH, `>= 400` MEDIUM, otherwise LOW. `null` while unscored."
         risk_signals:
           type: array
           maxItems: 2
-          description: |
-            The main reasons behind `risk_score`, worst first, at most two.
-            Empty while unscored or when nothing stands out. Show `label`
-            as-is; branch on `code`, which is stable. New codes may be added.
+          description: |-
+            The main reasons behind `risk_score`, worst first, at most two. Empty while unscored or when nothing stands out. Show `label` as-is and branch on `code`, which is stable. New codes may be added.
 
-            Codes: `regulatory_review`, `flagged_across_network`, `high_risk_country`,
-            `possible_duplicate`, `identity_mismatch`, `masked_network`,
-            `location_mismatch`, `details_changed`, `high_payout_volume`,
-            `large_payouts`, `unusual_activity`, `unverified_account`,
-            `crypto_focused`, `new_payee`, `incomplete_details`,
-            `established`, `trusted_by_other_merchants`.
+            Codes: `regulatory_review`, `flagged_across_network`, `high_risk_country`, `possible_duplicate`, `identity_mismatch`, `masked_network`, `location_mismatch`, `details_changed`, `high_payout_volume`, `large_payouts`, `unusual_activity`, `unverified_account`, `crypto_focused`, `new_payee`, `incomplete_details`, `established`, `trusted_by_other_merchants`.
           items:
             type: object
             required: [code, label]
@@ -9220,8 +8879,8 @@ components:
 
     BeneficiaryPII:
       type: object
-      description: |
-        A beneficiary's personal details, read back from the secure vault. Exactly one of
+      description: |-
+        A payee's personal details, read back from the secure vault. Exactly one of
         `individual` and `business` is set, matching `type`; the other is `null`. Optional
         fields are omitted when they were never set.
       required: [id, object, livemode, type, individual, business]
@@ -9402,14 +9061,10 @@ components:
 
     PaymentMethodCode:
       type: string
-      description: |
-        Credential format of a payment instrument — named by what data is stored,
-        not by the rail that delivers the funds. One credential type can route to
-        multiple rails (e.g. an IBAN can go via SEPA, SEPA Instant, TARGET2, SWIFT,
-        or CHAPS — the rail is selected at payout time).
+      description: |-
+        Credential format of a payment instrument, named by what data is stored, not by the rail that delivers the funds. One credential type can route to multiple rails (e.g. an IBAN can go via SEPA, SEPA Instant, TARGET2, SWIFT, or CHAPS). The rail is selected at payout time.
 
-        Query `GET /v1/payment-methods` for the full country-specific catalog
-        including per-method credential schemas.
+        Query `GET /v1/payment-methods` for the full country-specific catalog, including per-method credential schemas.
       enum:
         - iban
         - uk_bank
@@ -9475,13 +9130,13 @@ components:
           additionalProperties: true
         default:
           type: boolean
-          description: Make this the default instrument for the beneficiary. The previous default (if any) is unflagged.
+          description: Make this the payee's default instrument. The previous default, if any, is unflagged.
           default: false
         metadata:
           $ref: '#/components/schemas/Metadata'
         end_user_ip:
           type: string
-          description: IP address of your end user who initiated this action. Optional.
+          description: IP address of the end user who started this action. Optional.
 
     InstrumentUpdateRequest:
       type: object
@@ -9704,9 +9359,7 @@ components:
 
     PayoutMethod:
       type: string
-      description: |
-        How the payout will be delivered. Distinct from an `Instrument`'s `method`
-        (which is the credential format): this is the rail-family selection.
+      description: "How the payout is delivered. Not the same as an `Instrument`'s `method` (the credential format): this is the rail-family selection."
       enum:
         - bank_transfer
         - wire
@@ -9835,25 +9488,12 @@ components:
 
     SessionAssertion:
       type: object
-      description: |
-        End-user session context for the action, as observed by YOUR
-        edge — the person who initiated this payout in your product, not
-        your server. Every field is optional, but richer context makes
-        Anton's risk assessment of the payout materially better (IP
-        geolocation and network type, timezone-vs-location consistency,
-        device continuity).
+      description: |-
+        The end user's session as your edge observed it: the person who started this payout in your product, not your server. Every field is optional, but richer context improves Anton's risk assessment of the payout (IP geolocation and network type, timezone-vs-location consistency, device continuity).
 
-        Data-quality issues never fail the payout: only a syntactically
-        invalid `ip` is rejected (`422`). Everything else — a private
-        `ip` (usually a misconfigured proxy forwarding your own LB
-        address), an unrecognized `timezone`, a future `started_at` —
-        is accepted and reported back in the response's
-        `session_quality` array so you can fix your integration.
+        Data-quality issues never fail the payout. Only a syntactically invalid `ip` is rejected (`422`). Anything else is accepted and reported in the response's `session_quality` array so you can fix your integration: a private `ip` (usually a misconfigured proxy forwarding your own LB address), an unrecognized `timezone`, a future `started_at`.
 
-        By sending session data you confirm you collected it lawfully
-        from your end user (under your own privacy notice) and are
-        authorized to share it with Anton for fraud prevention and
-        AML transaction-monitoring purposes.
+        By sending session data you confirm you collected it lawfully from your end user, under your own privacy notice, and are authorized to share it with Anton for fraud prevention and AML transaction-monitoring purposes.
       properties:
         ip:
           type: string
@@ -9889,8 +9529,8 @@ components:
 
     Payout:
       type: object
-      description: |
-        A payment from your balance to a beneficiary's instrument. `status` is the public status (see
+      description: |-
+        A payment from your balance to one of a payee's instruments. `status` is the public status (see
         `PayoutStatus`). Amounts are decimal strings at their currency's precision. A field that does not apply
         is `null`, never absent: crypto fields are `null` on a fiat payout.
       required:
@@ -10770,12 +10410,12 @@ components:
       enum: [waiting_on_customer, not_a_match, confirmed_match, no_concern, concern_confirmed, release, cancel, approved, rejected, expired]
     ReviewReasonCode:
       type: string
-      description: |
-        Accepted per decision: `waiting_on_customer` — `dob_needed`, `id_document_needed`, `more_information_needed`;
-        `not_a_match` — `dob_differs`, `nationality_differs`, `id_document_verified`, `different_entity_type`, `location_differs`;
-        `confirmed_match` — `identity_confirmed`, `exact_identifier_match`, `customer_confirmed`;
-        `no_concern` — `activity_explained`, `documents_verified`; `concern_confirmed` — `suspicious_activity`, `policy_breach`;
-        `other` with any decision.
+      description: |-
+        Accepted per decision: `waiting_on_customer` accepts `dob_needed`, `id_document_needed`, `more_information_needed`;
+        `not_a_match` accepts `dob_differs`, `nationality_differs`, `id_document_verified`, `different_entity_type`, `location_differs`;
+        `confirmed_match` accepts `identity_confirmed`, `exact_identifier_match`, `customer_confirmed`;
+        `no_concern` accepts `activity_explained`, `documents_verified`; `concern_confirmed` accepts `suspicious_activity`, `policy_breach`;
+        `other` goes with any decision.
       enum: [dob_needed, id_document_needed, more_information_needed, dob_differs, nationality_differs, id_document_verified,
         different_entity_type, location_differs, identity_confirmed, exact_identifier_match, customer_confirmed,
         activity_explained, documents_verified, suspicious_activity, policy_breach, other]
@@ -11334,13 +10974,10 @@ components:
 
     WebhookEventType:
       type: string
-      description: |
-        An event type a subscription can name, or `*` for every event. `test` is the type of the delivery sent by
-        `POST /v1/webhooks/{id}/test`. The list below is generated from the event catalog in code; the
-        same list, with labels and categories, is returned by `GET /v1/webhooks/event-types`.
-        `x-anton-data-objects` names the schema of each event's `data.object`.
-        A payout that cannot be processed is announced by `payout.failed` with `failure_code`
-        `cannot_be_processed`.
+      description: |-
+        An event type you can subscribe to, or `*` for every event. `test` is the type of the delivery sent by `POST /v1/webhooks/{id}/test`. The list below is generated from the event catalog in code. `GET /v1/webhooks/event-types` returns the same list with labels and categories. `x-anton-data-objects` names the schema of each event's `data.object`.
+
+        A payout that cannot be processed is announced by `payout.failed` with `failure_code` `cannot_be_processed`.
       enum:
         # BEGIN GENERATED: webhook event types
         - payout.created
@@ -11527,12 +11164,7 @@ components:
 
     WebhookEvent:
       type: object
-      description: |
-        An event: what a delivery to your endpoint carries, and what `GET /v1/webhooks/events` returns. Events are
-        immutable. `data.object` is the same object the API returns for the resource, at the event's own
-        `api_version`: the version your account was pinned to when the event was created, so a retry sends the same
-        bytes. `x-anton-data-objects` on `WebhookEventType` names the schema of each type's `data.object`.
-        An event stored before API versions existed is shown as it was stored, under the launch version.
+      description: "An event: what each delivery to your endpoint carries, and what `GET /v1/webhooks/events` returns. Events are immutable. `data.object` is the object the API returns for the resource, rendered at the event's own `api_version`. That is the version your account was pinned to when the event was created, so a retry sends the same bytes. `x-anton-data-objects` on `WebhookEventType` names the schema of each type's `data.object`. An event stored before API versions existed is shown as it was stored, under the launch version."
       required: [id, object, type, api_version, livemode, created_at, data]
       properties:
         id:
@@ -11585,10 +11217,7 @@ components:
 
     WebhookDelivery:
       type: object
-      description: >-
-        One delivery attempt record: what your server answered (status, up to 4 KB of body, headers) and
-        the headers Anton sent, signature included, which is what you need to debug verification. The
-        same shape serves one endpoint's history and one event's attempts.
+      description: One delivery attempt record. It holds what your server answered (status, up to 4 KB of body, headers) and the headers Anton sent, signature included, which is what you need to debug verification. The same shape serves one endpoint's history and one event's attempts.
       required: [id, object, livemode, status, event_id, event_type, subscription_id, url, request_headers, response_status, response_body, response_headers, attempts, max_attempts, next_retry_at, error, duration_milliseconds, delivered_at, created_at, updated_at]
       properties:
         id:
@@ -11810,18 +11439,10 @@ components:
 
     PayoutDelivery:
       type: object
-      description: |
-        Delivery-time context for an individual payout, based on how its
-        destination corridor (country × method) has performed over the
-        trailing 30 days. Present only when the corridor has a sufficient
-        completed-payout sample across enough distinct merchants, and only
-        while the payout is non-terminal — it is omitted once the payout
-        reaches a terminal state (`completed`, `failed`, `returned`,
-        `cancelled`), where an ETA carries no meaning.
-        `estimated_completion_at` and a `delayed` value of `true` are
-        meaningful only while the payout is in flight (`processing` or `sent`,
-        with a `processed_at` timestamp); for every other non-terminal state
-        `estimated_completion_at` is omitted and `delayed` is `false`.
+      description: |-
+        Delivery-time context for a payout, based on how its destination corridor (country × method) has performed over the trailing 30 days. It appears only when the corridor has enough completed payouts across enough distinct merchants, and only while the payout is non-terminal. It is omitted once the payout reaches a terminal state (`completed`, `failed`, `returned`, `cancelled`), where an ETA carries no meaning.
+
+        `estimated_completion_at` and a `delayed` value of `true` are meaningful only while the payout is in flight (`processing` or `sent`, with a `processed_at` timestamp). In every other non-terminal state, `estimated_completion_at` is omitted and `delayed` is `false`.
       required: [corridor, method, p50_minutes, p90_minutes, sample_size, delayed]
       properties:
         corridor:
@@ -11841,14 +11462,10 @@ components:
         estimated_completion_at:
           type: string
           format: date-time
-          description: |
-            Projected completion time (`processed_at` + p50 minutes), RFC 3339
-            UTC. Present only while the payout is in flight.
+          description: "When the payout is expected to finish: `processed_at` plus p50 minutes, in RFC 3339 UTC. Present only while the payout is in flight."
         delayed:
           type: boolean
-          description: |
-            True when an in-flight payout has already exceeded the corridor's
-            p90 delivery time (running slower than 90% of comparable payouts).
+          description: True when an in-flight payout has run past the corridor's p90 delivery time, so it is slower than 90% of comparable payouts.
 
     FXQuoteCreateRequest:
       type: object
@@ -12786,19 +12403,19 @@ components:
 
     VerificationStatus:
       type: string
-      description: |
-        Verification attempt lifecycle status.
+      description: |-
+        Where a verification attempt stands.
 
-        - `created` — attempt exists, link minted, nothing delivered yet (manual delivery, or email unavailable)
-        - `sent` — hosted link delivered to the subject by email
-        - `in_progress` — the subject opened the flow
-        - `processing` — submitted; provider checks running
-        - `awaiting_owners` — business only: the business case is done, owner (UBO) flows outstanding
-        - `review` — flagged for manual review
-        - `approved` — verified (terminal)
-        - `declined` — failed verification (terminal)
-        - `expired` — the link or inquiry lapsed unused (terminal)
-        - `revoked` — cancelled by the merchant (terminal)
+        - `created`: the attempt exists and the link is minted, but nothing is delivered yet (manual delivery, or email unavailable)
+        - `sent`: the hosted link was delivered to the subject by email
+        - `in_progress`: the subject opened the flow
+        - `processing`: submitted, and provider checks are running
+        - `awaiting_owners`: business only. The business case is done and owner (UBO) flows are outstanding
+        - `review`: flagged for manual review
+        - `approved`: verified (terminal)
+        - `declined`: failed verification (terminal)
+        - `expired`: the link or inquiry lapsed unused (terminal)
+        - `revoked`: cancelled by the merchant (terminal)
       enum:
         - created
         - sent
@@ -12924,7 +12541,7 @@ components:
         metadata:
           allOf:
             - $ref: '#/components/schemas/Metadata'
-          description: Your own key/value pairs for this verification, set in the body when you re-verify a subject. Returned as-is, never read by Anton. The first verification of a subject carries none, so see the subject's own `metadata` is set when you create the subject.
+          description: Your own key-value pairs for this verification, set in the body when you re-verify a subject. Returned as-is and never read by Anton. The first verification of a subject carries none; set `metadata` on the subject when you create it.
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
