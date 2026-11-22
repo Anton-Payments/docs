@@ -1,6 +1,6 @@
 ---
 title: Pay out in stablecoin
-description: The same payout call as fiat, aimed at a wallet. The transfer isn't done when the call returns; it is done when the chain has confirmed it enough.
+description: The same payout call as fiat, aimed at a wallet. The payout completes once the chain reaches `required_confirmations`.
 kind: guide
 ---
 
@@ -49,7 +49,7 @@ The network belongs to the instrument. Check it against what the payee expects b
     purpose: "contractor_payment",
     reference: "INV-1042"
   }}>
-  Amounts are strings, and USDC allows up to 6 decimal places. The call returns `201`, and the payout is not done yet.
+  Amounts are strings, and USDC allows up to 6 decimal places. The call returns `201`.
 </RunStep>
 
 `network` is an optional hint on the request. Leave it out and Anton routes the payout. If you send it, use a chain from the `Network` enum: `ethereum`, `bitcoin`, `tron`, `solana`, `polygon`, `arbitrum`, `optimism`, `base`, `avalanche`, `bsc`, `lightning`, `stellar` or `ripple`. Which of them carry USDC for you is a corridor question, not a schema one.

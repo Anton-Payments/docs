@@ -4,7 +4,7 @@ description: "Lists page forward with an opaque cursor. There are no page number
 kind: concept
 ---
 
-Every list endpoint pages the same way, with an opaque `cursor` you pass back to get the next page.
+Pass each response's `next_cursor` back as `cursor` until `has_more` is `false`.
 
 ## Parameters
 

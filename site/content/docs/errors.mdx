@@ -106,7 +106,7 @@ When you sent a credential and it was refused, the header also names the reason:
 
 ## Error codes
 
-Codes group below by what went wrong, then run in order of status. The status for each code is fixed. The catalog lists every `code` value the API can return.
+Codes group below by what went wrong, then run in order of status. The status for each code is fixed.
 
 ### Request
 
@@ -158,7 +158,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | `approver_not_independent` | 403 | `permission_error` | The approver is not independent of the person who proposed the action. |
 | `approver_required` | 403 | `permission_error` | The action needs an approver, and the credential does not carry that permission. |
 | `capability_required` | 403 | `permission_error` | Your account does not hold the capability (`payouts` or `intelligence`) this endpoint needs. |
-| `forbidden` | 403 | `permission_error` | Authenticated, but not permitted to do this. |
+| `forbidden` | 403 | `permission_error` | A general 403, sent only when no more specific code applies. Permission failures on `/v1` use `insufficient_permissions`. |
 | `insufficient_permissions` | 403 | `permission_error` | The credential or signed-in user is not allowed to perform this action. |
 | `insufficient_scope` | 403 | `permission_error` | The credential was created without the scope this endpoint needs. Create a credential with the right scope. |
 | `key_environment_mismatch` | 403 | `permission_error` | A sandbox credential was used against production, or the reverse. |
@@ -190,7 +190,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | `batch_not_cancellable` | 409 | `invalid_request_error` | The batch is finished or already processing; cancel its payouts individually. |
 | `batch_not_validated` | 409 | `invalid_request_error` | The batch has not finished validating, or failed validation, so it cannot be confirmed. |
 | `beneficiary_not_active` | 409 | `invalid_request_error` | The beneficiary is archived or otherwise not active, so it cannot receive payouts or instruments. |
-| `conflict` | 409 | `invalid_request_error` | The request conflicts with the resource's current state. |
+| `conflict` | 409 | `invalid_request_error` | A general 409, sent only when no more specific code applies. Known conflicts, such as `payout_not_cancellable`, have their own code. |
 | `decision_not_pending` | 409 | `invalid_request_error` | The decision is no longer pending. |
 | `decision_pending` | 409 | `invalid_request_error` | The review already has a decision waiting to be applied. |
 | `duplicate_beneficiary` | 409 | `invalid_request_error` | An active beneficiary with the same identifying details already exists. |
@@ -239,7 +239,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | `instrument_update_failed` | 422 | `invalid_request_error` | The instrument could not be updated. Retry, and contact support with the `request_id` if it persists. |
 | `insufficient_balance` | 422 | `invalid_request_error` | Your available balance cannot cover the amount. Fund the account and retry with a new key. |
 | `invalid_country_code` | 422 | `invalid_request_error` | The country is not a supported ISO 3166-1 alpha-2 code. |
-| `invalid_credentials` | 422 | `invalid_request_error` | The credentials supplied for this operation were not accepted. |
+| `invalid_credentials` | 422 | `invalid_request_error` | Creating an instrument: the account details for its method failed validation, such as a card number, CLABE, CBU or IBAN in the wrong format. `message` names the field. |
 | `invalid_decision` | 422 | `invalid_request_error` | The review decision is not allowed in the review's current state. |
 | `invalid_display_name` | 422 | `invalid_request_error` | `display_name` is missing. |
 | `invalid_email` | 422 | `invalid_request_error` | `email` is missing or malformed. |
@@ -255,7 +255,7 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | `note_too_long` | 422 | `invalid_request_error` | The note is longer than 2,000 characters. |
 | `owner_not_eligible` | 422 | `invalid_request_error` | The owner is not able to decide reviews. |
 | `payout_rejected` | 422 | `invalid_request_error` | The payout was refused. The payout's `status_message` says what to correct. |
-| `policy_blocked` | 422 | `invalid_request_error` | A rule on your account stopped this request. |
+| `policy_blocked` | 422 | `invalid_request_error` | Only on `POST /v1/payouts`: one of your own approval policies with action `block` matched, and no payout was created. The `policy.matched` webhook names the policy. |
 | `pricing_plan_not_found` | 422 | `invalid_request_error` | No pricing plan applies to this request. |
 | `quote_expired` | 422 | `invalid_request_error` | The quote has expired. Request a new one. |
 | `quote_mismatch` | 422 | `invalid_request_error` | The request does not match the quote it names. |

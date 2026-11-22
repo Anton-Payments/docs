@@ -4,7 +4,7 @@ description: "Every authenticated response tells you your limit, what is left an
 kind: concept
 ---
 
-Two kinds of limit apply. Read the headers on any response for the one you're closest to, and treat `429` as the final word.
+Two kinds of limit apply. Read the headers on any response to see how close you are to a limit. Back off when you get a `429`.
 
 | Limit | Applies to |
 |---|---|

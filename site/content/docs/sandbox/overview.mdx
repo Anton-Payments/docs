@@ -1,6 +1,6 @@
 ---
 title: "Sandbox overview"
-description: "Everything production does, except move money. Rails are simulated, so no bank or chain is ever contacted."
+description: "The same API as production, with simulated rails. No bank or chain is ever contacted."
 kind: concept
 ---
 
@@ -31,8 +31,6 @@ The sandbox runs the same API as production: the same validation, the same payou
 | Access token | 8 hours | 1 hour |
 | Funding | `POST /v1/sandbox/deposits` | Bank transfer to your account details |
 | `livemode` | `false` | `true` |
-
-Everything else is the same, so the code you test here is the code you ship.
 
 ## Next
 

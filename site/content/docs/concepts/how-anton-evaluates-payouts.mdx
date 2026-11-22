@@ -56,7 +56,7 @@ You cannot disable the checks, override them at submission or skip them with a f
 
 ## What you send changes what Anton can see
 
-Anton scores what it is given. The largest single improvement most integrations can make is the `session` object on `POST /v1/payouts`: the end user's IP, timezone and user agent as your own edge observed them.
+Anton scores what it is given. Send the `session` object on `POST /v1/payouts`: the end user's IP, timezone and user agent as your own edge observed them.
 
 Without it the only address in the request is your server's. With it, Anton can use IP geolocation and network type, check whether the timezone agrees with where the address resolves, and follow a device across sessions.
 

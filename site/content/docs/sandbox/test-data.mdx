@@ -40,8 +40,6 @@ Response (`201`):
 
 `amount` is what you credited and `available` is the balance after the credit.
 
-Things to know:
-
 - The endpoint exists only in the sandbox (`https://api.antonpayments.dev`). In production it answers `404`.
 - It requires an `Idempotency-Key`. See [Idempotency](/concepts/idempotency).
 - The amount must be greater than zero (otherwise `422 amount_invalid`) and use no more decimal places than the currency allows (otherwise `422 amount_precision_invalid`). An amount that is not a decimal string is `400 type_mismatch`.
@@ -72,9 +70,9 @@ Rail submission is mocked. Authentication, validation, idempotency, rate limits,
 
 <CardGroup cols={2}>
   <Card title="Sandbox overview" href="/sandbox/overview">
-    What the sandbox is, and how it differs from production.
+    Token lifetimes, timing and funding, compared with production.
   </Card>
   <Card title="Going live" href="/guides/go-live">
-    Checklist for moving from sandbox to production.
+    New credentials, the production host, and a webhook endpoint that verifies signatures.
   </Card>
 </CardGroup>

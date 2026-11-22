@@ -105,7 +105,7 @@ Rescreening is a different job. [`POST /v1/verifications/{id}/rescreen`](/refere
 
 ## What you will not get back
 
-Names never leave. `display_name` is masked on every read, for subjects and owners alike, and the email is masked too. Reading the true name or the captured documents is a dashboard action for admins, and each access is audited. Webhook payloads carry IDs and statuses, not names, links or documents.
+Owners' names and emails are masked the same way as the subject's. Reading the true name or the captured documents is a dashboard action for admins, and each access is audited. Webhook payloads carry IDs and statuses, not names, links or documents.
 
 <Note>
   `GET /v1/verification-stats` gives your funnel in one call: totals by outcome, pass rate and median completion minutes. See [Verification overview stats](/reference/verifications/get-verification-stats).
@@ -117,7 +117,5 @@ Names never leave. `display_name` is masked on every read, for subjects and owne
   <Card title="Identity verification" href="/concepts/verifications">
     Statuses, screening and what the API never returns.
   </Card>
-  <Card title="Create a verification subject" href="/reference/verifications/create-verification-subject">
-    Every field, with a business example.
-  </Card>
+  <Card title="Create a verification subject" href="/reference/verifications/create-verification-subject" />
 </CardGroup>

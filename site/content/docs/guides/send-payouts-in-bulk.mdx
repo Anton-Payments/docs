@@ -82,8 +82,7 @@ A `validated` batch carries an `expires_at`, the deadline for confirming it. Mis
 A `partial` batch is normal, not an error. Read the outcome row by row:
 
 - `GET /v1/batches/{id}/results` returns each row's `status` (`success`, `failed`, `skipped` or `pending`), its `payout_id`, and a `message` for any row that did not succeed.
-- `GET /v1/batches/{id}/payouts` lists the payouts the batch created. Each is an ordinary payout with its own lifecycle and webhooks.
-
+- `GET /v1/batches/{id}/payouts` lists the payouts the batch created.
 Reconcile against your source file by row number. Retry failed rows in a new batch.
 
 ## What goes wrong
@@ -104,7 +103,7 @@ Reconcile against your source file by row number. Retry failed rows in a new bat
 
 - **Idempotency.** Upload, confirm and cancel all require an `Idempotency-Key`. Use a key that names the run, such as `payroll-2026-11`, so a retried upload does not create a second batch.
 - **Screening is per payout.** Validation checks the file: format, amounts, methods, credentials and payee matching. Each payout the batch creates is checked separately before it is sent, so a confirmed row can still end in `on_hold` or `failed`.
-- **Rate limits.** A `429` carries `Retry-After`. Respect it. See [Rate limits](/concepts/rate-limits).
+- **Rate limits.** A `429` carries `Retry-After` in seconds. Wait that long before retrying. See [Rate limits](/concepts/rate-limits).
 - **Credentials per environment.** Sandbox credentials work against `https://api.antonpayments.dev` and production credentials against `https://api.antonpayments.com`. See [Environments](/environments).
 - **Test first.** [Fund a sandbox balance](/guides/fund-your-balance) and run a small file end to end. See [Test data](/sandbox/test-data).
 
@@ -112,5 +111,5 @@ Reconcile against your source file by row number. Retry failed rows in a new bat
 
 <CardGroup cols={2}>
   <Card title="Send a payout" href="/guides/send-a-payout">The single-payout call, for event-driven flows.</Card>
-  <Card title="Go live" href="/guides/go-live">What to check before your first live payout.</Card>
+  <Card title="Go live" href="/guides/go-live">New credentials, the production host, and a webhook endpoint that verifies signatures.</Card>
 </CardGroup>

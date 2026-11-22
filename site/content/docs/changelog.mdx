@@ -14,7 +14,7 @@ kind: changelog
 
 <Notes>
 
-This is the first dated version of the Anton API and the one every account starts on. It describes the full `/v1` surface: authentication, beneficiaries and instruments, payouts and batches, balances and accounts, FX, webhooks, verifications and Anton Intelligence. Download the [OpenAPI description](/openapi-merchant.yaml) to generate a client or import the API into a tool such as Postman.
+It describes the full `/v1` surface: authentication, beneficiaries and instruments, payouts and batches, balances and accounts, FX, webhooks, verifications and Anton Intelligence. Download the [OpenAPI description](/openapi-merchant.yaml) to generate a client or import the API into a tool such as Postman.
 
 ### Versioning
 
@@ -190,7 +190,7 @@ If you built against earlier documentation:
 
 <Notes>
 
-OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-movement mutation surface. Previously, machine callers could read but not mutate on several payout-surface endpoints; credential scopes now map directly to the permissions each endpoint requires, so a `payouts`-scoped credential creates and cancels payouts, manages beneficiaries and instruments, uploads and confirms batches, executes FX, and manages webhook subscriptions — end to end.
+OAuth+DPoP credentials carrying the `payouts` scope can now do everything a payout integration needs. Before, machine callers could read but not change data on several payout endpoints; credential scopes now map directly to the permissions each endpoint requires, so a `payouts`-scoped credential creates and cancels payouts, manages beneficiaries and instruments, uploads and confirms batches, executes FX, and manages webhook subscriptions.
 
 ### Added
 
@@ -198,8 +198,8 @@ OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-
 
 ### Changed
 
-- **Beneficiary PII is write-only for machine credentials.** `PATCH /v1/beneficiaries/{id}/pii` is available (your system is the source of the data); `GET /v1/beneficiaries/{id}/pii` answers `403` to a machine credential. Detokenized PII readback — beneficiary PII, verification name reveal, captured documents — is for signed-in admin users of the merchant dashboard, audit-logged per access. A leaked API credential cannot harvest identities.
-- **Approval decisions stay human.** Payout approve/reject (maker-checker) rejects machine credentials — an approver must be a signed-in portal user distinct from the creator.
+- **Beneficiary PII is write-only for machine credentials.** `PATCH /v1/beneficiaries/{id}/pii` is available (your system is the source of the data); `GET /v1/beneficiaries/{id}/pii` answers `403` to a machine credential. Reading personal data back (payee PII, verification names, captured documents) is for signed-in admin users of the merchant dashboard, audit-logged per access. A leaked API credential cannot harvest identities.
+- **Approval decisions stay human.** Payout approve/reject (maker-checker) rejects machine credentials. An approver must be a signed-in portal user other than the creator.
 - **Access tokens without a `scope` claim now grant nothing.** The transitional full-scope default for pre-scope-era tokens has been removed; every legitimately minted token has carried the claim since it shipped, and a claim-less token now fails closed.
 
 </Notes>
@@ -213,11 +213,11 @@ OAuth+DPoP credentials carrying the `payouts` scope now exercise the full money-
 
 <Notes>
 
-Additive, non-breaking. The verification module — previously reachable only through the merchant dashboard — is now part of the public API for OAuth+DPoP credentials carrying the `intelligence` scope.
+Additive, non-breaking. The verification module, previously reachable only through the merchant dashboard, is now part of the public API for OAuth+DPoP credentials carrying the `intelligence` scope.
 
 ### Added
 
-- **Verifications API.** KYC/KYB-as-a-service over hosted flows: create verification subjects (`POST /v1/verification-subjects`), list and read them, re-verify, resend / regenerate / revoke links, resend per-owner (UBO) links, and read funnel stats (`GET /v1/verification-stats`). Every completed verification is sanctions-screened through Anton Intelligence, with the backing `evaluation_id` on the attempt's `screening` block. See the [Verifications guide](/concepts/verifications).
+- **Verifications API.** Identity checks for people and businesses, through hosted flows: create verification subjects (`POST /v1/verification-subjects`), list and read them, re-verify, resend / regenerate / revoke links, resend per-owner (UBO) links, and read funnel stats (`GET /v1/verification-stats`). Every completed verification is sanctions-screened through Anton Intelligence, with the backing `evaluation_id` on the attempt's `screening` block. See the [Verifications guide](/concepts/verifications).
 - **`verification.*` webhook events.** `verification.link_sent`, `verification.started`, `verification.approved`, `verification.declined`, `verification.review`, and `verification.expired` are documented in the [event catalog](/concepts/webhook-events#verification). `link_sent` fires as the delivery receipt for Anton-delivered hosted links.
 
 ### Security
@@ -240,7 +240,7 @@ Additive, non-breaking changes to the v1 contract. Existing integrations are una
 ### Added
 
 - **Account capabilities and credential scopes.** Every merchant account carries a capability set (`payouts`, `intelligence`); every OAuth client carries a scope set fixed at creation and embedded in access tokens as a `scope` claim (echoed in the token response). Effective access is `scopes ∩ capabilities`. See [Capabilities & Scopes](/concepts/capabilities).
-- **AI-Compliance-only tier.** Accounts can be provisioned with the `intelligence` capability only — full access to Anton Intelligence, dashboards, webhooks, and credential management, with the entire payout surface structurally unreachable (`403 capability_required`).
+- **AI-Compliance-only tier.** Accounts can be provisioned with the `intelligence` capability only, with full access to Anton Intelligence, dashboards, webhooks and credential management. Every payout endpoint is refused for these accounts (`403 capability_required`).
 - **Authenticated Intelligence API.** `POST /v1/intelligence/evaluations` (with required `Idempotency-Key`), `GET /v1/intelligence/evaluations` (new, cursor-paginated), `GET /v1/intelligence/evaluations/{id}`, and `POST /v1/intelligence/evaluations/validate` now run under merchant credentials with the `intelligence` scope. Evaluations persist under your account and reads are strictly merchant-scoped.
 - **New error codes.** `403 capability_required`, `403 insufficient_scope`, `409 idempotency_in_flight`, `503 idempotency_unavailable` are now documented across the [error catalog](/errors).
 
@@ -274,12 +274,12 @@ The v1.0.0 merchant contract is now frozen. Merchant integrations built against 
 - **ID prefix scheme normalised.** `pay_*` (payouts), `ben_*` (beneficiaries), `ins_*` (instruments), `bat_*` (batches), `whk_*` (webhook subscriptions), `evt_*` (events), `dlv_*` (deliveries), `pq_*` (pricing quotes), `fxq_*` (FX quotes), `fxx_*` (FX exchanges), `mer_*` (merchant). 
 - **Corridor responses no longer expose `provider`.** Anton's rail graph is a commercial secret; the merchant view emits only the merchant-observable fields.
 - **Timestamps are RFC 3339, in UTC.**
-- **Webhook secret rotation.** `POST /v1/webhooks/{id}/secret/rotate` returns a fresh raw secret **exactly once**; The secret cannot be read back afterwards. Webhook creates also echo the raw secret once in the create response.
-- **Idempotency scoping.** `Idempotency-Key` is scoped per `(merchant, path, body)` — cross-merchant collisions are impossible. Replays of identical bodies return the original response; replays with a different body return `422 idempotency_key_reused`.
+- **Webhook secret rotation.** `POST /v1/webhooks/{id}/secret/rotate` returns a fresh raw secret **exactly once**. The secret cannot be read back afterwards. Webhook creates also echo the raw secret once in the create response.
+- **Idempotency scoping.** `Idempotency-Key` is scoped per `(merchant, path, body)`, so two merchants can never collide. Replays of identical bodies return the original response; replays with a different body return `422 idempotency_key_reused`.
 
 ### Security
 
-- **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity — not even as booleans. Anton-network intelligence is aggregated only into opaque verification signals that are indistinguishable from external-provider outcomes.
+- **Cross-merchant policy.** The merchant API never exposes counts, identities, or adverse-event signals derived from other merchants' activity, not even as booleans. Signals from across the network reach you only inside verification results, in the same form as results from outside providers.
 - **PII isolation.** All beneficiary PII and payment instrument details are tokenized in a secure vault. Raw values are returned only to signed-in admin users of the merchant dashboard.
 
 </Notes>

@@ -6,6 +6,8 @@ import { RunStep } from './run-step';
 import { Entry, ChangelogFilter, Notes, Diff, Endpoints, Codes } from './changelog';
 import { BeforeYouBegin } from './before';
 import { Decision, Choice } from './decision';
+import { getOperation } from '@/lib/openapi';
+import { PRODUCTS } from '@/lib/nav';
 
 /* ---------- callouts (Mintlify names kept, so ported pages render unchanged) ---------- */
 function Callout({ type, title, children }: { type: 'note' | 'info' | 'tip' | 'warning' | 'check' | 'danger'; title?: string; children: ReactNode }) {
@@ -28,12 +30,26 @@ export const Danger = (p: { children: ReactNode; title?: string }) => <Callout t
 export const Check = (p: { children: ReactNode; title?: string }) => <Callout type="check" {...p} />;
 
 /* ---------- cards ---------- */
+/**
+ * A link card. A card that points at an API reference page shows that endpoint's method and path,
+ * read from the spec, in place of a caption, so it can't drift from the contract. A card that points
+ * at a core-path page is labelled with its step.
+ */
 export function Card({ title, href, kicker, children }: { title: string; href?: string; icon?: string; kicker?: string; children?: ReactNode }) {
+  const ref = href?.match(/^\/reference\/([^/#?]+)\/([^/#?]+)$/);
+  const op = ref ? getOperation(ref[1], ref[2]) : undefined;
+  // a card pointing at a core-path page says which step it is, from the sidebar config
+  const core = href ? PRODUCTS.find((p) => p.core.includes(href)) : undefined;
+  const k = kicker ?? (core && `Step ${core.core.indexOf(href!) + 1} of ${core.core.length}`);
   const inner = (
     <>
-      {kicker && <span className="card-k">{kicker}</span>}
+      {k && <span className="card-k">{k}</span>}
       <span className="card-t">{title}</span>
-      {children && <div className="card-b">{children}</div>}
+      {op ? (
+        <span className="card-route"><span className={`verb ${op.method}`}>{op.method.toUpperCase()}</span><code>{op.path}</code></span>
+      ) : (
+        children && <div className="card-b">{children}</div>
+      )}
       {href && <span className="go">Open →</span>}
     </>
   );

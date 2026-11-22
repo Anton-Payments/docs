@@ -4,7 +4,7 @@ kind: guide
 description: "The one evaluation that never answers on the spot. It returns 202 at once, and the decision reaches you as a webhook."
 ---
 
-`payout_screening` runs the full screening panel over a payment's amount, corridor and parties, and that can take up to about 20 seconds. So the call is accepted, not answered: the evaluation comes back with `status: "pending"` and no result fields. It creates no payout and moves no money.
+`payout_screening` runs the full screening panel over a payment's amount, corridor and parties, and that can take up to about 20 seconds. The call returns `202` instead of a verdict: the evaluation comes back with `status: "pending"` and no result fields. It creates no payout and moves no money.
 
 <BeforeYouBegin items={["Sandbox credentials with the intelligence scope", "A webhook endpoint subscribed to the intelligence evaluation events", "The payee, the amount, and the source and destination countries"]} />
 
@@ -28,14 +28,14 @@ Send the `entity` too, with something searchable: a `name` or `vault_token_id`. 
       rail: "bank"
     }
   }}>
-  Answers `202 Accepted`, never a verdict.
+  The body carries the evaluation `id` and `status: "pending"`.
 </RunStep>
 
 ## Take the 202
 
 The response is `202 Accepted` with a `Location` header holding the URL of the evaluation. The body has the envelope only.
 
-Store the `id` against your payment. Don't read `decision` yet; it is not there.
+Store the `id` against your payment. `decision` is absent until the evaluation completes.
 
 ## Wait for the event
 
@@ -61,9 +61,9 @@ A `failed` evaluation is not an approval. Hold the payment and run the evaluatio
 
 <CardGroup cols={2}>
   <Card title="Decisions" href="/intelligence/decisions">
-    What each decision, reason and action means.
+    Every `decision`, `reasons` and `required_actions` value.
   </Card>
   <Card title="Send a payout" href="/guides/send-a-payout">
-    Screening inside a real payout, with its own events.
+    How a held payout looks, and which events it sends.
   </Card>
 </CardGroup>

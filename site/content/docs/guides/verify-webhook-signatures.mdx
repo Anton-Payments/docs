@@ -12,7 +12,7 @@ Anyone who finds your webhook URL can post to it. The signature is the only thin
 
 Every delivery carries `X-Webhook-Timestamp` (Unix seconds) and `X-Webhook-Signature`. Anton computes an HMAC-SHA256 over the string `{timestamp}.{raw body}` with your secret and sends it as lowercase hex, prefixed `v1=`.
 
-Your handler does the same sum and compares. The order matters, and each step closes a different hole.
+Your handler does the same sum and compares. Do these steps in this order.
 
 <Steps>
   <Step title="Read the raw body">
@@ -243,7 +243,7 @@ exit 1
 
 ## When it fails
 
-If every delivery is rejected, the cause is almost always one of these.
+If every delivery is rejected, check these first.
 
 - **A parsed body.** The framework read the JSON before your handler did. Mount the raw reader on this route only.
 - **A body that was changed on the way.** A proxy that adds a trailing newline or changes the encoding invalidates the signature.

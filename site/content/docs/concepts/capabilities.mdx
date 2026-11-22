@@ -81,6 +81,6 @@ Neither code is retryable. The same request fails identically until the capabili
 Two kinds of operation need a signed-in person, whatever the scope:
 
 - **Approval decisions.** Approving or rejecting a payout needs a human identity, because maker-checker means nothing for a credential.
-- **Reading personal data back.** Beneficiary personal data, verification names and captured documents are dashboard-only, restricted by role and audit-logged on every access. A credential can write personal data (`PUT /v1/beneficiaries/{id}/pii`) but never read it, so a leaked credential cannot harvest identities.
+- **Reading personal data back.** Beneficiary personal data, verification names and captured documents are dashboard-only, restricted by role and audit-logged on every access. A credential can write personal data (`PATCH /v1/beneficiaries/{id}/pii`) but never read it, so a leaked credential cannot harvest identities.
 
 Responding to an RFI is dashboard-only too, and needs `rfis.respond` (Admin or Operator).

@@ -20,7 +20,7 @@ RFIs exist on every account tier, including accounts that hold only the `intelli
 
 ## What your integration can see
 
-There is no RFI object, endpoint or webhook event. No `rfi.*` type exists, so you cannot subscribe to one, and a subscription that names an unknown type is refused with `422 validation_error`.
+There is no RFI object, endpoint or webhook event. A subscription that names an `rfi.*` type is refused with `422 validation_error`.
 
 You see the payout. One that is under review has `status` `on_hold`. The API cannot tell you whether a hold is waiting on an RFI, so treat every `on_hold` payout as possibly waiting on one and check the dashboard.
 
@@ -57,8 +57,6 @@ You see the payout. One that is under review has `status` `on_hold`. The API can
 </Errors>
 
 A payout that ends `failed` with `failure_code` `cannot_be_processed` comes with no detail. Contact support at [help.antonpayments.com](https://help.antonpayments.com) with the payout `id` and the `request_id`.
-
-An RFI nobody can answer leaves payouts waiting, so name the responders before you go live.
 
 <CardGroup cols={2}>
   <Card title="Handle holds and reviews" href="/guides/handle-holds-and-reviews">What your code sees while a payout is held.</Card>

@@ -50,7 +50,7 @@ A held payout is not a failed one. Tell your user the payout is under review and
 
 Release is `payout.processing`, which also fires when a payout is first submitted to the rail. Read `status` in the payload rather than assuming which case it is. A hold that ends in `failed` arrives as `payout.failed`, and `failure_code` can be `cannot_be_processed` with no further detail. [Handle returns and failures](/guides/handle-returns-and-failures) covers that ending.
 
-A review has no published duration. Alert on a payout that stays held longer than your own deadline, and keep your user's pending state honest while it does.
+A review has no published duration. Alert on a payout that stays held longer than your own deadline, and keep showing your user the pending state until the payout moves.
 
 ## When your team can help
 

@@ -7,7 +7,7 @@ kicker: Core path · 1 of 3
 
 A payee is the person or business you pay. The API calls it a `beneficiary`, and its ID starts with `ben_`. A payee holds identity only. It cannot receive money until you [attach an instrument](/guides/register-an-instrument) to it.
 
-Every payee belongs to one merchant. If two merchants pay the same person, each creates its own record. Personal details you send are tokenized, and Anton's database never stores them raw. The payee record keeps a display name, a country and a token reference.
+Every payee belongs to one merchant. If two merchants pay the same person, each creates its own record. Personal details you send are tokenized. The payee record keeps a display name, a country and a token reference, never the raw details.
 
 <BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "The payee's type, name and country", "Your own ID for the payee, sent as external_ref"]} />
 
@@ -119,10 +119,8 @@ To stop paying someone, [archive](/reference/beneficiaries/archive-beneficiary) 
 ## Next
 
 <CardGroup cols={2}>
-  <Card title="Register an instrument" href="/guides/register-an-instrument" kicker="Step 2 of 3">
+  <Card title="Register an instrument" href="/guides/register-an-instrument">
     Attach a bank account or wallet to this payee.
   </Card>
-  <Card title="Create a payee" href="/reference/beneficiaries/create-beneficiary">
-    The full request and response reference.
-  </Card>
+  <Card title="Create a payee" href="/reference/beneficiaries/create-beneficiary" />
 </CardGroup>

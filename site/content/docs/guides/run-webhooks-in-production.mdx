@@ -47,7 +47,7 @@ A test delivery tells you the URL is reachable and your verification passes, bef
 
 The outcome is in the delivery record. List it with `GET /v1/webhooks/{id}/deliveries` and read `status` and `response_status`. The call is rate limited, and it returns `409 webhook_subscription_inactive` for a deactivated subscription. Activate it first.
 
-Test sends are the way to check a new handler. They do not replace watching real traffic, which the next two sections cover.
+Test sends do not replace watching real traffic.
 
 ## Read the delivery record
 

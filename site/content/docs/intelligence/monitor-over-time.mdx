@@ -1,10 +1,10 @@
 ---
 title: "Monitor over time"
-description: "Anton keeps re-screening your monitored customers as the lists change. You hear about it only when something matches."
+description: "Anton re-screens your monitored customers on a regular basis and sends an event only when something matches."
 kind: guide
 ---
 
-Two things share the name. Ongoing monitoring is Anton's: it re-screens every monitored customer on a regular basis, chiefly whenever the lists it screens against are updated, and once more when a customer is added or resumed. A `monitoring` evaluation is yours: one screen of a subject you already know, sent through the API and answered in the response. Anton does not repeat it for you.
+Ongoing monitoring is Anton's: it re-screens every monitored customer on a regular basis, and once more when a customer is added or resumed. A `monitoring` evaluation is yours: one screen of a subject you already know, sent through the API and answered in the response. Anton does not repeat it for you.
 
 <BeforeYouBegin items={["A sandbox OAuth client and its DPoP key, with the `intelligence` scope", "A subject to screen: a name or vault token on `entity`, or an `instrument`", "A stable reference of your own for the subject"]} />
 
@@ -36,7 +36,7 @@ Use `reference_id` for your own identifier of the subject, such as `cust_7731`. 
 
 `Idempotency-Key` is required, and a retry with the same key returns the first response. Build the key from the subject and the run, as above. A key made only from the subject would return the first run's answer on every later run.
 
-`metadata` is yours: strings only, up to 50 keys, returned on the evaluation and never sent to screening. A run date or batch id there makes each evaluation easy to find again.
+`metadata` is yours: strings only, up to 50 keys, returned on the evaluation and never sent to screening. Put a run date or batch id there so you can match evaluations to your own records.
 
 ## Read the result
 
@@ -68,6 +68,6 @@ A completed evaluation can reach you as `intelligence.evaluation.completed`, and
     What `approve`, `review` and `decline` ask of you.
   </Card>
   <Card title="Work the review queue" href="/intelligence/reviews">
-    Where a result that needs a person goes.
+    The reviews a match opens, with their notes and decisions.
   </Card>
 </CardGroup>

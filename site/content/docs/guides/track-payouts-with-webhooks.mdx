@@ -1,6 +1,6 @@
 ---
 title: Track payouts with webhooks
-description: Delivery is at least once and arrival order is not guaranteed. Build the receiver around those two facts, not around the happy path.
+description: Delivery is at least once and arrival order is not guaranteed. Build the receiver around those two facts.
 kind: webhooks
 kicker: After the core path
 ---
@@ -60,11 +60,9 @@ Verify the signature before you read the body as truth. [Verify webhook signatur
 
 ## Make the handler safe to repeat
 
-Four facts shape the receiver, and each one has a counter.
-
 - **Delivery is at least once.** Keep the event ids you have applied and skip a repeat.
 - **Order is not guaranteed.** Events for one payout are dispatched in order, but retries can reorder them at your endpoint. Compare `created_at` with the last event you applied for that payout.
-- **The status is the truth, not the event name.** Set your record from `data.object.status`, so applying an event twice leaves the same state.
+- **Set your record from `status`.** Events can arrive late or twice. Read `data.object.status`, so applying an event twice leaves the same state.
 - **Final statuses stay final.** `completed`, `returned`, `cancelled` and `failed` end a payout. Never move one out of them because a late event arrived.
 
 Treat a status you do not know as still in progress, and a `failure_code` you do not know as a plain failure. New values then never break the handler.
@@ -73,9 +71,7 @@ A hold is not an error. `payout.on_hold` is a review and carries no reason: the 
 
 ## Answer fast, retry safely
 
-Answer with a `2xx` within 30 seconds, and do the work from a queue. Anything else counts as a failed delivery, a redirect included: Anton doesn't follow a `3xx`.
-
-Anything else is retried with exponential backoff, five attempts in all, and then the delivery is abandoned. No endpoint replays an abandoned delivery, so keep a way to reconcile. `GET /v1/webhooks/events` lists every event for your account, and [Run webhooks in production](/guides/run-webhooks-in-production) covers reading the attempts and closing a gap.
+Answer with a `2xx` within 30 seconds, and do the work from a queue. Any other response counts as a failed delivery, and Anton does not follow a `3xx`. Failed deliveries are retried with exponential backoff, five attempts in all, then abandoned. No endpoint replays an abandoned delivery, so keep a way to reconcile. `GET /v1/webhooks/events` lists every event for your account, and [Run webhooks in production](/guides/run-webhooks-in-production) covers reading the attempts and closing a gap.
 
 ## When it goes wrong
 
@@ -87,7 +83,7 @@ Anything else is retried with exponential backoff, five attempts in all, and the
   <ErrorRow status={429} code="rate_limit_exceeded">Wait the seconds in `Retry-After`, then retry with the same `Idempotency-Key`.</ErrorRow>
 </Errors>
 
-If every delivery fails your own check, you are most likely hashing a parsed body or holding a secret that has since been rotated.
+If every delivery fails your own check, you are hashing a parsed body instead of the raw bytes, or holding a secret that has since been rotated.
 
 ## Next
 

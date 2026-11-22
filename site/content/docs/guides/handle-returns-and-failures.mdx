@@ -25,10 +25,10 @@ A payout fails before it is sent, or while the rail has it. `processing` can go 
 | `failure_code` | Means | Do |
 | --- | --- | --- |
 | `cannot_be_processed` | Anton could not process the payout and cannot say more. | Don't retry to the same payee. Contact support with the payout `id` and the `request_id`. |
-| `provider_rejected` | The generic rail failure. | Check the payee and instrument, then create a new payout. |
+| `provider_rejected` | The rail refused the payout, including when it rejects the receiving account. | Check the payee and instrument, then create a new payout. |
 | `provider_unavailable` | The rail reported it was unavailable. | Create a new payout later. |
-| `insufficient_funds` | What the rail reported. | Check your balance and the amounts before you create a new payout. |
-| `beneficiary_not_found` | What the rail reported. | Check the payee's details. |
+| `insufficient_funds` | The rail reported a shortfall after Anton sent the payout. Your own balance is checked earlier, at create, as `422 insufficient_balance`. | Check the amounts, then create a new payout. Contact support if it repeats. |
+| `beneficiary_not_found` | Anton could not load the payee when it went to send, for example because the payee was deleted after the payout was created. | Check the payee still exists, then create a new payout. |
 
 Treat a code you don't know as a plain failure. New values can be added without breaking you.
 

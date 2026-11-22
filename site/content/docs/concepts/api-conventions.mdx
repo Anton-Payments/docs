@@ -4,7 +4,7 @@ description: "Dates version the API, amounts are strings, and every unknown fiel
 kind: concept
 ---
 
-The API is REST over HTTPS, with JSON in and out. Dates are ISO 8601 in UTC. Amounts are decimal strings, never floats, so nothing rounds on the way.
+The API is REST over HTTPS, with JSON in and out. Amounts are decimal strings, never floats, so nothing rounds on the way.
 
 ## Base URLs
 
@@ -15,7 +15,7 @@ The API is REST over HTTPS, with JSON in and out. Dates are ISO 8601 in UTC. Amo
 
 ## Authentication
 
-Every request carries a DPoP-bound OAuth 2.0 access token and a fresh DPoP proof. Static API keys are not accepted. [Authentication](/authentication) walks through the flow with a working curl.
+Every request carries a DPoP-bound OAuth 2.0 access token and a fresh DPoP proof. Static API keys are not accepted. Mint a token and sign proofs as [Authentication](/authentication) shows.
 
 ```http
 Authorization: DPoP <access_token>
@@ -60,13 +60,13 @@ To correlate a call with your own systems, send `X-Client-Request-Id`: up to 128
     Cursors on every list endpoint.
   </Card>
   <Card title="Rate limits" href="/concepts/rate-limits">
-    The headers that tell you where you stand.
+    `X-RateLimit-*` headers, and `Retry-After` on a `429`.
   </Card>
   <Card title="Errors" href="/errors">
-    The error object, statuses and codes.
+    Branch on `error.code`. Every code, with its status.
   </Card>
   <Card title="Webhook events" href="/concepts/webhook-events">
-    Every event type and its payload.
+    Event types, their payloads and the API version they render at.
   </Card>
   <Card title="Webhook signing" href="/concepts/webhook-signing">
     Verify each delivery before you act on it.

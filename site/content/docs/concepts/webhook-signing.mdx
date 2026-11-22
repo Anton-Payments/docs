@@ -7,7 +7,7 @@ kind: concept
 Every delivery is signed with an HMAC-SHA256 derived from your subscription's signing secret. Verify it on your endpoint before you act on anything in the payload.
 
 <Warning>
-  Treat an unverified webhook the same as an untrusted HTTP request. Do not mark payouts as settled, release funds or update beneficiaries until the signature has verified.
+  Do not mark payouts as settled, release funds or update beneficiaries until the signature has verified.
 </Warning>
 
 ## The signature scheme
@@ -294,7 +294,7 @@ Every subscription has one signing secret. It is shown once, in the response tha
 </AccordionGroup>
 
 <Note>
-  The grace window only helps if your verifier checks every `v1=` entry. A verifier that reads one signature rejects deliveries during the window. Deploy the new secret within 24 hours of rotating.
+  Deploy the new secret within 24 hours of rotating.
 </Note>
 
 <Warning>

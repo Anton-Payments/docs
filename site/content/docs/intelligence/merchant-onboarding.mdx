@@ -4,7 +4,7 @@ description: "Screen a business before you let it onto your platform. Only a bus
 kind: guide
 ---
 
-`merchant_onboarding` evaluates a company at the point you would accept it as a customer. It decides before it answers, so the result can gate your own signup flow.
+`merchant_onboarding` evaluates a company at the point you would accept it as a customer. The decision is in the response, so you can gate your own signup flow on it.
 
 <BeforeYouBegin items={["Sandbox credentials with the intelligence scope", "The business's legal name, or a vault token that holds it", "A registration number, if you have one"]} />
 
@@ -14,7 +14,7 @@ kind: guide
 
 <Decision>
   <Choice title="Send the details" value='entity.name' fields="name, country, document" set={{ entity: { type: "business", reference_id: "merchant-example", name: "Example Imports LLC", country: "US", document: { type: "business_registration", country: "US", number: "TEST-REG-123" } } }} picked>
-    Everything travels in the request and is discarded after the evaluation.
+    The details travel in the request and are discarded after the evaluation.
   </Choice>
   <Choice title="Send a vault token" value='entity.vault_token_id' fields="vault_token_id" set={{ entity: { type: "business", reference_id: "merchant-example", vault_token_id: "vt_01HX8Z9K0M2N3P4Q5R6S7T8UA4" } }}>
     The token must belong to your account, and the details are read in memory.
@@ -56,6 +56,6 @@ The `merchant` object on the request is accepted but ignored today; don't depend
     Identity and business checks through hosted flows.
   </Card>
   <Card title="Reviews" href="/intelligence/reviews">
-    Work the cases that need a person.
+    Open, assign and decide the reviews an evaluation raised.
   </Card>
 </CardGroup>

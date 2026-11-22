@@ -10,7 +10,7 @@ When a payout matches one of your own approval policies, it waits for a second p
 
 ## What you see at creation
 
-`POST /v1/payouts` returns the payout as `pending_approval` instead of `created`. The status means a second person on your team has to approve it under your own policy.
+`POST /v1/payouts` returns the payout as `pending_approval` instead of `created`.
 
 A policy can also refuse the request outright. That is `422 policy_blocked`, and no payout is created.
 

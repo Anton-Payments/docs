@@ -75,7 +75,7 @@ The response is the subject. Its first verification is in `verifications`, and i
 
 `metadata` is yours: up to 50 string keys. Send it when you create the subject and it is stored on the subject. Send it when you re-verify and it is stored on the new verification. It comes back on every read.
 
-Three things in this response matter:
+In this response:
 
 - **`hosted_link` is secret-once.** It appears here and on the resend, regenerate and re-verify responses, and is never readable again. It opens a flow that collects your customer's identity documents, so treat it like a credential.
 - **`status` says whether the email went out.** `sent` means Anton delivered it. `created` means it did not, because you chose `delivery: "manual"` or the environment cannot send email. Deliver the link through your own channel, and never tell your customer to check their inbox on a `created` response.

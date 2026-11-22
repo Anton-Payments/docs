@@ -113,8 +113,6 @@ An event is rendered at the API version your account is pinned to, and records i
 
 ### Payouts
 
-Lifecycle events for every payout you create.
-
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
 | `payout.created` | A payout has been accepted and queued. | [Payout](/reference/payouts/get-payout) |
@@ -125,7 +123,7 @@ Lifecycle events for every payout you create.
 | `payout.failed` | The payout could not be completed. | [Payout](/reference/payouts/get-payout) |
 | `payout.cancelled` | A payout was cancelled before settlement. | [Payout](/reference/payouts/get-payout) |
 | `payout.returned` | Funds were returned by the receiving institution. | [Payout](/reference/payouts/get-payout) |
-| `payout.on_hold` | A payout is on hold. | [Payout](/reference/payouts/get-payout) |
+| `payout.on_hold` | Paused before it reached the rail. `status_message` is the only text Anton gives. | [Payout](/reference/payouts/get-payout) |
 
 ### Approvals
 
@@ -139,8 +137,6 @@ Payouts held for a human decision under your approval policy.
 
 ### Beneficiaries
 
-Changes to the people and businesses you pay.
-
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
 | `beneficiary.created` | A beneficiary was added. | [Beneficiary](/reference/beneficiaries/get-beneficiary) |
@@ -150,8 +146,6 @@ Changes to the people and businesses you pay.
 
 ### Instruments
 
-Changes to stored payment instruments.
-
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
 | `instrument.created` | A payment instrument was added. | [Instrument](/reference/instruments/get-instrument) |
@@ -159,8 +153,6 @@ Changes to stored payment instruments.
 | `instrument.deleted` | A payment instrument was removed. | Deleted instrument |
 
 ### Batches
-
-Bulk payout uploads.
 
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
@@ -170,8 +162,6 @@ Bulk payout uploads.
 
 ### Schedules
 
-Recurring payout schedules.
-
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
 | `schedule.executed` | A scheduled run created its payouts. | Schedule event |
@@ -180,16 +170,12 @@ Recurring payout schedules.
 
 ### Treasury
 
-Balances and funding.
-
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
 | `balance.low` | A currency balance crossed its low threshold. | Balance alert |
 | `funding.credit` | A funding deposit was credited to your balance. | Funding credit |
 
 ### FX
-
-Quotes and currency exchanges.
 
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
@@ -212,8 +198,6 @@ Identity and business verification lifecycle. Subscribe to track a subject witho
 | `verification.expired` | The hosted link lapsed before the subject completed it. | Verification event |
 
 ### Intelligence
-
-Risk evaluations and insights.
 
 | Event | When it is sent | `data.object` |
 | --- | --- | --- |
@@ -239,7 +223,6 @@ Your team's compliance reviews, for your own case system. Sent with the Reviews 
 
 - `payout.failed` carries a `failure_code` on the payout. A payout we could not process is announced by `payout.failed` with `failure_code` `cannot_be_processed`.
 - `payout.on_hold` means the payout is paused. It never says why: `status_message` is the only text.
-- `intelligence.review.note_added` never carries the note text.
 - `beneficiary.deleted` and `instrument.deleted` carry the ID of the removed object and `"deleted": true`.
 - `test` is the type of the delivery `POST /v1/webhooks/{id}/test` sends, to check your endpoint and signature handling. Its `data.object` is a sample payout with `"test": true`.
 - Subscribing to `*` delivers every event type, including ones added later.

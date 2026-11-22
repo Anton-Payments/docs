@@ -26,7 +26,7 @@ Check `available` before you create a payout, not `total`.
 
 <Decision>
   <Choice title="Sandbox: credit it" value="POST /v1/sandbox/deposits" fields="currency, amount, sandbox only" picked>
-    One call adds to your balance and returns the new `available`. No bank, no waiting, no real money. The endpoint answers `404` in production.
+    One call adds to your balance and returns the new `available`. The endpoint answers `404` in production.
   </Choice>
   <Choice title="Production: bank transfer" value="GET /v1/accounts/{currency}/details" fields="iban, account_number, routing_codes">
     Read the details for the currency, then pay into them from your bank. Anton credits the balance when the money lands.
@@ -70,7 +70,7 @@ Which fields are set depends on the currency and country: some accounts have an 
 
 A transfer that arrives reaches you as a signed `funding.credit` event, with the amount, currency, a masked sender name and the payment reference. Match it to the payment you expected by `reference`, not by sender.
 
-`balance.low` fires when a currency's available balance crosses its threshold. It fires once and stays quiet until the balance recovers, so it is a prompt to top up, not a running count. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers subscribing and verifying them.
+`balance.low` fires when a currency's available balance crosses its threshold. It fires once and stays quiet until the balance recovers, so treat it as a prompt to top up. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers subscribing and verifying them.
 
 ## When it goes wrong
 
@@ -84,6 +84,6 @@ A transfer that arrives reaches you as a signed `funding.credit` event, with the
 ## Next
 
 <CardGroup cols={2}>
-  <Card title="Send a payout" href="/guides/send-a-payout">Spend what you funded.</Card>
+  <Card title="Send a payout" href="/guides/send-a-payout">Debit the currency you just funded, then read `available` again.</Card>
   <Card title="Convert currency" href="/guides/convert-currency">Move money between your own balances.</Card>
 </CardGroup>
