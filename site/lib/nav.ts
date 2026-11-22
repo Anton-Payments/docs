@@ -96,7 +96,7 @@ export const CONSOLE_DEFAULTS: Record<PageKind, boolean> = {
   guide: false,
   concept: false,
   reference: false,
-  try: true,
+  try: false,
   webhooks: true,
   changelog: false,
 };

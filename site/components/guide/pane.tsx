@@ -77,16 +77,25 @@ const EMPTY = new Set<number>();
 /**
  * Fields a reader's choices have rewritten. A choice applies only to a request that already has
  * one of its keys; then every key is set, and a `null` removes one (so a choice can swap a block).
+ * Keys "$path.x", "$query.x" and "$header.x" set a path parameter, a query parameter or a header
+ * (the Try it form sends those).
  */
 function applySet(req: SampleInput, set: Record<string, unknown>): SampleInput {
-  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return req;
-  const body = { ...(req.body as Record<string, unknown>) };
-  if (!Object.keys(set).some((k) => k in body)) return req;
+  const keys = Object.keys(set);
+  const own = keys.filter((k) => k.startsWith('$'));
+  const isObj = !!req.body && typeof req.body === 'object' && !Array.isArray(req.body);
+  const body = isObj ? { ...(req.body as Record<string, unknown>) } : undefined;
+  if (!own.length && (!body || !keys.some((k) => k in body))) return req;
+  const next: SampleInput = { ...req, pathParams: { ...(req.pathParams || {}) }, query: { ...(req.query || {}) }, headers: { ...(req.headers || {}) } };
   for (const [k, v] of Object.entries(set)) {
-    if (v === null) delete body[k];
-    else body[k] = v;
+    const [where, name] = k.startsWith('$') ? [k.slice(1, k.indexOf('.')), k.slice(k.indexOf('.') + 1)] : ['body', k];
+    const target = where === 'path' ? next.pathParams! : where === 'query' ? next.query! : where === 'header' ? next.headers! : body;
+    if (!target) continue;
+    if (v === null || v === '') delete target[name];
+    else (target as Record<string, unknown>)[name] = v;
   }
-  return { ...req, body };
+  if (body) next.body = body;
+  return next;
 }
 
 const linesFor = (idx: LineIndex, toks: Iterable<string>) => {

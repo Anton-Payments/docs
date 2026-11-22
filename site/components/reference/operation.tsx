@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { ConsoleButton } from '@/components/shell/console-button';
 import type { SampleInput } from '@/lib/samples';
 import { flatten, requiresIdempotency, serverUrls, successStatus, type Operation } from '@/lib/openapi';
 import { Md } from './markdown';
@@ -32,7 +31,6 @@ export function OperationHeader({ op, view }: { op: Operation; view: 'docs' | 't
             <Link href={op.href} aria-current={view === 'docs' ? 'page' : undefined}>Docs</Link>
             <Link href={`${op.href}/try`} aria-current={view === 'try' ? 'page' : undefined}>Try it</Link>
           </div>
-          {view === 'try' && <ConsoleButton />}
         </div>
       </div>
       <div className="row" style={{ margin: '4px 0 16px' }}>
