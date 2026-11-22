@@ -86,7 +86,7 @@ Cancel works until Anton hands the payout to a rail: from `created`, from `pendi
   <ErrorRow status={422} code="cannot_be_processed">The payout cannot be processed. The response gives no reason. Contact support with the `request_id`.</ErrorRow>
   <ErrorRow status={422} code="policy_blocked">Your own approval policy blocks the payout. Review the rule on your account.</ErrorRow>
   <ErrorRow status={422} code="quote_expired">The quote passed its five minutes. Request a new one.</ErrorRow>
-  <ErrorRow status={422} code="quote_mismatch">The request does not match its quote. Send the quote's currencies and amount.</ErrorRow>
+  <ErrorRow status={422} code="quote_mismatch">The request differs from its quote in currencies, amounts, method, rail type or payee country. The error message names the field.</ErrorRow>
   <ErrorRow status={409} code="quote_already_used">A quote binds to one payout. Request a new one.</ErrorRow>
   <ErrorRow status={409} code="payout_on_hold">You tried to cancel a held payout. Wait until the hold ends.</ErrorRow>
   <ErrorRow status={409} code="payout_not_cancellable">The payout is already with a rail, or finished. It can no longer be cancelled.</ErrorRow>

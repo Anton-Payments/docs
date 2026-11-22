@@ -42,7 +42,7 @@ Give the currencies and the `source_amount`; it is the one amount a pricing quot
 
 ## Spend the quote
 
-Create the payout with the quote's `id` as `quote_id`, and the same currencies and amounts.
+Create the payout with the quote's `id` as `quote_id`. Send the quote's currencies and amounts, and the method, rail type and payee country it was priced for.
 
 ```json Payout request body
 {
@@ -76,7 +76,7 @@ The payout carries the figures you settle against: `exchange_rate`, `fee`, `tota
 
 <Errors>
   <ErrorRow status={422} code="quote_expired">The quote passed its five minutes. Request a new one and send the payout straight away.</ErrorRow>
-  <ErrorRow status={422} code="quote_mismatch">The payout doesn't match the quote. Send the currencies and amounts you quoted.</ErrorRow>
+  <ErrorRow status={422} code="quote_mismatch">The payout differs from the quote in its currencies, amounts, method, rail type or payee country. The error message names the field. Send what you quoted, or request a new quote.</ErrorRow>
   <ErrorRow status={409} code="quote_already_used">The quote is already bound to a payout. Request a new one.</ErrorRow>
   <ErrorRow status={404} code="resource_missing">`quote_id` names no quote of yours.</ErrorRow>
   <ErrorRow status={422} code="amount_precision_invalid">An amount has more decimal places than its currency allows.</ErrorRow>

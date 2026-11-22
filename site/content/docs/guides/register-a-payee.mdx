@@ -99,6 +99,8 @@ The two update paths do different things.
   Machine credentials can write personal details but cannot read them back. `GET /v1/beneficiaries/{id}/pii` answers `403` to an API credential. It works only for signed-in admin users of the merchant dashboard, and each read is audited. Keep your own copy of what you submit.
 </Warning>
 
+A payout already approved for a payee that is then blocked or archived is refused before it reaches the rail. It ends `failed` with `cannot_be_processed`, and the funds return to your balance.
+
 To stop paying someone, [archive](/reference/beneficiaries/archive-beneficiary) the payee. Archive keeps the record and the history, and you can restore it. [Delete](/reference/beneficiaries/delete-beneficiary) is for a payee you will never use again.
 
 ## When it goes wrong

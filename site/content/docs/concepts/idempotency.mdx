@@ -52,7 +52,7 @@ Each operation's reference page says whether it requires a key.
 | Same key to retry | Reuse the key when retrying the same operation. |
 | Length | Up to 255 characters. |
 | Retention | Keys are retained for 24 hours. |
-| What is stored | Only a `2xx` response. A `4xx` or `5xx` is not stored, so a retry with the same key runs the request again. |
+| What is stored | Only a `2xx` response. A `4xx` or `5xx` is not stored, so a retry with the same key runs the request again. `POST /v1/payouts` is the exception below. |
 
 ## What happens
 
@@ -66,6 +66,10 @@ Each operation's reference page says whether it requires a key.
 | The idempotency check is temporarily unavailable | `503 idempotency_unavailable`. Retry with the same key. |
 
 A `5xx` is safe to retry with the same key.
+
+## Payouts keep the key
+
+`POST /v1/payouts` also checks the key against the payout it created, with no time limit. The same request returns the original result: `201` with the same payout and no second `payout.created` event, or the same `422 cannot_be_processed` for a payout refused at create. A different request with the same key is `422 idempotency_key_reused` at any age.
 
 A replay is its own request: its `Request-Id` header is new, while the body keeps the original request's identifiers, including `error.request_id` on a replayed error.
 

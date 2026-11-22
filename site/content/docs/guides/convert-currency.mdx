@@ -60,6 +60,8 @@ To skip the quote, send `source_currency`, `destination_currency` and `destinati
 
 The exchange has its own ID, starting `fxx_`, and a `status` of `completed`, `pending` or `failed`. It carries the `quote_id`, both amounts and the rate you got. Fetch it with `GET /v1/fx/exchanges/{id}`, or list your exchanges with `GET /v1/fx/exchanges`, filtered by `status` or by a currency on either side.
 
+Money moves only when the exchange completes. While it is `pending`, the sell amount stays reserved on your balance. A failed exchange returns the reserved amount.
+
 ## Wait for the event
 
 The outcome reaches you as an event, so you needn't poll. `fx.exchange.created`, `fx.exchange.completed` and `fx.exchange.failed` carry the exchange object, and `fx.quote.created` carries the quote. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers subscribing and verifying them.
