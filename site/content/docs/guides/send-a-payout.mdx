@@ -65,12 +65,12 @@ Anton owns the payout until the rail has it. From `sent` on, the bank or the cha
 <Lifecycle states="processing, sent, completed"
   notes="Checked, then submitted | Rail confirmed dispatch | Payee received funds"
   edges="Rail dispatches | Rail settles">
-  Statuses that can branch off this path: `pending_approval` (a second person on your team must approve), `on_hold`, `failed`, `returned` and `cancelled`. `completed`, `returned`, `cancelled` and `failed` are final. A payout that reads `created` is in progress too.
+  Statuses that can branch off this path: `pending_approval` (a second person on your team must approve), `on_hold`, `failed`, `returned` and `cancelled`. `returned`, `cancelled` and `failed` are final, and `completed` can still become `returned`. A payout that reads `created` is in progress too.
 </Lifecycle>
 
 `on_hold` is a review, and it never comes with a reason. Show your user a pending state, not an error. It resumes as `processing` or ends as `cancelled` or `failed`, and nobody can cancel it while it waits.
 
-`returned` means the money left and came back; your user was not paid, and the whole amount, fee included, returns to your balance. `failed` carries a `failure_code`: `cannot_be_processed`, `provider_rejected`, `provider_unavailable`, `insufficient_funds` or `beneficiary_not_found`. Read an unknown code as a plain failure and an unknown status as still moving, and new values will never break you.
+`returned` means the money left and came back; your user was not paid, and the source amount returns to your balance. The fee is kept. `failed` carries a `failure_code`: `cannot_be_processed`, `provider_rejected`, `provider_unavailable`, `insufficient_funds` or `beneficiary_not_found`. Read an unknown code as a plain failure and an unknown status as still moving, and new values will never break you.
 
 The events worth a handler: `payout.completed`, `payout.failed`, `payout.returned`, `payout.on_hold`, `payout.approval_required` and `payout.cancelled`. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers receiving them.
 
