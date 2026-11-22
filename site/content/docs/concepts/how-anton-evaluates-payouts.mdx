@@ -28,11 +28,12 @@ You cannot disable the checks, override them at submission or skip them with a f
 | --- | --- |
 | `created` | `pending_approval`, `processing`, `on_hold` |
 | `pending_approval` | `processing`, `cancelled` |
-| `processing` | `on_hold`, `sent`, `failed`, `cancelled` |
+| `processing` | `on_hold`, `sent`, `failed`, `returned`, `cancelled` |
 | `on_hold` | `processing`, `cancelled`, `failed` |
 | `sent` | `completed`, `failed`, `returned` |
+| `completed` | `returned` |
 
-`completed`, `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
+`returned`, `cancelled` and `failed` are final. `completed` is final except that a bank can still return the payout after settlement. Treat a status you do not know as in progress.
 
 ## What each status means
 
