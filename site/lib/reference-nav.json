@@ -1,0 +1,668 @@
+[
+  {
+    "title": "Authentication",
+    "folder": "authentication",
+    "ops": [
+      {
+        "slug": "create-access-token",
+        "title": "Mint a DPoP-bound access token",
+        "method": "post",
+        "path": "/oauth/token"
+      },
+      {
+        "slug": "get-jwks",
+        "title": "Public OAuth signing key set",
+        "method": "get",
+        "path": "/.well-known/jwks.json"
+      }
+    ]
+  },
+  {
+    "title": "Reference Data",
+    "folder": "reference-data",
+    "ops": [
+      {
+        "slug": "list-currencies",
+        "title": "List Currencies",
+        "method": "get",
+        "path": "/v1/currencies"
+      },
+      {
+        "slug": "list-countries",
+        "title": "List Countries",
+        "method": "get",
+        "path": "/v1/countries"
+      },
+      {
+        "slug": "list-payment-methods",
+        "title": "List Payment Methods",
+        "method": "get",
+        "path": "/v1/payment-methods"
+      }
+    ]
+  },
+  {
+    "title": "Beneficiaries",
+    "folder": "beneficiaries",
+    "ops": [
+      {
+        "slug": "create-beneficiary",
+        "title": "Create a Beneficiary",
+        "method": "post",
+        "path": "/v1/beneficiaries"
+      },
+      {
+        "slug": "list-beneficiaries",
+        "title": "List Beneficiaries",
+        "method": "get",
+        "path": "/v1/beneficiaries"
+      },
+      {
+        "slug": "get-beneficiary",
+        "title": "Retrieve a Beneficiary",
+        "method": "get",
+        "path": "/v1/beneficiaries/{id}"
+      },
+      {
+        "slug": "update-beneficiary",
+        "title": "Update a beneficiary",
+        "method": "patch",
+        "path": "/v1/beneficiaries/{id}"
+      },
+      {
+        "slug": "delete-beneficiary",
+        "title": "Delete a Beneficiary",
+        "method": "delete",
+        "path": "/v1/beneficiaries/{id}"
+      },
+      {
+        "slug": "update-beneficiary-pii",
+        "title": "",
+        "method": "patch",
+        "path": "/v1/beneficiaries/{id}/pii"
+      },
+      {
+        "slug": "archive-beneficiary",
+        "title": "Archive a Beneficiary",
+        "method": "post",
+        "path": "/v1/beneficiaries/{id}/archive"
+      },
+      {
+        "slug": "restore-beneficiary",
+        "title": "Restore a Beneficiary",
+        "method": "post",
+        "path": "/v1/beneficiaries/{id}/restore"
+      },
+      {
+        "slug": "rescreen-beneficiary",
+        "title": "Re-screen a Beneficiary",
+        "method": "post",
+        "path": "/v1/beneficiaries/{id}/rescreen"
+      },
+      {
+        "slug": "download-beneficiary-import-template",
+        "title": "Download the Beneficiary Import Template",
+        "method": "get",
+        "path": "/v1/beneficiaries/import/template"
+      },
+      {
+        "slug": "import-beneficiaries",
+        "title": "Preview a Bulk Beneficiary Import",
+        "method": "post",
+        "path": "/v1/beneficiaries/import"
+      },
+      {
+        "slug": "confirm-beneficiary-import",
+        "title": "Confirm a Beneficiary Import",
+        "method": "post",
+        "path": "/v1/beneficiaries/import/{importID}/confirm"
+      },
+      {
+        "slug": "get-beneficiary-pii",
+        "title": "",
+        "method": "get",
+        "path": "/v1/beneficiaries/{id}/pii"
+      }
+    ]
+  },
+  {
+    "title": "Instruments",
+    "folder": "instruments",
+    "ops": [
+      {
+        "slug": "create-instrument",
+        "title": "Create an instrument",
+        "method": "post",
+        "path": "/v1/instruments"
+      },
+      {
+        "slug": "list-instruments",
+        "title": "List Instruments",
+        "method": "get",
+        "path": "/v1/instruments"
+      },
+      {
+        "slug": "list-instrument-countries",
+        "title": "List Countries Available for Instruments",
+        "method": "get",
+        "path": "/v1/instruments/countries"
+      },
+      {
+        "slug": "list-instrument-methods",
+        "title": "List Payment-Method Schemas",
+        "method": "get",
+        "path": "/v1/instruments/methods"
+      },
+      {
+        "slug": "get-instrument",
+        "title": "Retrieve an Instrument",
+        "method": "get",
+        "path": "/v1/instruments/{id}"
+      },
+      {
+        "slug": "update-instrument",
+        "title": "Update an instrument",
+        "method": "patch",
+        "path": "/v1/instruments/{id}"
+      },
+      {
+        "slug": "delete-instrument",
+        "title": "Delete an Instrument",
+        "method": "delete",
+        "path": "/v1/instruments/{id}"
+      }
+    ]
+  },
+  {
+    "title": "Intelligence",
+    "folder": "intelligence",
+    "ops": [
+      {
+        "slug": "create-evaluation",
+        "title": "Create an Intelligence Evaluation",
+        "method": "post",
+        "path": "/v1/intelligence/evaluations"
+      },
+      {
+        "slug": "validate-evaluation",
+        "title": "Validate an Intelligence Evaluation",
+        "method": "post",
+        "path": "/v1/intelligence/evaluations/validate"
+      },
+      {
+        "slug": "list-evaluations",
+        "title": "List Intelligence Evaluations",
+        "method": "get",
+        "path": "/v1/intelligence/evaluations"
+      },
+      {
+        "slug": "get-evaluation",
+        "title": "Get an Intelligence Evaluation",
+        "method": "get",
+        "path": "/v1/intelligence/evaluations/{id}"
+      }
+    ]
+  },
+  {
+    "title": "Reviews",
+    "folder": "reviews",
+    "ops": [
+      {
+        "slug": "list-reviews",
+        "title": "List Reviews",
+        "method": "get",
+        "path": "/v1/intelligence/reviews"
+      },
+      {
+        "slug": "get-review",
+        "title": "Get a Review",
+        "method": "get",
+        "path": "/v1/intelligence/reviews/{id}"
+      },
+      {
+        "slug": "get-review-settings",
+        "title": "Get Review Settings",
+        "method": "get",
+        "path": "/v1/intelligence/reviews/settings"
+      },
+      {
+        "slug": "record-decision",
+        "title": "Record a Decision",
+        "method": "post",
+        "path": "/v1/intelligence/reviews/{id}/decisions"
+      },
+      {
+        "slug": "resume-review",
+        "title": "Resume a Review",
+        "method": "post",
+        "path": "/v1/intelligence/reviews/{id}/resume"
+      },
+      {
+        "slug": "add-note",
+        "title": "Add a Note",
+        "method": "post",
+        "path": "/v1/intelligence/reviews/{id}/notes"
+      },
+      {
+        "slug": "export-reviews-csv",
+        "title": "Export reviews as CSV",
+        "method": "get",
+        "path": "/v1/intelligence/reviews/export"
+      },
+      {
+        "slug": "export-case-file",
+        "title": "Export a case file (PDF)",
+        "method": "get",
+        "path": "/v1/intelligence/reviews/{id}/case-file"
+      }
+    ]
+  },
+  {
+    "title": "Verifications",
+    "folder": "verifications",
+    "ops": [
+      {
+        "slug": "create-verification-subject",
+        "title": "Create a Verification Subject",
+        "method": "post",
+        "path": "/v1/verification-subjects"
+      },
+      {
+        "slug": "list-verification-subjects",
+        "title": "List Verification Subjects",
+        "method": "get",
+        "path": "/v1/verification-subjects"
+      },
+      {
+        "slug": "get-verification-subject",
+        "title": "Get a Verification Subject",
+        "method": "get",
+        "path": "/v1/verification-subjects/{id}"
+      },
+      {
+        "slug": "reverify-subject",
+        "title": "Re-verify a Subject",
+        "method": "post",
+        "path": "/v1/verification-subjects/{id}/verifications"
+      },
+      {
+        "slug": "resend-verification-link",
+        "title": "Resend a Verification Link",
+        "method": "post",
+        "path": "/v1/verifications/{id}/resend"
+      },
+      {
+        "slug": "regenerate-verification",
+        "title": "Regenerate a Verification",
+        "method": "post",
+        "path": "/v1/verifications/{id}/regenerate"
+      },
+      {
+        "slug": "revoke-verification",
+        "title": "Revoke a Verification",
+        "method": "post",
+        "path": "/v1/verifications/{id}/revoke"
+      },
+      {
+        "slug": "resend-owner-link",
+        "title": "",
+        "method": "post",
+        "path": "/v1/verifications/{id}/owners/resend"
+      },
+      {
+        "slug": "get-verification-stats",
+        "title": "Verification Stats",
+        "method": "get",
+        "path": "/v1/verification-stats"
+      },
+      {
+        "slug": "rescreen-verification",
+        "title": "Re-screen a verification",
+        "method": "post",
+        "path": "/v1/verifications/{id}/rescreen"
+      }
+    ]
+  },
+  {
+    "title": "Payouts",
+    "folder": "payouts",
+    "ops": [
+      {
+        "slug": "create-payout",
+        "title": "Create a Payout",
+        "method": "post",
+        "path": "/v1/payouts"
+      },
+      {
+        "slug": "list-payouts",
+        "title": "List Payouts",
+        "method": "get",
+        "path": "/v1/payouts"
+      },
+      {
+        "slug": "get-payout",
+        "title": "Retrieve a Payout",
+        "method": "get",
+        "path": "/v1/payouts/{id}"
+      },
+      {
+        "slug": "list-payout-events",
+        "title": "List Payout Lifecycle Events",
+        "method": "get",
+        "path": "/v1/payouts/{id}/events"
+      },
+      {
+        "slug": "cancel-payout",
+        "title": "Cancel a Payout",
+        "method": "post",
+        "path": "/v1/payouts/{id}/cancel"
+      },
+      {
+        "slug": "cancel-payouts",
+        "title": "Cancel several payouts",
+        "method": "post",
+        "path": "/v1/payouts/cancel"
+      }
+    ]
+  },
+  {
+    "title": "Batches",
+    "folder": "batches",
+    "ops": [
+      {
+        "slug": "download-batch-template",
+        "title": "Download the Batch Template",
+        "method": "get",
+        "path": "/v1/batches/template"
+      },
+      {
+        "slug": "upload-batch",
+        "title": "Upload a Batch",
+        "method": "post",
+        "path": "/v1/batches"
+      },
+      {
+        "slug": "list-batches",
+        "title": "List Batches",
+        "method": "get",
+        "path": "/v1/batches"
+      },
+      {
+        "slug": "get-batch",
+        "title": "Retrieve a Batch",
+        "method": "get",
+        "path": "/v1/batches/{id}"
+      },
+      {
+        "slug": "confirm-batch",
+        "title": "Confirm a Validated Batch",
+        "method": "post",
+        "path": "/v1/batches/{id}/confirm"
+      },
+      {
+        "slug": "cancel-batch",
+        "title": "Cancel a Batch",
+        "method": "post",
+        "path": "/v1/batches/{id}/cancel"
+      },
+      {
+        "slug": "list-batch-payouts",
+        "title": "List Payouts Created from a Batch",
+        "method": "get",
+        "path": "/v1/batches/{id}/payouts"
+      },
+      {
+        "slug": "list-batch-beneficiaries",
+        "title": "List Batch Beneficiaries",
+        "method": "get",
+        "path": "/v1/batches/{id}/beneficiaries"
+      },
+      {
+        "slug": "list-batch-errors",
+        "title": "List Batch Validation Errors",
+        "method": "get",
+        "path": "/v1/batches/{id}/errors"
+      },
+      {
+        "slug": "list-batch-results",
+        "title": "List Per-Row Processing Results",
+        "method": "get",
+        "path": "/v1/batches/{id}/results"
+      }
+    ]
+  },
+  {
+    "title": "Balances",
+    "folder": "balances",
+    "ops": [
+      {
+        "slug": "list-balances",
+        "title": "List Balances",
+        "method": "get",
+        "path": "/v1/balances"
+      },
+      {
+        "slug": "get-balance",
+        "title": "Retrieve a Balance",
+        "method": "get",
+        "path": "/v1/balances/{currency}"
+      }
+    ]
+  },
+  {
+    "title": "Accounts",
+    "folder": "accounts",
+    "ops": [
+      {
+        "slug": "list-accounts",
+        "title": "List Funding Accounts",
+        "method": "get",
+        "path": "/v1/accounts"
+      },
+      {
+        "slug": "get-account",
+        "title": "Retrieve a Funding Account",
+        "method": "get",
+        "path": "/v1/accounts/{currency}"
+      },
+      {
+        "slug": "get-account-details",
+        "title": "Retrieve Deposit Details",
+        "method": "get",
+        "path": "/v1/accounts/{currency}/details"
+      },
+      {
+        "slug": "list-transactions",
+        "title": "List All Transactions",
+        "method": "get",
+        "path": "/v1/transactions"
+      },
+      {
+        "slug": "export-transactions",
+        "title": "Export transactions",
+        "method": "get",
+        "path": "/v1/transactions/export"
+      },
+      {
+        "slug": "get-transaction",
+        "title": "Retrieve a transaction",
+        "method": "get",
+        "path": "/v1/transactions/{id}"
+      }
+    ]
+  },
+  {
+    "title": "Webhooks",
+    "folder": "webhooks",
+    "ops": [
+      {
+        "slug": "create-webhook-subscription",
+        "title": "Create a Webhook Subscription",
+        "method": "post",
+        "path": "/v1/webhooks"
+      },
+      {
+        "slug": "list-webhook-subscriptions",
+        "title": "List Webhook Subscriptions",
+        "method": "get",
+        "path": "/v1/webhooks"
+      },
+      {
+        "slug": "get-webhook-subscription",
+        "title": "Retrieve a Webhook Subscription",
+        "method": "get",
+        "path": "/v1/webhooks/{id}"
+      },
+      {
+        "slug": "update-webhook-subscription",
+        "title": "Update a Webhook Subscription",
+        "method": "patch",
+        "path": "/v1/webhooks/{id}"
+      },
+      {
+        "slug": "delete-webhook-subscription",
+        "title": "Delete a Webhook Subscription",
+        "method": "delete",
+        "path": "/v1/webhooks/{id}"
+      },
+      {
+        "slug": "rotate-webhook-secret",
+        "title": "Rotate the Signing Secret",
+        "method": "post",
+        "path": "/v1/webhooks/{id}/secret/rotate"
+      },
+      {
+        "slug": "test-webhook-subscription",
+        "title": "Send a Test Delivery",
+        "method": "post",
+        "path": "/v1/webhooks/{id}/test"
+      },
+      {
+        "slug": "deactivate-webhook-subscription",
+        "title": "Deactivate a Subscription",
+        "method": "post",
+        "path": "/v1/webhooks/{id}/deactivate"
+      },
+      {
+        "slug": "list-webhook-events",
+        "title": "List Webhook Events",
+        "method": "get",
+        "path": "/v1/webhooks/events"
+      },
+      {
+        "slug": "get-webhook-event",
+        "title": "Retrieve a Webhook Event",
+        "method": "get",
+        "path": "/v1/webhooks/events/{id}"
+      },
+      {
+        "slug": "list-webhook-deliveries",
+        "title": "List Deliveries for an Event",
+        "method": "get",
+        "path": "/v1/webhooks/events/{id}/deliveries"
+      },
+      {
+        "slug": "activate-webhook-subscription",
+        "title": "Activate a webhook subscription",
+        "method": "post",
+        "path": "/v1/webhooks/{id}/activate"
+      },
+      {
+        "slug": "get-webhook-delivery-summary",
+        "title": "Summarise webhook deliveries",
+        "method": "get",
+        "path": "/v1/webhooks/summary"
+      },
+      {
+        "slug": "list-webhook-event-types",
+        "title": "List webhook event types",
+        "method": "get",
+        "path": "/v1/webhooks/event-types"
+      },
+      {
+        "slug": "list-webhook-subscription-deliveries",
+        "title": "",
+        "method": "get",
+        "path": "/v1/webhooks/{id}/deliveries"
+      }
+    ]
+  },
+  {
+    "title": "Pricing",
+    "folder": "pricing",
+    "ops": [
+      {
+        "slug": "list-merchant-pricing",
+        "title": "List Merchant Pricing Plans",
+        "method": "get",
+        "path": "/v1/pricing"
+      },
+      {
+        "slug": "create-pricing-quote",
+        "title": "Quote a Fee",
+        "method": "post",
+        "path": "/v1/pricing/quotes"
+      }
+    ]
+  },
+  {
+    "title": "FX",
+    "folder": "fx",
+    "ops": [
+      {
+        "slug": "create-fx-quote",
+        "title": "Create a Lockable FX Quote",
+        "method": "post",
+        "path": "/v1/fx/quotes"
+      },
+      {
+        "slug": "list-indicative-fx-rates",
+        "title": "List Indicative Rates",
+        "method": "get",
+        "path": "/v1/fx/rates"
+      },
+      {
+        "slug": "create-fx-exchange",
+        "title": "Execute an FX exchange",
+        "method": "post",
+        "path": "/v1/fx/exchanges"
+      },
+      {
+        "slug": "list-fx-exchanges",
+        "title": "List FX Exchanges",
+        "method": "get",
+        "path": "/v1/fx/exchanges"
+      },
+      {
+        "slug": "get-fx-exchange",
+        "title": "Retrieve an FX exchange",
+        "method": "get",
+        "path": "/v1/fx/exchanges/{id}"
+      }
+    ]
+  },
+  {
+    "title": "Corridors",
+    "folder": "corridors",
+    "ops": [
+      {
+        "slug": "list-corridors",
+        "title": "List Active Corridors",
+        "method": "get",
+        "path": "/v1/corridors"
+      }
+    ]
+  },
+  {
+    "title": "Sandbox",
+    "folder": "sandbox",
+    "ops": [
+      {
+        "slug": "create-sandbox-deposit",
+        "title": "Fund a sandbox balance",
+        "method": "post",
+        "path": "/v1/sandbox/deposits"
+      }
+    ]
+  }
+]

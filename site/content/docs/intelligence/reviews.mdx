@@ -1,0 +1,75 @@
+---
+title: "Work the review queue"
+description: "A review shows a masked subject and your own reference for it. Names, dates of birth and note text never come back through the API."
+kind: guide
+---
+
+Reviews are your team's own compliance reviews: screenings of yours that need a person, ones opened by monitoring or list screening, and ones your team opens by hand. The portal is where your team works them. The Reviews API lets your own case system read the same queue, and webhooks keep it in step.
+
+<Note>
+  The Reviews API and its webhooks need the **Reviews API and Webhooks** add-on. Without it an endpoint answers `403 module_not_enabled`. Every endpoint also needs a credential with the `intelligence` scope. Anton's own screening of your payouts never appears in a review.
+</Note>
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key, with the `intelligence` scope", "The Reviews API and Webhooks add-on on the account"]} />
+
+## List the queue
+
+[`GET /v1/intelligence/reviews`](/reference/reviews/list-reviews) returns your reviews, newest first. Filter with `status`, which is `open`, `waiting_on_customer`, `awaiting_approval` or `closed`, and with `kind`. Page with `limit` and `cursor`; `next_cursor` is `null` on the last page. An unknown `status`, `kind` or parameter is a `400`, never an empty list.
+
+<RunStep title="List open reviews" method="GET" path="/v1/intelligence/reviews"
+  query={{ status: "open", limit: "25" }}>
+  Each row is a `review` with its `number`, `kind`, `priority` and `due_at`.
+</RunStep>
+
+`kind` is one of `possible_sanctions_match`, `possible_pep_match`, `screening_review`, `manual`, `payout_held_by_rule` or `payee_risk_by_rule`. The last two are opened by your own payout rules, and their money decision is made on the linked approval in the portal, not through this API.
+
+`source` says where it came from: `evaluation`, `manual`, `monitoring`, `list_screening` or `payout_rule`. For an `evaluation`, `evaluation_id` is the evaluation of yours that opened it.
+
+## Read the subject
+
+`subject.display` is masked to the first letter of each word, like `A*** L***`. `subject.reference` is your own reference for the subject, such as `cust_7731`, or `null` when you gave none. The API returns no name, date of birth or contact details at any point, so match on `reference`.
+
+[`GET /v1/intelligence/reviews/{id}`](/reference/reviews/get-review) adds `matched_entries`, `decisions`, `notes` and `events`. Notes come back as presence only: who wrote one and when, never its text. Your team reads note text in the portal. A review that belongs to another account is a `404`.
+
+## Deadlines
+
+`due_at` is the time a decision is due, and `overdue` is `true` once it has passed without one. `priority` is `high`, `medium` or `low`. `paused_at` is set while the review is `waiting_on_customer`, and the due time stops running until you [resume it](/intelligence/record-a-decision#wait-on-your-customer). `due_at` can be `null`.
+
+`closed_at` and `outcome` are `null` while a review is open. Your team's business hours and per-priority targets are in [`GET /v1/intelligence/reviews/settings`](/reference/reviews/get-review-settings), read only.
+
+## Events
+
+Subscribe to `intelligence.review.*` with [`POST /v1/webhooks`](/reference/webhooks/create-webhook-subscription) instead of polling.
+
+| Event | When |
+|---|---|
+| `intelligence.review.opened` | A review opened in your queue. |
+| `intelligence.review.decision_proposed` | A decision is waiting for a second approver. |
+| `intelligence.review.decided` | A decision took effect, including waiting on your customer. |
+| `intelligence.review.reopened` | A decision was sent back or withdrawn, or your customer responded. |
+| `intelligence.review.closed` | A review closed, with its outcome. |
+| `intelligence.review.overdue` | A review passed its due time without a decision. |
+| `intelligence.review.note_added` | A note was added. The note is never sent. |
+
+Every event carries ids, codes and your own `reference`. It has no name, not even the masked one, and no date of birth, contact details, note text or person on your team. Fetch the review for more. `reopened` carries a `reason`: `sent_back`, `withdrawn` or `customer_responded`. [Webhook Events](/concepts/webhook-events#intelligence-reviews) has the payloads.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={403} code="module_not_enabled">The account lacks the Reviews API and Webhooks add-on.</ErrorRow>
+  <ErrorRow status={403} code="insufficient_scope">The credential was created without the `intelligence` scope. A missing account capability is `capability_required`.</ErrorRow>
+  <ErrorRow status={400} code="invalid_request">An unknown `status` or `kind`, or a timestamp that is not RFC 3339 UTC with milliseconds and a `Z`.</ErrorRow>
+  <ErrorRow status={400} code="unknown_parameter">The query has a parameter the endpoint does not take.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">The review does not exist, or belongs to another account.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Record and approve a decision" href="/intelligence/record-a-decision">
+    Close a review from your own system.
+  </Card>
+  <Card title="Export case files and evidence" href="/intelligence/export-case-files">
+    A review exported as a PDF case file; notes only come with the portal export.
+  </Card>
+</CardGroup>

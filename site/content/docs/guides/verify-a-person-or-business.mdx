@@ -1,0 +1,121 @@
+---
+title: Verify a person or business
+description: Anton hosts the check and you never touch the documents. You get the link once, and every read after that comes back masked.
+kind: guide
+---
+
+A verification subject is a person or business you want checked, and its ID starts with `vsub_`. Creating one opens its first verification, `vrf_`, with a hosted link your customer completes. Anton then screens the result, and you read the outcome from the subject or from webhooks.
+
+Verifications need the `intelligence` capability and a credential carrying the `intelligence` scope. Without it a call is `403`, with `insufficient_scope` or `capability_required`.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key, with the intelligence scope", "The subject's legal name, and an email if Anton is to send the link", "Your own ID for the subject, sent as external_ref"]} />
+
+## Choose who delivers the link
+
+`delivery` decides who gets the hosted link to your customer. Only `sent` proves an email went out. If the status comes back `created`, you hold the link and nobody has received it.
+
+<Decision>
+  <Choice title="Anton emails it" value='delivery: "email"' fields="email, message" set={{ delivery: "email" }} picked>
+    The link goes to `email`. `message` is shown in that email, attributed to your business.
+  </Choice>
+  <Choice title="You deliver it" value='delivery: "manual"' fields="hosted_link" set={{ delivery: "manual" }}>
+    The default when `delivery` is left out. The response carries the link and you send it through your own channel. Without an email on file, this is the only outcome.
+  </Choice>
+</Decision>
+
+## Create the subject
+
+`type` is `person` or `business`. A person completes an ID and selfie flow. A business completes its details, then a flow for each controlling owner. Only `type` and `display_name` are required.
+
+<RunStep title="Create the subject" method="POST" path="/v1/verification-subjects"
+  headers={{ "Idempotency-Key": "verify-customer-8841" }}
+  body={{
+    type: "person",
+    display_name: "Ada Lovelace",
+    email: "ada@example.com",
+    external_ref: "customer_8841",
+    country: "CA",
+    delivery: "email",
+    message: "Please verify your identity so we can activate your account.",
+    link_expires_in_days: 7,
+    metadata: { crm_id: "42" }
+  }}>
+  The subject comes back with its first verification in `verifications` and the one-time `hosted_link`.
+</RunStep>
+
+`display_name` is the legal name. It goes into the vault and comes back masked on every read. `country` is optional and worth sending, since it helps screening tell people apart. `external_ref` is your own ID, echoed back. Search matches it, or the subject ID, and never a name.
+
+`link_expires_in_days` is `7`, `14` or `30`, and defaults to `7`. `message` is up to 500 characters, used for that one send and never stored, so it cannot be read back. `metadata` is your own string map and comes back on every read.
+
+`hosted_link` opens a flow that collects identity documents, so treat it like a credential. It appears on the response that minted it and on no read afterwards. Replay the same request with the same `Idempotency-Key` and the link is `null`; ask for a new one with resend or regenerate.
+
+## What happens next
+
+`status` on the subject is the status of its current verification.
+
+<Lifecycle states="created, sent, in_progress, processing, approved"
+  notes="Link minted | Emailed by Anton | Subject opened it | Checks running | Verified"
+  edges="Anton emails | Subject opens | Subject submits | Checks pass">
+  Branches: `awaiting_owners` for a business whose owner flows are outstanding, `review`, `declined`, `expired` and `revoked`. `approved`, `declined`, `expired` and `revoked` are final.
+</Lifecycle>
+
+A business cannot reach `approved` until every controlling owner has. Each owner in `owners` has its own `status`, a masked name and email, and an `ownership_percentage`.
+
+Subscribe to the `verification.link_sent`, `verification.started`, `verification.approved`, `verification.declined`, `verification.review` and `verification.expired` events, or read the subject with [`GET /v1/verification-subjects/{id}`](/reference/verifications/get-verification-subject). The read returns every verification the subject has had, newest first. List rows leave `verifications` out. Webhooks are covered in [Track payouts with webhooks](/guides/track-payouts-with-webhooks).
+
+Every completed verification is screened, and the result is in its `screening` block with `status`, `score`, `tier`, `reasons` and an `evaluation_id`. The block is `null` until the screening has run. A result that needs a person to look at it has `status` `review`, and the verification is flagged for manual review. The concepts page has the [screening detail](/concepts/verifications).
+
+## When a link goes wrong
+
+Three calls cover it, and what you pick depends on what happened to the link. Each requires an `Idempotency-Key`.
+
+| Situation | Call | Result |
+| --- | --- | --- |
+| The link expired unused, or never arrived | `POST /v1/verifications/{id}/resend` | A fresh link for the same verification, re-delivered to the email on file. |
+| The link may have been forwarded or exposed | `POST /v1/verifications/{id}/regenerate` | The old link and inquiry die at once. A new verification opens with `reason` `regenerated`. |
+| You no longer want it to happen | `POST /v1/verifications/{id}/revoke` | The verification becomes `revoked` and its link expires. |
+
+Resend is refused with `invalid_verification_state` on a verification that is already `approved`, `declined`, `expired` or `revoked`; open a new one instead. Revoke is refused the same way on `approved`, `declined` and `expired`, and revoking one that is already revoked returns it unchanged.
+
+<RunStep title="Resend the link" method="POST" path="/v1/verifications/{id}/resend"
+  pathParams={{ id: "vrf_01JD3XB7Q3" }}
+  headers={{ "Idempotency-Key": "resend-vrf-01JD3XB7Q3-1" }}>
+  A new `hosted_link` and a new `link_expires_at`. The previous link is not usable.
+</RunStep>
+
+For a business, the link that went astray may be an owner's. [`POST /v1/verifications/{id}/owners/resend`](/reference/verifications/resend-owner-link) mints a fresh link for one owner. Name the owner by exactly one of `owner_id` or `email`. An `email` must belong to an owner of that verification, or the call is `404`. With `email` you can also send `deliver: false`, and the link comes back in the response instead of in an inbox. `owner_id` always emails the address on file.
+
+## Verify again
+
+A subject can be verified again, for a periodic refresh or because their details changed. [`POST /v1/verification-subjects/{id}/verifications`](/reference/verifications/reverify-subject) opens a new verification with `reason` `reverification` and keeps the history. It takes an optional `metadata` map, which is stored on the new verification, and returns the new `hosted_link`. If the subject has an email on file, Anton emails it.
+
+Rescreening is a different job. [`POST /v1/verifications/{id}/rescreen`](/reference/verifications/rescreen-verification) runs the screening again on the data Anton already holds, for example after a watchlist update. It returns the same verification with a fresh `screening` block and a new `evaluation_id`. The status does not change and nothing is re-collected. It is refused on a verification not yet screened (`created`, `sent`, `in_progress`) or one that is `revoked` or `expired`.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={403} code="insufficient_scope">The credential was created without the `intelligence` scope.</ErrorRow>
+  <ErrorRow status={403} code="capability_required">Your account does not hold the `intelligence` capability.</ErrorRow>
+  <ErrorRow status={422} code="validation_error">A field is invalid. `details` lists every failing field.</ErrorRow>
+  <ErrorRow status={422} code="idempotency_key_reused">The same key came with a different body. Use a new key.</ErrorRow>
+  <ErrorRow status={409} code="invalid_verification_state">The action is not allowed in the verification's current state, such as resending a verification that has finished.</ErrorRow>
+  <ErrorRow status={409} code="idempotency_in_flight">Another request with this key is still running. Wait and send it again.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">No such subject or verification for your account.</ErrorRow>
+</Errors>
+
+## What you will not get back
+
+Owners' names and emails are masked the same way as the subject's. Reading the true name or the captured documents is a dashboard action for admins, and each access is audited. Webhook payloads carry IDs and statuses, not names, links or documents.
+
+<Note>
+  `GET /v1/verification-stats` gives your funnel in one call: totals by outcome, pass rate and median completion minutes. See [Verification overview stats](/reference/verifications/get-verification-stats).
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Identity verification" href="/concepts/verifications">
+    Statuses, screening and what the API never returns.
+  </Card>
+  <Card title="Create a verification subject" href="/reference/verifications/create-verification-subject" />
+</CardGroup>

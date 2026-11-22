@@ -1,0 +1,59 @@
+---
+title: "Screen a payee"
+description: "Screen a person or business before you pay them, or without ever paying them. The verdict comes back in the same response."
+kind: guide
+---
+
+`payee_registration` screens one subject and decides before it answers, so you can gate the signup or the payee record on the result. It does not create a payee in Anton; it only evaluates. To store the payee for payouts, see [Register a payee](/guides/register-a-payee).
+
+<BeforeYouBegin items={["Sandbox credentials with the intelligence scope", "The payee's name, or a vault token that holds it"]} />
+
+## Choose how the details reach Anton
+
+The subject is the `entity`. Either you send the details in the request, or you send a `vault_token_id` and Anton reads them in memory from your vault. One of `name` or `vault_token_id` is required; without either the call is a `422 validation_error`.
+
+<Decision>
+  <Choice title="Send the details" value='entity.name' fields="name, country, birth_date" set={{ entity: { type: "person", reference_id: "payee-john-doe", name: "John Doe", country: "US", birth_date: "1979-12-30" } }} picked>
+    The details travel over TLS and are discarded after the evaluation.
+  </Choice>
+  <Choice title="Send a vault token" value='entity.vault_token_id' fields="vault_token_id" set={{ entity: { type: "person", reference_id: "payee-john-doe", vault_token_id: "vt_01HX8Z9K0M2N3P4Q5R6S7T8UA3" } }}>
+    Anton reads the details from the vault in memory. The token must belong to your account. See [PII and vault tokens](/intelligence/pii-and-vault).
+  </Choice>
+</Decision>
+
+`type` is `person` or `business`. Everything else on the entity narrows the match: `country`, `birth_date`, `address`, `email`, `phone`, `nationality`, and a `document` with a `type` such as `passport` or `business_registration`. Countries are uppercase two-letter codes and dates are `YYYY-MM-DD`; a malformed one is a `422`.
+
+## Send the evaluation
+
+<RunStep title="Screen the payee" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "intel-payee-john-doe-001" }}
+  body={{
+    use_case: "payee_registration",
+    client_reference_id: "payee-john-doe-001",
+    entity: {
+      type: "person",
+      reference_id: "payee-john-doe",
+      name: "John Doe",
+      country: "US",
+      birth_date: "1979-12-30"
+    }
+  }}>
+  The response is `201` with `status: "completed"`, and the verdict in `decision`.
+</RunStep>
+
+`reference_id` ties the subject to your own record, and `client_reference_id` ties this evaluation to your own request. Build the `Idempotency-Key` from the same record, so a retry after a timeout returns the evaluation you already have.
+
+## Act on the decision
+
+`approve` means go on. `decline` means stop; don't create the payee. `review` means a person at your end decides, and `required_actions` may tell you what would settle it: `provide_missing_information` means resubmit with more details, and `verify_identity` points to a [verification](/concepts/verifications).
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Screen an account or wallet" href="/intelligence/instrument-screening">
+    The payee passed. Now check where the money goes.
+  </Card>
+  <Card title="Decisions" href="/intelligence/decisions">
+    Every reason and required action.
+  </Card>
+</CardGroup>

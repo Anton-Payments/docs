@@ -1,0 +1,91 @@
+---
+title: Go live
+description: Sandbox needs no approval and production needs three, so start the one you cannot test first.
+kind: guide
+---
+
+Production is a separate environment with its own base URL, credentials and data. Nothing in your sandbox carries over.
+
+| | Sandbox | Production |
+|---|---|---|
+| Base URL | `https://api.antonpayments.dev` | `https://api.antonpayments.com` |
+| `client_id` | Starts `ant_oc_test_` | Starts `ant_oc_live_` |
+| Access token lifetime | 8 hours | 1 hour |
+| Moves | Simulated payouts | Real funds |
+
+<BeforeYouBegin items={["An integration that passes end to end in sandbox", "A merchant dashboard login that can create credentials", "A real payee you control, for the first payout"]} />
+
+## Start the approval first
+
+A live call does nothing useful until three things are true of your account:
+
+1. Your business is verified.
+2. Anton has underwritten the account and approved it for live operation.
+3. The corridor you want is enabled.
+
+An account that is not active gets `403 merchant_not_active`. Sandbox needs none of this, which is why it gets left to the end. `GET /v1/corridors` lists the corridors Anton pays out through.
+
+## Walk the checklist
+
+<Steps>
+  <Step title="Fund the balance">
+    A live payout draws from your balance, and one it cannot cover is `422 insufficient_balance`. `POST /v1/sandbox/deposits` exists only in sandbox and answers `404` in production.
+  </Step>
+  <Step title="Key every POST">
+    Build each `Idempotency-Key` from your own record, such as an invoice number, so a retry after a timeout returns the payout you already made. `PATCH` and `DELETE` accept a key and do not need one. Keys last 24 hours. See [Idempotency](/concepts/idempotency).
+  </Step>
+  <Step title="Receive events and verify them">
+    Create a subscription against production, verify every delivery and deduplicate on the event `id`. A subscription belongs to one environment, so the sandbox one does not follow you. See [Track payouts with webhooks](/guides/track-payouts-with-webhooks) and [Verify webhook signatures](/guides/verify-webhook-signatures).
+  </Step>
+  <Step title="Allowlist Anton, if you firewall">
+    Production webhooks come from fixed IP addresses, listed in the dashboard. Allow them before your first live event, or the deliveries fail at your edge.
+  </Step>
+  <Step title="Plan the secret rotation">
+    Write down who rotates the signing secret and where it is stored before you need to. [Run webhooks in production](/guides/run-webhooks-in-production) covers the 24-hour overlap and `immediate=true` for a leak.
+  </Step>
+  <Step title="Back off on 429">
+    Wait at least `Retry-After` seconds, with jitter when many requests retry together. Your ceiling is in `X-RateLimit-Limit`. A response without the `X-RateLimit-*` headers means the limit is unknown, not unlimited. See [Rate limits](/concepts/rate-limits).
+  </Step>
+  <Step title="Give every error a behavior">
+    Read `error.code` on each `4xx` and `5xx` and decide whether you retry, escalate, show the user or fail the job. See [Errors](/errors).
+  </Step>
+  <Step title="Treat on_hold as waiting">
+    A held payout is under review, carries no reason and cannot be cancelled. Show your user a pending state. `status_message` is the only text, and an RFI that holds a payout is answered in the dashboard by a person with `rfis.respond` ([Respond to an RFI](/guides/respond-to-an-rfi)).
+  </Step>
+  <Step title="Keep credentials in a secrets manager">
+    Never in source or frontend code. See [Authentication](/authentication).
+  </Step>
+</Steps>
+
+## Switch over
+
+1. Create production credentials in the merchant dashboard. A sandbox client cannot mint tokens against production, and the reverse also fails.
+2. Put the production credentials in your production secrets manager and change the base URL to `https://api.antonpayments.com`.
+3. Create the production webhook subscription and store its secret.
+4. Redeploy.
+5. Send one small payout to a payee you control, and watch it through its events before you raise volume.
+
+<Warning>
+  Cancel works only until Anton hands the payout to a rail: from `created`, `pending_approval`, and early in `processing`. After that a live payout can only finish, so make the first one small.
+</Warning>
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={403} code="key_environment_mismatch">A sandbox credential reached production. Check the `client_id` and the base URL.</ErrorRow>
+  <ErrorRow status={403} code="merchant_not_active">Your account is not active yet. Finish approval in the dashboard.</ErrorRow>
+  <ErrorRow status={403} code="capability_required">Your account lacks the capability this endpoint needs. See [Capabilities](/concepts/capabilities).</ErrorRow>
+  <ErrorRow status={403} code="insufficient_scope">The credential was created without the scope this endpoint needs. Create a new credential with the right scope.</ErrorRow>
+  <ErrorRow status={422} code="insufficient_balance">Fund the account and retry with a new key.</ErrorRow>
+  <ErrorRow status={422} code="cannot_be_processed">Anton could not process the payout and gives no reason. Contact support with the `request_id`.</ErrorRow>
+  <ErrorRow status={429} code="rate_limit_exceeded">Wait `Retry-After` seconds, with jitter.</ErrorRow>
+</Errors>
+
+If something looks wrong, stop creating payouts and contact [help.antonpayments.com](https://help.antonpayments.com) with the `request_id` from the error body or the `Request-Id` response header. [Environments](/environments) and the [Sandbox overview](/sandbox/overview) cover re-testing.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">Create, fund and track a payout from start to finish.</Card>
+  <Card title="Send payouts in bulk" href="/guides/send-payouts-in-bulk">Move many payouts with one file.</Card>
+</CardGroup>

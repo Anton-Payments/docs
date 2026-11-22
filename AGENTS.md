@@ -1,27 +1,32 @@
 # docs: rules for every agent
 
-The published API reference, built with Mintlify (`docs.json`, `.mdx` pages). Not Scalar.
+The public developer docs at docs.antonpayments.com: a Next.js app in `site/` (Fumadocs for the
+MDX pages, our own components for everything else), served from Cloud Run.
 This repo is PUBLIC: write every line as if a stranger will read it, because one will.
 Workspace hard rules are in ../CLAUDE.md and apply here.
 
 ## Done means
 
-1. You previewed the change (`npm run dev`, port 3003) and every changed page renders and every link resolves.
-   CI does not check rendering or links.
-2. `vale .` over the WHOLE tree exits 0 (`npm i -g mdx2vast && vale .`), not just the files you touched.
-3. You changed only what was asked.
-4. You read REVIEW.md and checked every item the diff triggers.
+1. In `site/`: `npm run typecheck`, `npm run build`, then `npm start` and `npm run check:links` all pass.
+2. You looked at every changed page in a browser (`npm run dev`, port 3004), light and dark.
+3. `vale .` from the repo root exits 0 over the WHOLE tree (`npm i -g mdx2vast`), not just your files.
+4. You changed only what was asked.
+5. You read REVIEW.md and checked every item the diff triggers.
 Never make a check pass by changing the check.
 
 ## Where things live
 
 ```
-openapi-merchant.yaml   merchant-facing contract; must match what the API serves
-*.mdx, guides/, api-reference/, sandbox/   pages (nav in docs.json)
-changelog.mdx           merchant-facing changelog
+openapi-merchant.yaml        the merchant contract, synced from the API repo; never hand-edit it
+site/content/docs/           guides, concepts, Intelligence pages, changelog (.mdx)
+site/lib/nav.ts              both sidebars, the core paths and the route stages: file a page once, here
+site/lib/redirects.json      old addresses that must keep working
+site/components/             one component per job; a page never brings its own button or input
 styles/config/vocabularies/AntonDocs/accept.txt   accepted spellcheck terms
-.github/workflows/vale.yml                        whole-tree spellcheck on every PR
 ```
+
+Branches: `develop` deploys to the preview (docs-preview.antonpayments.com, never indexed);
+`main` deploys to docs.antonpayments.com. Promotion is `develop` to `main` by PR.
 
 ## Rules
 
@@ -31,9 +36,10 @@ styles/config/vocabularies/AntonDocs/accept.txt   accepted spellcheck terms
   obviously synthetic.
 - Document only endpoints that are deployed and stable. A published endpoint is a promise.
 - Do not describe a licence or registration the company does not hold. Ask Ryan when unsure.
-- `openapi-merchant.yaml` must match what the API actually serves; the API repo's public spec is the
-  upstream copy. A documented shape that drifts is worse than none.
+- `openapi-merchant.yaml` must match what the API serves. It arrives by PR from the API repo's
+  sync; the `anton-spec-sync` header line proves it was not edited by hand.
 - Decimals are strings. Examples show them quoted.
+- Every caption, card and table cell adds a fact. Never restate the heading or explain the page.
 - A legitimate technical term goes in `accept.txt`; possessives are separate tokens.
 
 ## Ship

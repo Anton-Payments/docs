@@ -1,0 +1,145 @@
+---
+title: "Rate limits"
+description: "Every authenticated response tells you your limit, what is left and when it resets. A 429 tells you how long to wait."
+kind: concept
+---
+
+Two kinds of limit apply. Read the headers on any response to see how close you are to a limit. Back off when you get a `429`.
+
+| Limit | Applies to |
+|---|---|
+| 100 requests a second | Each IP address, across the whole API |
+| 120 requests a minute | Each merchant, on `/v1/intelligence/*` |
+| 60 requests a minute | Each merchant, on `POST /v1/webhooks/{id}/test` |
+
+A few other endpoints, such as exports and FX quotes, carry tighter limits of their own. These numbers can change; the headers always show the limit that applies, and they are the contract.
+
+## Headers
+
+Every authenticated response carries:
+
+| Header | Value |
+|---|---|
+| `X-RateLimit-Limit` | Maximum requests permitted in the current window. |
+| `X-RateLimit-Remaining` | Requests remaining in the current window. |
+| `X-RateLimit-Reset` | Unix timestamp when the current window resets. |
+
+If Anton cannot check your limit for a moment, it serves the request and leaves these three headers out rather than guess. Treat a response without them as "limit unknown", not "unlimited", and keep your own pacing.
+
+Over the limit, Anton returns `429` with one more header:
+
+| Header | Value |
+|---|---|
+| `Retry-After` | Seconds to wait before retrying. |
+
+Response body:
+
+```json
+{
+  "error": {
+    "type": "rate_limit_error",
+    "code": "rate_limit_exceeded",
+    "message": "rate limit exceeded, retry after 60 seconds",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#rate_limit_exceeded",
+    "request_id": "req_01JD3XB7Q2"
+  }
+}
+```
+
+## Handling 429
+
+Treat `429` as transient and wait at least `Retry-After` seconds before retrying. When many requests are waiting, add jitter: retrying them all at the same instant trips the limiter again. A `503` also carries `Retry-After`.
+
+<CodeGroup>
+
+```bash cURL
+retry() {
+  local url=$1
+  for attempt in 1 2 3 4 5; do
+    # dpop_proof builds a fresh proof for each attempt
+    response=$(curl -sS -D /tmp/hdr -o /tmp/body -w "%{http_code}" "$url" \
+      -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+      -H "DPoP: $(dpop_proof GET "$url")")
+    if [ "$response" != "429" ]; then
+      cat /tmp/body
+      return 0
+    fi
+    retry_after=$(grep -i '^retry-after:' /tmp/hdr | awk '{print $2}' | tr -d '\r')
+    sleep "${retry_after:-1}"
+  done
+  echo "rate limit: retry budget exhausted" >&2
+  return 1
+}
+```
+
+```javascript JavaScript
+// buildInit returns the headers, including a fresh DPoP proof, for each attempt.
+async function requestWithBackoff(url, buildInit, attempt = 1) {
+  const response = await fetch(url, await buildInit());
+  if (response.status !== 429) return response;
+
+  if (attempt > 5) throw new Error("rate limit: retry budget exhausted");
+
+  const retryAfter = Number(response.headers.get("retry-after")) || 1;
+  const jitter = Math.random() * 500;
+  await new Promise((r) => setTimeout(r, retryAfter * 1000 + jitter));
+
+  return requestWithBackoff(url, buildInit, attempt + 1);
+}
+```
+
+```php PHP
+// $buildOpts returns the cURL options, including a fresh DPoP proof, for each attempt.
+function requestWithBackoff(string $url, callable $buildOpts, int $attempt = 1): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, $buildOpts() + [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+    ]);
+    $raw = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($status !== 429) return $raw;
+    if ($attempt > 5) throw new RuntimeException("rate limit: retry budget exhausted");
+
+    preg_match('/retry-after:\s*(\d+)/i', $raw, $m);
+    $wait = ((int)($m[1] ?? 1)) + (mt_rand(0, 500) / 1000);
+    usleep((int)($wait * 1_000_000));
+
+    return requestWithBackoff($url, $buildOpts, $attempt + 1);
+}
+```
+
+```go Go
+// newReq builds the request, including a fresh DPoP proof, for each attempt.
+func DoWithBackoff(newReq func() (*http.Request, error)) (*http.Response, error) {
+    for attempt := 1; attempt <= 5; attempt++ {
+        req, err := newReq()
+        if err != nil {
+            return nil, err
+        }
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+            return nil, err
+        }
+        if resp.StatusCode != http.StatusTooManyRequests {
+            return resp, nil
+        }
+        retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+        if retryAfter < 1 {
+            retryAfter = 1
+        }
+        resp.Body.Close()
+        jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+        time.Sleep(time.Duration(retryAfter)*time.Second + jitter)
+    }
+    return nil, errors.New("rate limit: retry budget exhausted")
+}
+```
+
+</CodeGroup>
+
+## Needing a higher limit
+
+If sustained traffic keeps hitting your ceiling, contact [help.antonpayments.com](https://help.antonpayments.com) with your use case and expected volume.

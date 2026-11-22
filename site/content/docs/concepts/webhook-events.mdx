@@ -1,0 +1,253 @@
+---
+title: "Webhook events"
+description: "Every event wraps the same resource the matching GET returns. Deliveries can repeat, so deduplicate on the event id."
+kind: concept
+---
+
+Anton sends an HTTP `POST` to your URL when something happens in your account. Subscribe with `POST /v1/webhooks` and name the event types you want, or `*` for all of them.
+
+You may receive the same event twice, so deduplicate on the event `id`. Retries mean events can arrive out of order: use `created_at` and the resource's own `status`, not arrival order.
+
+Every delivery is signed. [Webhook signing](/concepts/webhook-signing) shows how to verify it. Answer with any `2xx` within 30 seconds to acknowledge receipt. A slower answer, or any other status, a redirect included, is a failed delivery. Anything else is retried up to 5 attempts in all, waiting 30 seconds, 2 minutes, 8 minutes and 32 minutes between them. `GET /v1/webhooks/summary` returns this retry policy.
+
+## The event envelope
+
+Every delivery has the same outer shape. The resource that changed is in `data.object`.
+
+| Field | Description |
+| --- | --- |
+| `id` | The event ID (`evt_...`). Unique and stable across retries. Use it to deduplicate. |
+| `object` | Always `"event"`. |
+| `type` | The event type, for example `payout.completed`. |
+| `api_version` | The API version the payload is rendered at. See [API versions](#api-versions). |
+| `livemode` | `true` for production events, `false` for sandbox. |
+| `created_at` | When the event happened, RFC 3339 in UTC with milliseconds. |
+| `data.object` | The resource, exactly as the API returns it from the matching `GET` endpoint. There are no separate webhook shapes. |
+
+```json
+{
+  "id": "evt_01JD3XC4",
+  "object": "event",
+  "type": "payout.completed",
+  "api_version": "2026-12-01",
+  "livemode": false,
+  "created_at": "2026-11-19T14:03:22.104Z",
+  "data": {
+    "object": {
+      "id": "pay_dbvqrpqukoh470i0beug",
+      "object": "payout",
+      "livemode": false,
+      "status": "completed",
+      "status_message": null,
+      "failure_code": null,
+      "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+      "beneficiary_name": null,
+      "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+      "batch_id": null,
+      "method": "sepa",
+      "rail_type": "fiat",
+      "network": "sepa",
+      "source_amount": "550.00",
+      "source_currency": "USD",
+      "destination_amount": "500.00",
+      "destination_currency": "EUR",
+      "exchange_rate": "0.9091",
+      "fee": "5.00",
+      "fee_currency": "USD",
+      "fee_bearer": "merchant",
+      "fixed_side": "fixed_destination",
+      "fee_finalized": false,
+      "total_debited": "557.50",
+      "total_debited_currency": "USD",
+      "buffer_amount": "0.00",
+      "buffer_currency": null,
+      "wallet_address": null,
+      "token_contract": null,
+      "token_symbol": null,
+      "transaction_hash": null,
+      "block_confirmations": null,
+      "required_confirmations": null,
+      "network_fee": null,
+      "network_fee_currency": null,
+      "created_by": null,
+      "purpose": "supplier_payment",
+      "reference": "PO-8821",
+      "approved_at": null,
+      "processed_at": null,
+      "completed_at": null,
+      "failed_at": null,
+      "cancelled_at": null,
+      "risk": {
+        "score": 640,
+        "tier": "HIGH"
+      },
+      "delivery": null,
+      "session_quality": null,
+      "metadata": {
+        "order_ref": "A-1042"
+      },
+      "created_at": "2026-11-19T14:03:22.104Z",
+      "updated_at": "2026-11-19T14:03:22.104Z"
+    }
+  }
+}
+```
+
+Each delivery also carries these HTTP headers:
+
+| Header | Description |
+| --- | --- |
+| `X-Webhook-ID` | The event `id`. |
+| `X-Webhook-Event` | The event type. |
+| `User-Agent` | `AntonPayments-Webhook/1.0`. The version can change, so don't match it exactly. |
+| `X-Webhook-Timestamp` | Unix seconds when the delivery was signed. |
+| `X-Webhook-Signature` | One or more `v1={hex}` HMAC-SHA256 signatures. See [Webhook signing](/concepts/webhook-signing). |
+
+### API versions
+
+An event is rendered at the API version your account is pinned to, and records it in `api_version`. A retried delivery is byte-for-byte identical to the first attempt, including its version. A per-request `Anton-Version` header never applies to webhooks. New optional fields, enum values and event types can appear at any version, so ignore fields and types you do not know.
+
+## Event catalog
+
+`GET /v1/webhooks/event-types` returns this catalog with labels and categories. `test` and `*` are described at the end.
+
+### Payouts
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `payout.created` | A payout has been accepted and queued. | [Payout](/reference/payouts/get-payout) |
+| `payout.approved` | A payout was approved and will be sent. | [Payout](/reference/payouts/get-payout) |
+| `payout.processing` | A payout is being processed: submitted to the payment rail, or released from a hold. | [Payout](/reference/payouts/get-payout) |
+| `payout.sent` | Funds have been released to the rail. | [Payout](/reference/payouts/get-payout) |
+| `payout.completed` | A payout settled at the receiving institution. | [Payout](/reference/payouts/get-payout) |
+| `payout.failed` | The payout could not be completed. | [Payout](/reference/payouts/get-payout) |
+| `payout.cancelled` | A payout was cancelled before settlement. | [Payout](/reference/payouts/get-payout) |
+| `payout.returned` | Funds were returned by the receiving institution. | [Payout](/reference/payouts/get-payout) |
+| `payout.on_hold` | Paused before it reached the rail. `status_message` is the only text Anton gives. | [Payout](/reference/payouts/get-payout) |
+
+### Approvals
+
+Payouts held for a human decision under your approval policy.
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `payout.approval_required` | A payout matched a policy and is waiting on an approver. | [Payout](/reference/payouts/get-payout) |
+| `payout.approval_expired` | An approval window lapsed with no decision. | [Payout](/reference/payouts/get-payout) |
+| `policy.matched` | A payout matched one of your approval policies. | Policy match |
+
+### Beneficiaries
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `beneficiary.created` | A beneficiary was added. | [Beneficiary](/reference/beneficiaries/get-beneficiary) |
+| `beneficiary.updated` | A beneficiary's details changed. | [Beneficiary](/reference/beneficiaries/get-beneficiary) |
+| `beneficiary.deleted` | A beneficiary was removed. | Deleted beneficiary |
+| `beneficiary.blocked` | A beneficiary was blocked and can no longer be paid. | [Beneficiary](/reference/beneficiaries/get-beneficiary) |
+
+### Instruments
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `instrument.created` | A payment instrument was added. | [Instrument](/reference/instruments/get-instrument) |
+| `instrument.updated` | A payment instrument changed. | [Instrument](/reference/instruments/get-instrument) |
+| `instrument.deleted` | A payment instrument was removed. | Deleted instrument |
+
+### Batches
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `batch.uploaded` | A batch file was accepted for processing. | [Batch](/reference/batches/get-batch) |
+| `batch.completed` | Every payout in a batch reached a terminal state. | [Batch](/reference/batches/get-batch) |
+| `batch.failed` | A batch could not be processed. | [Batch](/reference/batches/get-batch) |
+
+### Schedules
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `schedule.executed` | A scheduled run created its payouts. | Schedule event |
+| `schedule.failed` | A scheduled run could not create its payouts. | Schedule event |
+| `schedule.paused` | A schedule was paused and will not run until resumed. | Schedule event |
+
+### Treasury
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `balance.low` | A currency balance crossed its low threshold. | Balance alert |
+| `funding.credit` | A funding deposit was credited to your balance. | Funding credit |
+
+### FX
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `fx.quote.created` | An FX quote was issued. | FX quote |
+| `fx.exchange.created` | An FX exchange was accepted. | [FX exchange](/reference/fx/get-fx-exchange) |
+| `fx.exchange.completed` | An FX exchange settled. | [FX exchange](/reference/fx/get-fx-exchange) |
+| `fx.exchange.failed` | An FX exchange could not be completed. | [FX exchange](/reference/fx/get-fx-exchange) |
+
+### Verification
+
+Identity and business verification lifecycle. Subscribe to track a subject without polling.
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `verification.link_sent` | A hosted verification link was delivered to the subject. | Verification event |
+| `verification.started` | The subject opened the link and began verifying. | Verification event |
+| `verification.approved` | Verification passed every check. | Verification event |
+| `verification.declined` | Verification failed. The attempt is terminal. | Verification event |
+| `verification.review` | Verification needs a human decision before it resolves. | Verification event |
+| `verification.expired` | The hosted link lapsed before the subject completed it. | Verification event |
+
+### Intelligence
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `intelligence.evaluation.completed` | A risk evaluation finished and its verdict is available. | [Evaluation](/reference/intelligence/get-evaluation) |
+| `intelligence.evaluation.failed` | A risk evaluation could not complete. | [Evaluation](/reference/intelligence/get-evaluation) |
+| `insight.created` | Anton surfaced a new insight about your activity. | Insight |
+
+### Intelligence reviews
+
+Your team's compliance reviews, for your own case system. Sent with the Reviews API and Webhooks add-on. Ids, codes and your own reference only, never names or note text.
+
+| Event | When it is sent | `data.object` |
+| --- | --- | --- |
+| `intelligence.review.opened` | A review opened in your queue, from your own checks or by your team. | Review event |
+| `intelligence.review.decision_proposed` | A decision is waiting for a second approver. | Review event |
+| `intelligence.review.decided` | A decision took effect, including waiting on your customer. | Review event |
+| `intelligence.review.reopened` | A decision was sent back or withdrawn, or your customer responded. | Review event |
+| `intelligence.review.closed` | A review closed with its outcome. | Review event |
+| `intelligence.review.overdue` | A review passed its due time without a decision. | Review event |
+| `intelligence.review.note_added` | A note was added to a review. The note itself is never sent. | Review event |
+
+### Notes on specific events
+
+- `payout.failed` carries a `failure_code` on the payout. A payout we could not process is announced by `payout.failed` with `failure_code` `cannot_be_processed`.
+- `payout.on_hold` means the payout is paused. It never says why: `status_message` is the only text.
+- `beneficiary.deleted` and `instrument.deleted` carry the ID of the removed object and `"deleted": true`.
+- `test` is the type of the delivery `POST /v1/webhooks/{id}/test` sends, to check your endpoint and signature handling. Its `data.object` is a sample payout with `"test": true`.
+- Subscribing to `*` delivers every event type, including ones added later.
+
+Events for surfaces your account cannot reach, such as payout events on an account that holds only the `intelligence` capability, are never sent.
+
+## Subscribing
+
+Create a subscription with the event types you want. The signing `secret` is returned once, in the creation response, and cannot be read back.
+
+<Note>
+  The `url` must use `https://` and must be reachable from the public internet. Anton refuses plaintext `http://` URLs with `webhook_url_not_https`, and private, loopback and metadata addresses with `webhook_url_private_address`. See [Errors](/errors#webhook-url-checks).
+</Note>
+
+```bash
+curl https://api.antonpayments.dev/v1/webhooks \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: webhook-orders-1" \
+  -d '{
+    "url": "https://example.com/webhooks/anton",
+    "events": ["payout.created", "payout.completed", "payout.failed"]
+  }'
+```
+
+Inspect past events and attempts with `GET /v1/webhooks/events`, `GET /v1/webhooks/events/{id}` and `GET /v1/webhooks/events/{id}/deliveries`.

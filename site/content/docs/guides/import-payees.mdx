@@ -1,0 +1,94 @@
+---
+title: Import payees from a file
+description: An import is its own object, and nothing is created until you confirm it. The preview checks every row without making a single payee.
+kind: guide
+---
+
+One CSV creates payees, and only payees. Instruments and payouts are separate calls, or one [bulk batch](/guides/send-payouts-in-bulk) if you want all three from a file. An import has an ID starting with `imp_`, and it lives 24 hours.
+
+Upload gives you a preview with a verdict per row. You fix what failed, then confirm, and every row that passed becomes a payee. The same checks run as on `POST /v1/beneficiaries`.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "A CSV of up to 1,000 data rows, 8 MB at most", "Rows of one type only: all individuals or all businesses"]} />
+
+## Start from the template
+
+Column order and casing matter, and a header row that does not match is `400 invalid_csv`. Download the template for your type and fill it in.
+
+```bash Download the template
+curl "https://api.antonpayments.dev/v1/beneficiaries/import/template?type=individual" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -o individuals.csv
+```
+
+`type` is `individual` or `business`, and it is required. The file comes with its header row and an example row or two. Only `.csv` is accepted, and `format` can only be `csv`. The route takes no other query parameters.
+
+## Upload the file
+
+The upload is `multipart/form-data` with the file in the `file` field. An `Idempotency-Key` is required.
+
+<RunStep title="Preview the import" method="POST" path="/v1/beneficiaries/import"
+  headers={{ "Idempotency-Key": "import-payees-2026-11", "Content-Type": "multipart/form-data" }}
+  body={{
+    file: "individuals.csv",
+    metadata: "{\"order_ref\":\"A-1042\"}"
+  }}>
+  Nothing is created yet. The import comes back with `status` `preview`, a `summary` and one entry per row in `rows`.
+</RunStep>
+
+`metadata` is optional and yours: a JSON object as a string, with string values only, up to 50 keys. Put no personal data in it. It comes back on the import.
+
+Over 1,000 data rows is `422 import_too_large`, so split the file and upload each part. Over 8 MB is `413 file_too_large`.
+
+## Read the preview
+
+`summary` counts `total`, `valid` and `invalid` rows. Each entry in `rows` has its `row_number`, counted from the first data row, and a `valid` flag. A row that failed lists what is wrong in `errors`, by column and never by value.
+
+The preview does not echo what you uploaded. Each row carries `external_ref`, `country` and a `masked` block with the name, email and phone cut down to enough to recognise it. The real details are sealed in the vault at upload, and Anton's import record does not hold them. A row with no `external_ref`, or one over 255 characters, comes back with `null`, so give every row one.
+
+An import with failures can still be confirmed. The failed rows are skipped. If you would rather fix them first, correct the file and upload it again as a new import; there is no editing an import in place.
+
+## Confirm it
+
+Confirm takes no body and no query, only the `imp_` ID and an `Idempotency-Key`.
+
+<RunStep title="Confirm the import" method="POST" path="/v1/beneficiaries/import/{import_id}/confirm"
+  pathParams={{ import_id: "imp_dbvqrpqukoh470i0a3q0" }}
+  headers={{ "Idempotency-Key": "import-payees-2026-11-confirm" }}>
+  The import is now `confirmed`, `rows` is `null`, and `result` holds the outcome.
+</RunStep>
+
+`result` counts `created`, `skipped` and `failed`, and lists `beneficiary_ids`. `skipped` is the rows that failed preview. `failed` is the rows that passed preview and could not be created, such as a duplicate identity, and each is in `errors` with its `row_number` and a `message`.
+
+The import is `confirmed` once the call completes, even when some rows failed. To retry a subset, take those rows into a new CSV and upload a fresh import. Confirming the same import again is `409 import_already_confirmed`.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={400} code="invalid_csv">The file could not be parsed, or its header does not match the individual or business template. Download the template again.</ErrorRow>
+  <ErrorRow status={400} code="invalid_file_format">The file is not a `.csv`.</ErrorRow>
+  <ErrorRow status={400} code="invalid_file">The `file` field is missing or unreadable.</ErrorRow>
+  <ErrorRow status={413} code="file_too_large">The file is over 8 MB. Split it.</ErrorRow>
+  <ErrorRow status={422} code="import_too_large">More than 1,000 data rows. Upload the file in parts.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">No import with that ID belongs to you.</ErrorRow>
+  <ErrorRow status={409} code="import_already_confirmed">A previous call created the payees, or another confirm is creating them now. Read the result from the import you have.</ErrorRow>
+  <ErrorRow status={409} code="import_expired">The 24 hours are up. Upload the file again.</ErrorRow>
+  <ErrorRow status={503} code="service_unavailable">The vault could not answer. On upload nothing was stored, so upload again. On confirm the import is open again, so confirm again.</ErrorRow>
+</Errors>
+
+## Idempotency
+
+Both calls require an `Idempotency-Key`. Build it from your own data, such as the file's name and date, and a retry after a timeout returns the same import. See [Idempotency](/concepts/idempotency).
+
+<Note>
+  Each payee the confirm creates is an ordinary payee with a `ben_` ID. Attach instruments to them next, in [Register an instrument](/guides/register-an-instrument).
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Register an instrument" href="/guides/register-an-instrument">
+    Give each imported payee somewhere to be paid.
+  </Card>
+  <Card title="Preview a bulk import" href="/reference/beneficiaries/import-beneficiaries" />
+</CardGroup>

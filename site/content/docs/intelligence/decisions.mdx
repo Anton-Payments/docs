@@ -1,0 +1,82 @@
+---
+title: "Act on a decision"
+description: "An evaluation returns one of three decisions, but only a review has more to say. A clean approval comes back with no reasons and nothing to do."
+kind: guide
+---
+
+Branch on `decision`. It is `approve`, `review` or `decline`, and it sits with a `score` from 0 to 1000 where higher is worse. Anton does not return how it reached the decision, so what you act on is the decision, the reasons and the actions.
+
+The result fields exist only once `status` is `completed`. A `payout_screening` evaluation answers `202` with `status: pending` and no result; the rest answer `201` already decided.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key, with the `intelligence` scope", "A subject to evaluate"]} />
+
+## Get a decision
+
+<RunStep title="Evaluate a payee" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "payee-john-doe-001" }}
+  body={{
+    use_case: "payee_registration",
+    entity: {
+      type: "person",
+      name: "John Doe",
+      country: "US"
+    }
+  }}>
+  The `use_case` fixes the required fields. A `payee_registration` needs an `entity.name` or an `entity.vault_token_id`.
+</RunStep>
+
+For `payout_screening`, poll [`GET /v1/intelligence/evaluations/{id}`](/reference/intelligence/get-evaluation) until `status` is `completed` or `failed`, or subscribe to `intelligence.evaluation.completed` and `intelligence.evaluation.failed`. A failed evaluation carries `failure_reason: evaluation_failed` and no decision. That is not an approval, so do not treat it as one.
+
+## Branch on the decision
+
+| Decision | What it tells you |
+|---|---|
+| `approve` | Go on. `reasons` and `required_actions` are empty for a clean approval. |
+| `review` | The decision is not a plain approval. `reasons` says why and `required_actions` says what you can do. |
+| `decline` | Stop. Don't create the payee or send the payout. |
+
+A review in your queue can name the evaluation that opened it in `evaluation_id`. [Work the review queue](/intelligence/reviews) covers it.
+
+`coverage` says how much of the screening panel answered: `complete`, `partial` or `error`. Read it alongside the decision.
+
+## Read the score and tier
+
+`score` is an integer from 0 to 1000. `tier` is `low`, `medium`, `high` or `critical`. Store both, and branch on `decision` rather than a score threshold of your own.
+
+## Reasons and required actions
+
+| Reason | Meaning |
+|---|---|
+| `watchlist_review` | A possible or confirmed list match needs review. |
+| `identity_unverified` | The identity could not be confirmed. |
+| `information_incomplete` | Details needed for a confident answer were missing. |
+| `elevated_risk` | The risk is elevated, or the reason is not one of the others. |
+
+| Action | What to do |
+|---|---|
+| `provide_missing_information` | Resubmit with the missing details. |
+| `verify_identity` | Verify the subject's identity with a [verification subject](/concepts/verifications). |
+
+Both lists can gain values. Treat one you do not know as the generic case: `elevated_risk` for a reason, and no action for an unknown action.
+
+## Decisions a person makes later
+
+An evaluation's `decision` is Anton's. When it opens a review, your team records its own decisions on that review: `not_a_match`, `confirmed_match`, `no_concern` and the rest. Those are a separate object, and one your API credential proposes that clears the subject returns `requires_approval: true` with `approval_rule: api_clearance`, so it waits for an independent person. [Record and approve a decision](/intelligence/record-a-decision) covers it.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="validation_error">The request is missing what its `use_case` requires, or a value is not valid.</ErrorRow>
+  <ErrorRow status={400} code="unknown_field">The body has a field outside the contract, at any depth.</ErrorRow>
+  <ErrorRow status={400} code="invalid_request">A filter on the list endpoint used a value it does not know.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">An evaluation `id` that is not yours is a 404, the same as one that does not exist.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Work the review queue" href="/intelligence/reviews">
+    Where a `review` decision goes.
+  </Card>
+  <Card title="Create an evaluation" href="/reference/intelligence/create-evaluation" />
+</CardGroup>

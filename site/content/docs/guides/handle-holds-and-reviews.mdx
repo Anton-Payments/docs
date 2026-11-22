@@ -1,0 +1,62 @@
+---
+title: Handle holds and reviews
+description: A held payout never says why, and nothing you send can release it. Your code's job is to show a pending state and wait for the next event.
+kind: guide
+---
+
+A payout is checked before any rail sees it. When a check needs a closer look, the payout becomes `on_hold`. How Anton decides is in [How Anton evaluates payouts](/concepts/how-anton-evaluates-payouts).
+
+<BeforeYouBegin items={["A webhook subscription that includes payout.on_hold and payout.processing", "A pending state in your UI that is not an error"]} />
+
+## Know it has happened
+
+`payout.on_hold` fires when a payout is placed on hold. The payout in `data.object` has `status` `on_hold`, and its `status_message` is the only text Anton gives. A typical one reads "This payout is under review", and nothing follows it.
+
+A hold can also begin after you created the payout and saw `processing`. A payout can go from `created` or `processing` to `on_hold`, so handle the event whenever it arrives, not only in the create response.
+
+## Read the payout
+
+You don't need to poll for this. Read the payout once when you want to confirm what an event told you, or when you are reconciling after downtime.
+
+<RunStep title="Read a held payout" method="GET" path="/v1/payouts/{id}"
+  pathParams={{ id: "pay_dbvqrpqukoh470i0a400" }}>
+  Look at `status`, `status_message` and `failure_code`. On a held payout `failure_code` is `null`, and so is `risk`.
+</RunStep>
+
+The payout's timeline is at [`GET /v1/payouts/{id}/events`](/reference/payouts/list-payout-events), oldest first. It carries each public status the payout has had and no free text, so it cannot tell you why either.
+
+## Show your user a pending state
+
+A held payout is not a failed one. Tell your user the payout is under review and that you will update them. Don't repeat `status_message` as if it were a reason, and don't guess one. Anton doesn't give you a cause, so anything you show would be invented.
+
+## What not to do
+
+- **Don't cancel it.** A held payout cannot be cancelled. The request returns `409 payout_on_hold`.
+- **Don't send it again.** A second payout for the same invoice risks paying twice. If your creating call timed out, retry it with the same `Idempotency-Key` and you get the first payout back.
+- **Don't treat the hold as a defect to retry around.** There is no flag, header or field that skips or overrides a check.
+
+<Errors>
+  <ErrorRow status={409} code="payout_on_hold">You tried to cancel a held payout. Wait until the status changes.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">The payout does not exist or belongs to another merchant.</ErrorRow>
+</Errors>
+
+## How a hold ends
+
+<Lifecycle states="on_hold, processing"
+  notes="Under review. Cannot be cancelled | Review ended, payout continues"
+  edges="review ends">
+  A hold can also end in `cancelled` or `failed`. Both are final.
+</Lifecycle>
+
+Release is `payout.processing`, which also fires when a payout is first submitted to the rail. Read `status` in the payload rather than assuming which case it is. A hold that ends in `failed` arrives as `payout.failed`, and `failure_code` can be `cannot_be_processed` with no further detail. [Handle returns and failures](/guides/handle-returns-and-failures) covers that ending.
+
+A review has no published duration. Alert on a payout that stays held longer than your own deadline, and keep showing your user the pending state until the payout moves.
+
+## When your team can help
+
+If an answer from you is what the review needs, it is an RFI, and your team answers it in the dashboard. The API cannot tell you whether a given hold is waiting on one. See [Respond to an RFI](/guides/respond-to-an-rfi).
+
+<CardGroup cols={2}>
+  <Card title="Respond to an RFI" href="/guides/respond-to-an-rfi">Who on your team answers, and where.</Card>
+  <Card title="Track payouts with webhooks" href="/guides/track-payouts-with-webhooks">Receive and verify the events above.</Card>
+</CardGroup>

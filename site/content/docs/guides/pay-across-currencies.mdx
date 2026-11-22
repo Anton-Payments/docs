@@ -1,0 +1,95 @@
+---
+title: Pay across currencies
+description: A pricing quote pins the fee and rate of one payout for five minutes. Without one, the payout is priced the moment you create it.
+kind: guide
+---
+
+A cross-currency payout needs no FX call. You send both amounts on `POST /v1/payouts` and Anton converts. A pricing quote is for the case where your user sees a price before they confirm, and the payout must honour it. Which amount is fixed is settled on the payout itself, in [Send a payout](/guides/send-a-payout).
+
+To convert between your own balances instead, see [Convert currency](/guides/convert-currency). Its `fxq_` quotes never go on a payout.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "A destination currency a corridor pays out in"]} />
+
+## Decide whether to quote
+
+<Decision>
+  <Choice title="No quote" value="quote_id omitted" fields="priced at create" picked>
+    The payout is priced when you create it, and the response carries the fee and rate it got. Right for sends the user doesn't confirm against a price.
+  </Choice>
+  <Choice title="Pricing quote" value="POST /v1/pricing/quotes" fields="pq_, five minutes, one payout">
+    A stored quote with the fee and rate. Pass its `id` as `quote_id` before it expires and the payout keeps that price.
+  </Choice>
+</Decision>
+
+`GET /v1/corridors`, filtered by `destination_currency`, shows which currencies you can pay out in.
+
+## Request the quote
+
+Give the currencies and the `source_amount`; it is the one amount a pricing quote requires. `destination_amount` is optional, and on a cross-currency quote Anton computes it from the indicative rate when you leave it out. `method` and `rail_type` narrow the price to the way the payout will travel, and `destination_country` does the same when the fee depends on it.
+
+<RunStep title="Create a pricing quote" method="POST" path="/v1/pricing/quotes"
+  headers={{ "Idempotency-Key": "quote-A-1042" }}
+  body={{
+    source_currency: "USD",
+    destination_currency: "EUR",
+    method: "sepa",
+    source_amount: "550.00",
+    destination_amount: "500.00",
+    metadata: { order_ref: "A-1042" }
+  }}>
+  The quote carries the `fee`, the `rate` and `total_cost`, with an `expires_at` five minutes ahead. A retry with the same `Idempotency-Key` and body returns the original quote.
+</RunStep>
+
+## Spend the quote
+
+Create the payout with the quote's `id` as `quote_id`, and the same currencies and amounts.
+
+```json Payout request body
+{
+  "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+  "instrument_id": "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+  "source_amount": "550.00",
+  "source_currency": "USD",
+  "destination_amount": "500.00",
+  "destination_currency": "EUR",
+  "method": "sepa",
+  "fixed_side": "fixed_destination",
+  "quote_id": "pq_dbvm07aukoh6sl1ll18g",
+  "purpose": "supplier_payment",
+  "reference": "PO-8821"
+}
+```
+
+A quote binds to one payout, so a second payout needs a second quote. The payout still needs its own `Idempotency-Key`.
+
+<Lifecycle states="active, consumed"
+  notes="Can be passed as quote_id | Bound to one payout"
+  edges="you create the payout with quote_id">
+  A quote that isn't used by `expires_at` becomes `expired`. It can't be revived: request a new one, and expect the rate to have moved in either direction.
+</Lifecycle>
+
+## What comes back
+
+The payout carries the figures you settle against: `exchange_rate`, `fee`, `total_debited` and `total_debited_currency`. A cross-currency payout also holds a `buffer_amount` while it processes. Store these rather than recomputing them.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="quote_expired">The quote passed its five minutes. Request a new one and send the payout straight away.</ErrorRow>
+  <ErrorRow status={422} code="quote_mismatch">The payout doesn't match the quote. Send the currencies and amounts you quoted.</ErrorRow>
+  <ErrorRow status={409} code="quote_already_used">The quote is already bound to a payout. Request a new one.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">`quote_id` names no quote of yours.</ErrorRow>
+  <ErrorRow status={422} code="amount_precision_invalid">An amount has more decimal places than its currency allows.</ErrorRow>
+  <ErrorRow status={422} code="insufficient_balance">Your balance can't cover the payout. [Fund it](/guides/fund-your-balance) and retry with a new key.</ErrorRow>
+</Errors>
+
+<Note>
+  Request the quote when the user confirms, not when the page loads. Five minutes is the whole window.
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">The full create call, statuses and cancellation.</Card>
+  <Card title="Convert currency" href="/guides/convert-currency">Move money between your own balances.</Card>
+</CardGroup>

@@ -1,0 +1,112 @@
+---
+title: "Send your first payout"
+description: "Six calls take an empty sandbox to a payout on its way, with no real money involved."
+kind: guide
+---
+
+Each call below leaves something the next one needs: a token, a payee, an account to pay into, money to send, the payout, and a way to hear how it ends. Keep the IDs as you go.
+
+<BeforeYouBegin items={["A sandbox client_id and client_secret from the dashboard", "The DPoP private key the dashboard generated with them", "A shell, or the console on this page"]} />
+
+## Get a token
+
+Trade your `client_id` and `client_secret` for a token. Every call after this one carries that token and a fresh DPoP proof signed for its exact method and URL. [Authentication](/authentication) has a working signer.
+
+<RunStep title="Mint an access token" method="POST" path="/oauth/token"
+  headers={{ "Authorization": "Basic $CLIENT_CREDENTIALS", "Content-Type": "application/x-www-form-urlencoded" }}
+  body={{ grant_type: "client_credentials" }}>
+  A sandbox token lasts 8 hours. There is no refresh token: mint a new one when it runs out.
+</RunStep>
+
+## Register who you pay
+
+A payee is identity and nothing else. Its personal details go to a vault on the way in, and you get back a `ben_` ID. Send your own ID as `external_ref`, and build the `Idempotency-Key` from it, so a retry returns the same payee instead of a second one.
+
+<RunStep title="Register the payee" method="POST" path="/v1/beneficiaries"
+  headers={{ "Idempotency-Key": "ben-contractor-1042" }}
+  body={{
+    type: "individual",
+    country: "GB",
+    external_ref: "contractor-1042",
+    individual: {
+      first_name: "Jane",
+      last_name: "Smith",
+      email: "jane@example.com",
+      phone: "+442079460000",
+      birth_date: "1988-05-12",
+      nationality: "GB",
+      address: { street_line_1: "10 Example Street", city: "London", postal_code: "SW1A 1AA", country: "GB" }
+    }
+  }}>
+  Comes back `active`. [Register a payee](/guides/register-a-payee) covers businesses and duplicates.
+</RunStep>
+
+## Give them an account
+
+An instrument is where the money lands, and it belongs to one payee through `beneficiary_id`. The `iban` goes in and never comes back out; reads show a masked display.
+
+<RunStep title="Register the instrument" method="POST" path="/v1/instruments"
+  headers={{ "Idempotency-Key": "ins-contractor-1042-eur-primary" }}
+  body={{
+    beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    method: "iban",
+    currency: "EUR",
+    label: "Primary account",
+    default: true,
+    credentials: { account_holder_name: "Jane Smith", iban: "DE89370400440532013000" }
+  }}>
+  [Register an instrument](/guides/register-an-instrument) covers wallets and the other methods.
+</RunStep>
+
+## Fund the sandbox
+
+A payout spends a balance you already hold. In the sandbox, one call credits it; in production the money arrives by bank transfer instead, and this endpoint doesn't exist.
+
+<RunStep title="Credit your sandbox balance" method="POST" path="/v1/sandbox/deposits"
+  headers={{ "Idempotency-Key": "fund-usd-1" }}
+  body={{ currency: "USD", amount: "1000.00" }}>
+  Deposits stack. [Fund your balance](/guides/fund-your-balance) covers production funding.
+</RunStep>
+
+## Send the payout
+
+USD from your balance, EUR to the payee over SEPA. `fixed_side` says the payee gets exactly the `destination_amount`; Anton prices the other side. Amounts are strings.
+
+<RunStep title="Create the payout" method="POST" path="/v1/payouts"
+  headers={{ "Idempotency-Key": "payout-PO-8821" }}
+  body={{
+    beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    instrument_id: "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    source_amount: "550.00",
+    source_currency: "USD",
+    destination_amount: "500.00",
+    destination_currency: "EUR",
+    method: "sepa",
+    rail_type: "fiat",
+    fixed_side: "fixed_destination",
+    purpose: "supplier_payment",
+    reference: "PO-8821"
+  }}>
+  The call returns before the money moves. Anton checks the payout first, and everything after arrives as events.
+</RunStep>
+
+## Hear how it ends
+
+Polling tells you less, later. Subscribe once and every payout reports its own progress to your URL, signed. Answer any `2xx` quickly and do the work afterwards.
+
+<RunStep title="Create the subscription" method="POST" path="/v1/webhooks"
+  headers={{ "Idempotency-Key": "webhook-orders-1" }}
+  body={{
+    url: "https://example.com/hooks",
+    events: ["payout.completed", "payout.failed", "payout.returned", "payout.on_hold"]
+  }}>
+  The signing `secret` is shown once. Store it now.
+</RunStep>
+
+## Next
+
+<CardGroup cols={3}>
+  <Card kicker="Send" title="Send a payout" href="/guides/send-a-payout">Every field above, and every way a payout ends.</Card>
+  <Card kicker="Deliver" title="Verify webhook signatures" href="/guides/verify-webhook-signatures">Trust an event only after its signature checks out.</Card>
+  <Card kicker="Before production" title="Go live" href="/guides/go-live">What production asks for that the sandbox doesn't.</Card>
+</CardGroup>

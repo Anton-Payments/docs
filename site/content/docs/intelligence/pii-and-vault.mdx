@@ -1,0 +1,17 @@
+---
+title: "PII and vault tokens"
+description: "Send PII directly or as a vault token. Either way, Anton keeps only redacted evidence."
+kind: concept
+---
+
+Intelligence accepts sensitive data in two ways:
+
+| Path | Use when |
+|---|---|
+| Direct PII | You send the data over TLS for immediate evaluation |
+| Vault token | You send a token reference in `vault_token_id` and Anton detokenizes it in memory |
+
+In both paths Anton uses the values in memory for the evaluation and persists only redacted decision evidence, never raw PII.
+
+A vault token must belong to the calling merchant. A token owned by another merchant is not accepted.
+
