@@ -20,7 +20,7 @@ The dashboard creates the credential and generates an ES256 or Ed25519 DPoP keyp
 
 Each credential also carries scopes, `payouts` and `intelligence`, checked against your account's capabilities when the credential is created. A call outside the credential's scopes is `403 insufficient_scope`. A call outside your account's capabilities is `403 capability_required`. [Capabilities and scopes](/concepts/capabilities) has the detail.
 
-Sandbox credentials belong to `api.antonpayments.dev` and production credentials to `api.antonpayments.com`. A sandbox client used in production is a `403`.
+Sandbox credentials belong to `api.antonpayments.dev` and production credentials to `api.antonpayments.com`. A sandbox token sent to the production API is `403 key_environment_mismatch`, and a sandbox client asking the production token endpoint for a token gets `403 invalid_client`.
 
 ## Mint a token
 
@@ -137,11 +137,11 @@ The token endpoint answers in the flat RFC 6749 shape, `{"error": "invalid_clien
   <ErrorRow status={400} code="unsupported_grant_type">`grant_type` is not `client_credentials`.</ErrorRow>
   <ErrorRow status={400} code="invalid_request">The token request is malformed.</ErrorRow>
   <ErrorRow status={400} code="invalid_dpop_proof">The proof for the token request failed a check. On a `/v1` call the same failure is a `401`.</ErrorRow>
-  <ErrorRow status={401} code="invalid_client">The `client_id` is unknown, the secret is wrong, or the client is revoked.</ErrorRow>
+  <ErrorRow status={401} code="invalid_client">The `client_id` is unknown, the secret is wrong, or the client is revoked. A sandbox client asking the production token endpoint gets `403 invalid_client` instead.</ErrorRow>
   <ErrorRow status={401} code="invalid_token">On a `/v1` call: the token is expired, or `ath` does not match the token you sent. Recompute `ath` per request.</ErrorRow>
   <ErrorRow status={401} code="invalid_dpop_proof">On a `/v1` call: the proof failed a check, such as signature, `htm`, `htu`, `iat` or `jti`. A clock more than 60 seconds off fails `iat`. A repeated `jti` fails as a replay. Sign for the method and URL you are actually calling.</ErrorRow>
   <ErrorRow status={401} code="static_api_keys_disabled">You sent a static API key. Use client credentials with DPoP.</ErrorRow>
-  <ErrorRow status={403} code="key_environment_mismatch">Credentials from one environment were used against the other.</ErrorRow>
+  <ErrorRow status={403} code="key_environment_mismatch">A sandbox token was sent to the production API.</ErrorRow>
   <ErrorRow status={403} code="insufficient_scope">The credential was created without the scope this endpoint needs.</ErrorRow>
   <ErrorRow status={403} code="capability_required">Your account does not hold the capability this endpoint needs.</ErrorRow>
 </Errors>
