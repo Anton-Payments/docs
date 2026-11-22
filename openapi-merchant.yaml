@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=f86f9d7751c964b2acb7f3d9187b6723afd1fe9acc5c6207634d7f60fb2c2cb1
+# anton-spec-sync sha256=ba9413eb8014e98fa6139c27b0301d0b39fcbf81a6c0624c6b80ac0aab578db7
 openapi: 3.1.0
 
 info:
@@ -127,11 +127,13 @@ paths:
         The request contract is strict and uses fixed enums, so you can generate SDKs safely. You can send direct PII over TLS or have Anton recover it from a vault token. Anton uses it in memory for the evaluation and persists only redacted decision evidence.
 
         **Required fields per use case.** Beyond the always-required `use_case` and `entity.type`, each use case adds requirements (a `422 validation_error` otherwise):
-        - `payee_registration`: `entity.name` OR `entity.vault_token_id`.
-        - `merchant_onboarding`: `entity.type` must be `business`, plus `entity.name` OR `entity.vault_token_id`.
+        - `payee_registration`: `entity.name`, `entity.vault_token_id` or `entity.document.number`.
+        - `merchant_onboarding`: `entity.type` must be `business`, plus `entity.name`, `entity.vault_token_id` or `entity.document.number`.
         - `instrument_screening`: an `instrument` block.
         - `payout_screening`: a `payout` block, plus searchable `entity` or `instrument` data.
         - `monitoring`: searchable `entity` or `instrument` data.
+
+        A searchable entity has a `name`, a `vault_token_id` or a `document.number`. An `email` or `phone` alone is not searchable, because sanctions lists can't be matched on them.
 
         The static `required` arrays below can't express these conditions, so they are listed here.
 
@@ -150,7 +152,7 @@ paths:
           schema:
             type: string
             maxLength: 255
-          description: Required. Retries with the same key return the original response. If the body also carries `idempotency_key`, the header wins.
+          description: Required. Retries with the same key return the original response.
       requestBody:
         required: true
         content:
@@ -4049,7 +4051,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: "`duplicate_instrument` (you already hold this instrument for the payee) or `idempotency_in_flight`."
+          description: "`duplicate_instrument` (you already hold this instrument for the payee), `beneficiary_not_active` (the payee is archived or blocked) or `idempotency_in_flight`."
           content:
             application/json:
               schema:
@@ -7294,7 +7296,7 @@ paths:
       description: |-
         Quote a conversion between two of your currencies. `source` is the currency you give up and `destination` is the one you receive (the old `sell` and `buy`). Fix one side with `source_amount` or `destination_amount`, and the other is computed.
 
-        A locked quote (the default) is stored, and you can execute it on `POST /v1/fx/exchanges` until `expires_at`. `locked: false` returns an indicative, non-binding price that is not stored. Requires an `Idempotency-Key`; a retry with the same key and body returns the original quote.
+        A locked quote (the default) is stored, and you can execute it on `POST /v1/fx/exchanges` until `expires_at`. `locked: false` returns an indicative, non-binding price with `expires_at: null`; it is kept only so that executing it is refused with `422 quote_not_locked`. Requires an `Idempotency-Key`; a retry with the same key and body returns the original quote.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -9336,15 +9338,16 @@ components:
         - `on_hold`: held for review. The `status_message` is the only thing we say about it. It cannot be cancelled while held.
         - `sent`: the rail confirmed dispatch.
         - `completed`: the beneficiary received the funds.
-        - `returned`: the funds came back after being sent.
+        - `returned`: the funds came back after being sent, possibly after the payout was `completed`.
         - `cancelled`: cancelled before submission: by you, or by Anton (an approval that expired, or a held payout Anton closed).
         - `failed`: the payout did not go through, and its status will not change again. `failure_code` says what the rail reported, or is
           `cannot_be_processed` when we could not process the payout (no further detail is given).
 
         Transitions: `created` to `pending_approval`, `processing` or `on_hold`; `pending_approval` to
-        `processing` or `cancelled`; `processing` to `on_hold`, `sent`, `failed` or `cancelled`; `on_hold` to
+        `processing` or `cancelled`; `processing` to `on_hold`, `sent`, `failed`, `returned` or `cancelled`; `on_hold` to
         `processing`, `cancelled` or `failed` (only Anton moves an `on_hold` payout to `cancelled`; you
-        cannot); `sent` to `completed`, `failed` or `returned`. `completed`,
+        cannot); `sent` to `completed`, `failed` or `returned`; `completed` to `returned` (the receiving bank
+        sent the funds back after settlement, so keep handling `payout.returned` after `completed`).
         `returned`, `cancelled` and `failed` are final. Treat a status you do not know as in progress.
       enum:
         - created
@@ -10395,9 +10398,9 @@ components:
     ReviewKind:
       type: string
       description: |
-        `payout_held_by_rule` and `payee_risk_by_rule` are opened by your own payout rules; their money
-        decision is made on the linked approval in the portal, not through this API.
-      enum: [possible_sanctions_match, possible_pep_match, screening_review, manual, payout_held_by_rule, payee_risk_by_rule]
+        `payout_held_by_rule` is opened by your own payout rules; its money decision is made on the
+        linked approval in the portal, not through this API.
+      enum: [possible_sanctions_match, possible_pep_match, screening_review, manual, payout_held_by_rule]
     ReviewStatus:
       type: string
       enum: [open, waiting_on_customer, awaiting_approval, closed]
@@ -11500,8 +11503,8 @@ components:
       type: object
       description: >-
         An FX quote. A locked quote is stored and can be executed on `POST /v1/fx/exchanges` until
-        `expires_at`; an indicative quote (`locked: false`) is a price only, is not stored and has
-        `expires_at: null`. `source` is the currency you give up, `destination` the one you receive.
+        `expires_at`; an indicative quote (`locked: false`) is a price only, has `expires_at: null` and can never be
+        executed (`422 quote_not_locked`). `source` is the currency you give up, `destination` the one you receive.
       required: [id, object, livemode, status, locked, source_currency, destination_currency, source_amount, destination_amount, mid_market_rate, customer_rate, inverse_rate, markup_basis_points, fee, fee_currency, expires_at, metadata, created_at, updated_at]
       properties:
         id:
@@ -12118,9 +12121,6 @@ components:
         client_reference_id:
           type: string
           description: Client-supplied reference for reconciliation. Not used for merchant scoping.
-        idempotency_key:
-          type: string
-          description: Body fallback for testing. Prefer the `Idempotency-Key` header.
         entity:
           $ref: '#/components/schemas/IntelligenceEntity'
         instrument:
