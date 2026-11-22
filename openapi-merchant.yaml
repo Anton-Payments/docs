@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=80bf3699768127cd661a1e44be1382f80b0a17eb3883b3e6521c79c3ddf00f5b
+# anton-spec-sync sha256=f86f9d7751c964b2acb7f3d9187b6723afd1fe9acc5c6207634d7f60fb2c2cb1
 openapi: 3.1.0
 
 info:
@@ -1374,7 +1374,7 @@ paths:
 
         Send credentials with HTTP Basic auth (`Authorization: Basic <base64(client_id:client_secret)>`). The body is also accepted. The `DPoP` header is required and MUST carry a proof JWT signed with your private DPoP key, with `htm=POST`, `htu=https://api.../oauth/token`, a fresh `iat` and `jti`, and NO `ath` claim (the access token does not exist yet).
 
-        A token lasts **1 hour** in production and staging, and **8 hours** in sandbox. There are no refresh tokens: call `POST /oauth/token` again for a fresh token.
+        A token lasts **1 hour** in production and **8 hours** in sandbox. There are no refresh tokens: call `POST /oauth/token` again for a fresh token.
       security: []
       parameters:
         - in: header
@@ -7916,7 +7916,7 @@ components:
         2. Mint an access token with `POST /oauth/token`, using `Authorization: Basic <client_id:client_secret>` and `Content-Type: application/x-www-form-urlencoded`. The body is `grant_type=client_credentials`. A `DPoP` header carrying a proof signed for the token endpoint is required (no `ath` claim on this proof).
         3. Use the token. Send `Authorization: DPoP <access_token>` plus a fresh `DPoP: <proof>` header on every `/v1` request. The proof JWT must carry `htm` (request method), `htu` (request URL, no query or fragment), `iat` (within ±60s), `jti` (unique within 5 min), and `ath` (SHA-256 of the access token, base64url).
 
-        Tokens expire in **1 hour** in production and staging and **8 hours** in sandbox. There are no refresh tokens, so call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
+        Tokens expire in **1 hour** in production and **8 hours** in sandbox. There are no refresh tokens, so call `/oauth/token` again with your secret. Anton's public signing key is published at `/.well-known/jwks.json`.
 
         **Scopes** are granted to the credential when you register it in the merchant portal. The token request takes no `scope` parameter, and the token response lists the credential's scopes in its `scope` field.
 
