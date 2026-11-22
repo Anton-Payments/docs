@@ -173,3 +173,5 @@ monorepos
 deduplicates
 approvers
 else
+Fontsource
+Vercel
