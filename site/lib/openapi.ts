@@ -2,13 +2,11 @@ import 'server-only';
 import fs from 'node:fs';
 import path from 'node:path';
 import { load as loadYaml } from 'js-yaml';
-import matter from 'gray-matter';
 
 /*
   The merchant contract lives at the repo root (openapi-merchant.yaml) and stays the single source.
-  Which operations are published, their order, groups and URL slugs come from the existing
-  api-reference/ pages and docs.json, so the new reference documents exactly the set that is
-  published today, and every old URL has a new home.
+  Which operations are published, their order, groups and URL slugs come from
+  lib/reference-nav.json (see readPublished).
 */
 
 const ROOT = path.resolve(process.cwd(), '..');
@@ -153,33 +151,16 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-type PublishedPage = { file: string; folder: string; slug: string; title: string; method: string; path: string };
+type PublishedPage = { slug: string; title: string; method: string; path: string };
+type PublishedGroup = { title: string; folder: string; ops: PublishedPage[] };
 
-function readPublished(): { pages: PublishedPage[]; groups: { title: string; folder: string; files: string[] }[] } {
-  const dir = path.join(ROOT, 'api-reference');
-  const pages: PublishedPage[] = [];
-  const walk = (d: string) => {
-    for (const f of fs.readdirSync(d)) {
-      const full = path.join(d, f);
-      if (fs.statSync(full).isDirectory()) walk(full);
-      else if (f.endsWith('.mdx')) {
-        const fm = matter(fs.readFileSync(full, 'utf8')).data as { title?: string; openapi?: string };
-        if (!fm.openapi) continue;
-        const [method, p] = fm.openapi.trim().split(/\s+/);
-        const rel = path.relative(dir, full).replace(/\.mdx$/, '');
-        pages.push({ file: rel, folder: rel.split('/')[0], slug: path.basename(rel), title: fm.title || '', method: method.toLowerCase(), path: p });
-      }
-    }
-  };
-  walk(dir);
-  const docsJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs.json'), 'utf8'));
-  const refTab = docsJson.navigation.tabs.find((t: { tab: string }) => /api reference/i.test(t.tab));
-  const groups: { title: string; folder: string; files: string[] }[] = [];
-  for (const g of refTab?.groups || []) {
-    const files = (g.pages as string[]).filter((p) => pages.some((pg) => 'api-reference/' + pg.file === p)).map((p) => p.replace('api-reference/', ''));
-    if (files.length) groups.push({ title: g.group, folder: files[0].split('/')[0], files });
-  }
-  return { pages, groups };
+/*
+  Which endpoints the reference publishes, in what order, under what URL: lib/reference-nav.json.
+  It is the publishing decision, kept beside the site rather than inferred from the spec: a new
+  endpoint in the spec appears in the reference only once it is added here.
+*/
+function readPublished(): PublishedGroup[] {
+  return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'lib/reference-nav.json'), 'utf8')) as PublishedGroup[];
 }
 
 export function loadSpec() {
@@ -188,14 +169,13 @@ export function loadSpec() {
   if (cache && mtime === cachedAt) return cache;
   cachedAt = mtime;
   const raw = loadYaml(fs.readFileSync(SPEC_PATH, 'utf8')) as Spec;
-  const { pages, groups: navGroups } = readPublished();
+  const navGroups = readPublished();
   const ops: Operation[] = [];
   const groups: RefGroup[] = [];
   for (const g of navGroups) {
     const group: RefGroup = { title: g.title, slug: slugify(g.folder), ops: [] };
-    for (const file of g.files) {
-      const pg = pages.find((p) => p.file === file);
-      if (!pg) continue;
+    for (const published of g.ops) {
+      const pg = { ...published };
       // match on path shape, so a renamed path parameter ({importID} vs {import_id}) still resolves
       const shape = (x: string) => x.replace(/\{[^}]+\}/g, '{}');
       const specPath = raw.paths[pg.path] ? pg.path : Object.keys(raw.paths).find((k) => shape(k) === shape(pg.path)) || pg.path;

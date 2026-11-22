@@ -9,6 +9,7 @@ import { pageExtras } from '@/components/mdx/pages';
 import { Toc } from '@/components/shell/toc';
 import { ConsolePage } from '@/components/shell/providers';
 import { GuidePane } from '@/components/guide/pane';
+import { ReportLink } from '@/components/shell/report-link';
 import { RouteBar } from '@/components/guide/route-bar';
 import { routeFor } from '@/lib/guide-route';
 import { Home, type HrefMap } from '@/components/home/home';
@@ -126,6 +127,7 @@ export default async function Page({ params }: Props) {
           <article className="prose">
             <Body components={mdxComponents} />
           </article>
+          <ReportLink path={url} title={d.title} />
           {next && (
             <Link href={next.url} className="nextcard">
               <span><small>Next in the core path</small><b>{next.data.title}</b></span>
@@ -158,5 +160,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const page = source.getPage(slug);
   if (!page) notFound();
-  return { title: page.data.kind === 'home' ? { absolute: 'Anton Docs' } : page.data.title, description: page.data.description };
+  const title = page.data.kind === 'home' ? 'Anton Docs' : page.data.title;
+  return {
+    title: page.data.kind === 'home' ? { absolute: title } : title,
+    description: page.data.description,
+    alternates: { canonical: page.url },
+    openGraph: { title, description: page.data.description, url: page.url },
+  };
 }

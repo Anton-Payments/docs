@@ -10,10 +10,11 @@
   --d-surface:#FFFFFF; --d-sunken:#F6F7F9; --d-sunken-2:#F0F1F4; --d-line:#E7E8EB; --d-line-strong:#C9CCD3;
   --d-ink:#111318; --d-ink-2:#2A2E36; --d-muted:#50545E; --d-faint:#6A6E77; --d-accent:#2B45FF; --d-accent-hover:#1E35E0;
   --bg: #F6F8FB; --surface: #FFFFFF; --sunken: #EFF2F7; --raised: #FFFFFF;
-  --line: #DFE5EE; --line-soft: #EAEEF4; --line-strong: #C8CFDA;
-  --ink: #0A0F1C; --ink-2: #1F2636; --muted: #4A5468; --faint: #646C7E;
-  --accent: #2B45FF; --accent-ink: #1E35E0; --accent-soft: #ECEFFF; --on-accent: #FFFFFF;
-  --link: #2B45FF; --link-hover: #1E35E0;
+  /* the shared names below read from the design system tokens above: one source of truth */
+  --line: var(--d-line); --line-soft: #EAEEF4; --line-strong: var(--d-line-strong);
+  --ink: var(--d-ink); --ink-2: var(--d-ink-2); --muted: var(--d-muted); --faint: var(--d-faint);
+  --accent: var(--d-accent); --accent-ink: var(--d-accent-hover); --accent-soft: #ECEFFF; --on-accent: #FFFFFF;
+  --link: var(--d-accent); --link-hover: var(--d-accent-hover);
   --ok: #047857; --ok-soft: #E2F5EE; --warn: #A16207; --warn-soft: #FEF6E4;
   --bad: #B91C3C; --bad-soft: #FDECEF; --info: #0369A1; --info-soft: #E3F1FA;
   --unknown: #5F6573; --unknown-soft: #EEF0F4;
@@ -42,10 +43,10 @@
   --d-surface:#0E1015; --d-sunken:#161920; --d-sunken-2:#1D2029; --d-line:#262A33; --d-line-strong:#3A3F4B;
   --d-ink:#ECEDEF; --d-ink-2:#D5D8DD; --d-muted:#A6AAB3; --d-faint:#878B94; --d-accent:#8796FF; --d-accent-hover:#A3AEFF;
   --bg: #080C16; --surface: #0E1422; --sunken: #0B101C; --raised: #121A2B;
-  --line: #1D2534; --line-soft: #161D2B; --line-strong: #323C4F;
-  --ink: #EEF1F6; --ink-2: #D5DAE3; --muted: #A3ABBA; --faint: #8790A1;
-  --accent: #8796FF; --accent-ink: #A3AEFF; --accent-soft: #1E2547; --on-accent: #080C16;
-  --link: #8796FF; --link-hover: #A3AEFF;
+  --line: var(--d-line); --line-soft: #161D2B; --line-strong: var(--d-line-strong);
+  --ink: var(--d-ink); --ink-2: var(--d-ink-2); --muted: var(--d-muted); --faint: var(--d-faint);
+  --accent: var(--d-accent); --accent-ink: var(--d-accent-hover); --accent-soft: #1E2547; --on-accent: #080C16;
+  --link: var(--d-accent); --link-hover: var(--d-accent-hover);
   --ok: #34D399; --ok-soft: #0E2B24; --warn: #FBBF24; --warn-soft: #30260E;
   --bad: #FB7185; --bad-soft: #36161F; --info: #38BDF8; --info-soft: #0E2838;
   --unknown: #A3A9B5; --unknown-soft: #1A2130;
@@ -774,3 +775,6 @@ a.e-card:hover { border-color: var(--d-line-strong); color: var(--d-ink); }
 /* skip link: hidden until a keyboard user tabs to it */
 .skip { position: absolute; left: 12px; top: -48px; z-index: 200; padding: 8px 14px; border-radius: 8px; background: var(--d-ink); color: var(--d-surface); font-size: 14px; font-weight: 600; transition: top .15s; }
 .skip:focus { top: 12px; color: var(--d-surface); }
+.report { margin: 64px 0 0; padding-top: 20px; border-top: 1px solid var(--d-line); font-size: 14px; color: var(--d-faint); }
+.report a { color: var(--d-muted); text-decoration: underline; text-underline-offset: 3px; }
+.report a:hover { color: var(--d-ink); }

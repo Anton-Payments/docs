@@ -7,6 +7,7 @@ import { ConsolePage } from '@/components/shell/providers';
 import { OperationDocs, OperationHeader, exampleRequest } from '@/components/reference/operation';
 import { ExampleSwitch } from '@/components/reference/example-switch';
 import { GuidePane } from '@/components/guide/pane';
+import { ReportLink } from '@/components/shell/report-link';
 import { exampleResponse } from '@/lib/echo';
 
 /*
@@ -55,6 +56,7 @@ export default async function OperationPage({ params }: Props) {
             <ExampleSwitch variants={variants} />
             <OperationDocs op={op} />
           </article>
+          <ReportLink path={op.href} title={op.title} />
         </div>
       </main>
       <GuidePane startOpen />
@@ -69,5 +71,5 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { group, op: slug } = await params;
   const op = getOperation(group, slug);
-  return { title: op ? op.title : 'Not found', description: op?.summary };
+  return { title: op ? op.title : 'Not found', description: op?.summary, alternates: op ? { canonical: op.href } : undefined, openGraph: op ? { title: op.title, description: op.summary, url: op.href } : undefined };
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SITE_URL } from '@/lib/site';
 import { Geist, JetBrains_Mono, Unbounded } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { Providers } from '@/components/shell/providers';
@@ -13,9 +14,12 @@ const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', displ
 const unbounded = Unbounded({ subsets: ['latin'], weight: ['600'], variable: '--font-unbounded', display: 'swap' });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { default: 'Anton Docs', template: '%s · Anton Docs' },
-  description: 'Build cross-border payouts on Anton: guides, API reference and a sandbox console.',
+  description: 'Developer docs for Anton: cross-border payouts, and the intelligence that checks each one before it moves.',
   icons: { icon: '/brand/mark.svg' },
+  openGraph: { siteName: 'Anton Docs', type: 'website' },
+  twitter: { card: 'summary' },
 };
 
 // Sets the theme before first paint: the reader's saved choice, else their system setting.

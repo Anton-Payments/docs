@@ -11,7 +11,7 @@ name: Deploy docs preview
 on:
   push:
     branches: [feat/docs-platform]
-    paths: ['site/**', 'openapi-merchant.yaml', 'api-reference/**', 'docs.json', '.github/workflows/deploy-preview.yml']
+    paths: ['site/**', 'openapi-merchant.yaml', '.github/workflows/deploy-preview.yml']
   workflow_dispatch:
 
 permissions:

@@ -5,7 +5,7 @@ name: Docs app
 on:
   pull_request:
     branches: [develop, main]
-    paths: ['site/**', 'openapi-merchant.yaml', 'api-reference/**', 'docs.json']
+    paths: ['site/**', 'openapi-merchant.yaml']
 
 permissions:
   contents: read
