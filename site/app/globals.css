@@ -814,3 +814,9 @@ a.e-card:hover { border-color: var(--d-line-strong); color: var(--d-ink); }
 .nf-start b { font-weight: 600; color: var(--d-ink); }
 .nf-start span { font-size: 13.5px; color: var(--d-muted); }
 @media (max-width: 640px) { .nf { padding-top: 40px; } .nf-start { grid-template-columns: 1fr; } .nf-list a { grid-template-columns: 1fr; } .nf-g { grid-row: auto; } }
+
+/* the page header's Copy Markdown control */
+.copy-md { display: inline-flex; gap: 6px; align-items: center; }
+.copy-md .btn { color: var(--d-muted); font-weight: 560; }
+.copy-md .btn:hover { color: var(--ink); }
+.ref-md { margin-left: auto; }

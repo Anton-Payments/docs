@@ -4,6 +4,8 @@ import { flatten, getOperation, loadSpec, requestExample, responseExample, succe
 import { GuidePane } from '@/components/guide/pane';
 import { exampleResponse } from '@/lib/echo';
 import { ConsolePage } from '@/components/shell/providers';
+import { endpointMarkdown } from '@/lib/page-markdown';
+import { SITE_URL } from '@/lib/site';
 import { OperationHeader, exampleRequest } from '@/components/reference/operation';
 import { TryForm, type FormField } from '@/components/reference/try-form';
 
@@ -37,7 +39,7 @@ export default async function TryPage({ params }: Props) {
       <ConsolePage kind="try" target={null} />
       <main className="main g2 ref" id="content">
         <div className="main-inner">
-          <OperationHeader op={op} view="try" />
+          <OperationHeader op={op} view="try" markdown={endpointMarkdown(op, SITE_URL)} />
           <article className="prose ref-prose">
             <div hidden data-pane="run" data-title={op.title} data-req={JSON.stringify(req)} data-resp={JSON.stringify(response)} />
             <TryForm initial={req} paramFields={paramFields} bodyFields={bodyFields} />
