@@ -1,0 +1,68 @@
+---
+title: Reconcile with transactions
+description: The transactions list is your balance's ledger, newest first. Debits are unsigned in the API and negative in the CSV export.
+kind: guide
+---
+
+Payout events tell you what happened to a payout. Transactions tell you what happened to your balance. Reconcile by matching the two on `payout_id`.
+
+<BeforeYouBegin items={["A credential with access to the payouts surface", "Report-download permission, if you will use the CSV export"]} />
+
+## List movements
+
+<RunStep title="List transactions" method="GET" path="/v1/transactions"
+  query={{ type: "payout", direction: "debit", created_after: "2026-11-01T00:00:00.000Z", limit: "100" }}>
+  Newest first, with ties broken on `id`. `has_more` and `next_cursor` tell you whether another page exists.
+</RunStep>
+
+Each transaction has a `type` (`payin`, `payout`, `fee`, `exchange`, `transfer` or `return`) and a `status` (`completed`, `pending`, `failed` or `returned`). `amount` is unsigned at the currency's precision; `direction` is `credit` for money in and `debit` for money out, and is `null` when it could not be told.
+
+`payout_id` ties a movement to a payout and `exchange_id` to an FX exchange. Both are `null` when there isn't one. `reference` is whatever the movement carries, and `counterparty_name` is set when known. The ledger does not record when a transaction last changed, so `updated_at` equals `created_at`.
+
+## Filter
+
+`type`, `direction`, `status` and `currency` take the values above. `created_after` is inclusive and `created_before` is exclusive. Both must be RFC 3339 UTC with millisecond precision and a `Z` suffix, such as `2026-11-01T00:00:00.000Z`. Anything else is `400 invalid_request` with `param` set.
+
+## Page through
+
+`limit` is 1 to 100 and defaults to 25. Pass `next_cursor` back as `cursor` until it is `null`. The cursor is opaque, so store it and don't build one. A bad `limit` is `400 invalid_limit` and a bad cursor is `400 cursor_invalid`. [Pagination](/concepts/pagination) has the rest.
+
+For one movement, `GET /v1/transactions/{id}` returns it, or `404 resource_missing`.
+
+## Match against your records
+
+<Steps>
+  <Step title="Take a window">
+    Pick a closed range with `created_after` and `created_before`, so two runs of the same window give the same rows.
+  </Step>
+  <Step title="Match on payout_id">
+    For each payout you hold, find its movements. One payout can have more than one movement, a `return` among them, so expect several rows.
+  </Step>
+  <Step title="Check the sign">
+    Sum credits and debits by `direction` and `currency`. Amounts are unsigned, so adding them without the direction gives the wrong total.
+  </Step>
+  <Step title="Chase the differences">
+    A payout with no movement, or a movement with no payout, goes to your own queue. Quote the `id` and the `request_id` to support.
+  </Step>
+</Steps>
+
+## Export a period
+
+`GET /v1/transactions/export` takes the same filters and returns `text/csv`, newest first. Its columns are `id`, `created_at`, `type`, `direction`, `status`, `amount`, `currency`, `reference`, `counterparty`, `payout_id` and `exchange_id`. Debits are written with a negative amount here, unlike the JSON.
+
+The export is a bulk copy of your ledger. It needs the report-download permission, is rate limited per merchant and is audited before any byte is sent. Past 10,000 rows it is refused with `422 export_too_large`: narrow the dates and export again.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={400} code="invalid_request">A filter value that is not valid or a timestamp that does not parse. `param` names it.</ErrorRow>
+  <ErrorRow status={400} code="invalid_limit">`limit` is outside 1 to 100.</ErrorRow>
+  <ErrorRow status={400} code="cursor_invalid">The `cursor` is malformed. Start again from the first page.</ErrorRow>
+  <ErrorRow status={422} code="export_too_large">More than 10,000 transactions match. Narrow the dates.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">No such transaction on your account.</ErrorRow>
+</Errors>
+
+<CardGroup cols={2}>
+  <Card title="Handle returns and failures" href="/guides/handle-returns-and-failures">What each ending does to the payout.</Card>
+  <Card title="Pagination" href="/concepts/pagination">Cursors and limits for every list.</Card>
+</CardGroup>

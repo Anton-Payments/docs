@@ -4,3 +4,9 @@
 node_modules
 Dockerfile.dev
 .dockerignore
+# the docs site image (site/Dockerfile)
+**/node_modules
+site/.next
+site/.source
+.github
+!site/**/*.md

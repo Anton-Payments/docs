@@ -1,0 +1,91 @@
+---
+title: Convert currency
+description: A conversion moves money between two of your own balances. The quote is optional, and a locked one is the only kind that can be executed.
+kind: guide
+---
+
+An FX quote is a price, and an exchange is the act of taking it. Together they turn money in one balance into money in another, at a rate you can hold. A payout across currencies doesn't use them: it is priced with a [pricing quote](/guides/pay-across-currencies), and an `fxq_` ID is never valid there.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "Available balance in the currency you give up", "An account in the currency you receive"]} />
+
+## Name the pair and fix one side
+
+`source_currency` is the currency you give up and `destination_currency` the one you receive. Fix exactly one side with `source_amount` or `destination_amount`, and Anton computes the other. Sending both is a validation error.
+
+Amounts are decimal strings at the currency's precision: two places for USD, none for JPY, six for USDC. More places is `422 amount_precision_invalid`.
+
+You need an account in the destination currency. Without one, an exchange fails with `422 no_buy_account`. [Fund your balance](/guides/fund-your-balance) covers getting one; in the sandbox a deposit creates it.
+
+## Lock the price or only look at it
+
+<Decision>
+  <Choice title="Locked" value="locked: true" fields="stored, expires_at, executable" set={{ locked: true }} picked>
+    The quote is stored with an `expires_at` and can be executed once at its rate until then. This is the default.
+  </Choice>
+  <Choice title="Indicative" value="locked: false" fields="not stored, expires_at: null, not executable" set={{ locked: false }}>
+    A price for display. Nothing is stored, the rate can move, and executing it fails with `422 quote_not_locked`.
+  </Choice>
+</Decision>
+
+For a price with no write at all, `GET /v1/fx/rates` takes the same fields as query parameters and returns an indicative quote with `locked: false`. Fix at most one side; with none, you get the price of one unit of the destination currency. Today the list holds the one quote for your pair.
+
+## Request a quote
+
+<RunStep title="Create an FX quote" method="POST" path="/v1/fx/quotes"
+  headers={{ "Idempotency-Key": "fxq-A-1042" }}
+  body={{
+    source_currency: "USD",
+    destination_currency: "EUR",
+    destination_amount: "500.00",
+    locked: true,
+    metadata: { order_ref: "A-1042" }
+  }}>
+  The quote carries both amounts, the `customer_rate` you get, the `mid_market_rate` it was built from, a `fee` and an `expires_at`. A retry with the same `Idempotency-Key` and body returns the original quote.
+</RunStep>
+
+`markup_basis_points` is the markup on the mid-market rate. A `locked` quote is `active` until it is `used`, `expired` or `cancelled`. An indicative quote is always `active`.
+
+## Execute the exchange
+
+Send the quote's `id` as `quote_id`. A quote executes once, and only before its `expires_at`.
+
+```json POST /v1/fx/exchanges
+{
+  "quote_id": "fxq_dbvm07aukoh6sl1ll14g",
+  "metadata": { "order_ref": "A-1042" }
+}
+```
+
+To skip the quote, send `source_currency`, `destination_currency` and `destination_amount` instead, and Anton quotes and executes in one step. `quote_id` can't be combined with those fields. The one-step form gives you no look at the rate first, so use it when you don't need one.
+
+The exchange has its own ID, starting `fxx_`, and a `status` of `completed`, `pending` or `failed`. It carries the `quote_id`, both amounts and the rate you got. Fetch it with `GET /v1/fx/exchanges/{id}`, or list your exchanges with `GET /v1/fx/exchanges`, filtered by `status` or by a currency on either side.
+
+## Wait for the event
+
+The outcome reaches you as an event, so you needn't poll. `fx.exchange.created`, `fx.exchange.completed` and `fx.exchange.failed` carry the exchange object, and `fx.quote.created` carries the quote. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers subscribing and verifying them.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={404} code="resource_missing">`quote_id` names no quote of yours.</ErrorRow>
+  <ErrorRow status={409} code="quote_already_used">The quote was already executed. Request a new one.</ErrorRow>
+  <ErrorRow status={422} code="quote_expired">The quote passed `expires_at`. Request a new one and execute it straight away.</ErrorRow>
+  <ErrorRow status={422} code="quote_not_locked">The quote was indicative. Create it with `locked: true`, the default.</ErrorRow>
+  <ErrorRow status={422} code="insufficient_balance">The available balance in the source currency can't cover it. Fund it or reduce the amount.</ErrorRow>
+  <ErrorRow status={422} code="no_buy_account">You hold no account in the destination currency.</ErrorRow>
+  <ErrorRow status={422} code="no_funding_account">On a quote: you hold no account in the source currency.</ErrorRow>
+  <ErrorRow status={422} code="amount_precision_invalid">An amount has more decimal places than its currency allows.</ErrorRow>
+  <ErrorRow status={502} code="fx_rates_unavailable">Rates are unavailable for the moment. Retry with the same `Idempotency-Key`.</ErrorRow>
+  <ErrorRow status={503} code="locked_rate_unavailable">A locked rate isn't available right now. Wait for `Retry-After`, then retry.</ErrorRow>
+</Errors>
+
+## Idempotency
+
+Quotes and exchanges both require an `Idempotency-Key`. Build it from your own record so a retry after a timeout returns what you already made instead of converting twice. [Idempotency](/concepts/idempotency) has the rest.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Pay across currencies" href="/guides/pay-across-currencies">Pin the price of a payout with a pricing quote.</Card>
+  <Card title="Create an FX exchange" href="/reference/fx/create-fx-exchange" />
+</CardGroup>

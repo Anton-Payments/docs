@@ -1,0 +1,86 @@
+---
+title: "Capabilities and scopes"
+description: "A call needs both the account capability and the credential scope. A compliance-only account has no payout surface at all."
+kind: concept
+---
+
+Two layers decide what a request can reach:
+
+1. **Account capabilities** are what your account as a whole may do.
+2. **Credential scopes** are what one OAuth client may do inside it. They are validated against your capabilities when the credential is created.
+
+```
+effective access = credential scopes ∩ account capabilities
+```
+
+## The vocabulary
+
+| Value | Covers |
+| --- | --- |
+| `payouts` | Money movement: payouts, batches, beneficiaries, instruments, balances, accounts and funding, FX, pricing, corridors and the sandbox seeders. |
+| `intelligence` | Anton Intelligence: risk evaluations and [verifications](/concepts/verifications). See the [Intelligence overview](/intelligence/overview). |
+
+## Compliance-only accounts
+
+An account can hold only `intelligence`. It buys screening and evaluation without moving money through Anton: every payout-surface endpoint returns `403 capability_required`, so the account cannot create payouts, beneficiaries, instruments, batches or FX exchanges.
+
+Webhooks and reference data (currencies, countries, payment methods) work on every account. Payout events never fire for an account that cannot create payouts.
+
+A compliance-only integration is the [Intelligence quickstart](/intelligence/quickstart): mint a token, `POST /v1/intelligence/evaluations`, read evaluations back. To add payouts to a compliance-only account, contact Anton through [help.antonpayments.com](https://help.antonpayments.com).
+
+## Scopes in tokens
+
+A token carries exactly the scopes its credential was created with, as a space-delimited `scope` claim (RFC 6749 §3.3), echoed in the token response. `POST /oauth/token` has no `scope` request parameter.
+
+```json
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIs...",
+  "token_type": "DPoP",
+  "expires_in": 3600,
+  "scope": "intelligence"
+}
+```
+
+Give compliance tooling an `intelligence` credential and your payment service a `payouts` credential, so a leaked compliance credential cannot move money.
+
+## When a call is refused
+
+Both layers fail with `403 permission_error` and a stable code.
+
+| Code | Layer | Meaning |
+| --- | --- | --- |
+| `capability_required` | Account | Your account does not hold the capability this endpoint needs. Typical for a compliance-only account calling a payout endpoint. |
+| `insufficient_scope` | Credential | Your account holds the capability, but this credential was created without the matching scope. Use a credential that has it. |
+
+```json
+{
+  "error": {
+    "type": "permission_error",
+    "code": "capability_required",
+    "message": "this endpoint requires the \"payouts\" account capability",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#capability_required",
+    "request_id": "req_01JD3XB7Q2"
+  }
+}
+```
+
+Neither code is retryable. The same request fails identically until the capability or the credential changes. See [Errors](/errors#authentication-and-access).
+
+## What each surface needs
+
+| Surface | Needs |
+| --- | --- |
+| Payouts, batches, beneficiaries, instruments, balances, accounts, FX, pricing, corridors, sandbox seeders | `payouts` capability and scope |
+| Intelligence evaluations | `intelligence` capability and scope |
+| Verifications | `intelligence` capability and scope |
+| Intelligence reviews | `intelligence` capability and scope, plus the Reviews API and Webhooks add-on. Exports also need the Audit Pack. Without the add-on the call is `403 module_not_enabled`. |
+| Webhooks, reference data | Any authenticated credential |
+
+## What a credential can never do
+
+Two kinds of operation need a signed-in person, whatever the scope:
+
+- **Approval decisions.** Approving or rejecting a payout needs a human identity, because maker-checker means nothing for a credential.
+- **Reading personal data back.** Beneficiary personal data, verification names and captured documents are dashboard-only, restricted by role and audit-logged on every access. A credential can write personal data (`PATCH /v1/beneficiaries/{id}/pii`) but never read it, so a leaked credential cannot harvest identities.
+
+Responding to an RFI is dashboard-only too, and needs `rfis.respond` (Admin or Operator).

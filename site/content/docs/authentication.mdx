@@ -1,0 +1,168 @@
+---
+title: "Authentication"
+description: "Every call needs an access token and a DPoP proof signed with your private key, so a stolen token cannot be used on its own."
+kind: guide
+---
+
+Every `/v1` call carries two things: an access token in `Authorization`, and a DPoP proof in `DPoP`, signed with your private key for that one method and URL. The scheme is `DPoP`, not `Bearer`; a Bearer request is refused. Static API keys are not accepted on `/v1`.
+
+The token comes from `POST /oauth/token`, using the client credentials the merchant dashboard issued you.
+
+<BeforeYouBegin items={["A client_id and client_secret from the merchant dashboard", "Your DPoP private key, as the dashboard gave it to you", "A clock within 60 seconds of UTC"]} />
+
+## Know your credentials
+
+The dashboard creates the credential and generates an ES256 or Ed25519 DPoP keypair in your browser, so the private half never leaves your device. The secret is shown once. Store it and the private key in a secrets manager, and pass them to your service as environment variables or a mount.
+
+- `client_id` looks like `ant_oc_<env>_<32hex>`. It is public.
+- `client_secret` looks like `ant_ocs_<env>_<48hex>`. It cannot be shown again.
+- The public half of your key is registered with Anton, and every token you mint is bound to it.
+
+Each credential also carries scopes, `payouts` and `intelligence`, checked against your account's capabilities when the credential is created. A call outside the credential's scopes is `403 insufficient_scope`. A call outside your account's capabilities is `403 capability_required`. [Capabilities and scopes](/concepts/capabilities) has the detail.
+
+Sandbox credentials belong to `api.antonpayments.dev` and production credentials to `api.antonpayments.com`. A sandbox client used in production is a `403`.
+
+## Mint a token
+
+The token request is the one call that has no access token yet, so its proof has no `ath` claim. Everything else about the proof is the same as on any other call: `htm` is `POST` and `htu` is the token URL.
+
+<RunStep title="Mint an access token" method="POST" path="/oauth/token"
+  headers={{ "Authorization": "Basic $CLIENT_CREDENTIALS", "Content-Type": "application/x-www-form-urlencoded" }}
+  body={{ grant_type: "client_credentials" }}>
+  `CLIENT_CREDENTIALS` is `base64(client_id:client_secret)`. Sending `client_id` and `client_secret` as form fields is also accepted.
+</RunStep>
+
+`grant_type` must be `client_credentials`. There is no scope parameter. The token carries exactly the scopes your credential was created with, and `scope` in the response lists them, space-separated.
+
+`expires_in` is in seconds. A token lasts 1 hour in production and staging and 8 hours in sandbox. There are no refresh tokens: when it runs out, call the endpoint again with your secret.
+
+## Sign every call
+
+Send both headers on every `/v1` call:
+
+```http
+Authorization: DPoP <access_token>
+DPoP: <proof JWT, fresh per request>
+```
+
+The proof is a JWT with `typ` `dpop+jwt`. Its header carries your public key as `jwk`, and it must be the key registered with Anton. Its claims are:
+
+- `htm`, the HTTP method.
+- `htu`, the URL with scheme, host and path only. Strip the query and the fragment.
+- `iat`, a Unix timestamp within 60 seconds of Anton's clock, either way.
+- `jti`, a unique ID. A `jti` seen again within five minutes is rejected.
+- `ath`, `base64url(SHA-256(access_token))`. Every call except the token request has it.
+
+The script below mints a token and lists payees against sandbox. It shells out to `openssl`, `jq` and a Python helper that converts the signature format. Use a JOSE library in production.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+API=https://api.antonpayments.dev
+CLIENT_ID="${ANTON_CLIENT_ID:?missing}"
+CLIENT_SECRET="${ANTON_CLIENT_SECRET:?missing}"
+PRIV_PEM="${ANTON_PRIVATE_KEY_PEM:?path to your PKCS#8 EC private key}"
+
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+sha256_b64url() { openssl dgst -sha256 -binary | b64url; }
+
+# Build a DPoP proof. ath_b64 is empty for the token request.
+build_proof() {
+  local method="$1" url="$2" ath_b64="${3:-}"
+
+  # Extract public key (x, y) from the PEM.
+  local raw_hex x_hex y_hex
+  raw_hex=$(openssl ec -in "$PRIV_PEM" -pubout -outform DER 2>/dev/null \
+            | tail -c 65 | xxd -p -c 999)
+  x_hex=${raw_hex:2:64}
+  y_hex=${raw_hex:66:64}
+  local x y
+  x=$(echo "$x_hex" | xxd -r -p | b64url)
+  y=$(echo "$y_hex" | xxd -r -p | b64url)
+
+  local header claims
+  header=$(printf '{"typ":"dpop+jwt","alg":"ES256","jwk":{"kty":"EC","crv":"P-256","x":"%s","y":"%s"}}' "$x" "$y" | b64url)
+  if [ -n "$ath_b64" ]; then
+    claims=$(printf '{"jti":"%s","htm":"%s","htu":"%s","iat":%d,"ath":"%s"}' \
+             "$(uuidgen)" "$method" "$url" "$(date +%s)" "$ath_b64" | b64url)
+  else
+    claims=$(printf '{"jti":"%s","htm":"%s","htu":"%s","iat":%d}' \
+             "$(uuidgen)" "$method" "$url" "$(date +%s)" | b64url)
+  fi
+  local signing_input="$header.$claims"
+  local sig_der sig_p1363
+  sig_der=$(printf '%s' "$signing_input" | openssl dgst -sha256 -sign "$PRIV_PEM" -binary)
+  # Convert ASN.1 DER signature to IEEE P1363 (r || s, 64 bytes for P-256).
+  sig_p1363=$(printf '%s' "$sig_der" | python3 -c "
+import sys
+from asn1crypto import core
+data = sys.stdin.buffer.read()
+seq = core.Sequence.load(data)
+r = int(seq[0]).to_bytes(32, 'big')
+s = int(seq[1]).to_bytes(32, 'big')
+sys.stdout.buffer.write(r + s)
+" | b64url)
+  printf '%s.%s' "$signing_input" "$sig_p1363"
+}
+
+# 1. Mint a token.
+TOKEN_PROOF=$(build_proof POST "$API/oauth/token")
+TOKEN_RESP=$(curl -fsS -X POST "$API/oauth/token" \
+  -u "$CLIENT_ID:$CLIENT_SECRET" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "DPoP: $TOKEN_PROOF" \
+  -d "grant_type=client_credentials")
+ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r .access_token)
+
+# 2. Build a per-request proof (this one carries `ath`) and call /v1.
+ATH=$(printf '%s' "$ACCESS_TOKEN" | sha256_b64url)
+REQ_URL="$API/v1/beneficiaries"
+REQ_PROOF=$(build_proof GET "$REQ_URL" "$ATH")
+
+curl -fsS "$REQ_URL" \
+  -H "Authorization: DPoP $ACCESS_TOKEN" \
+  -H "DPoP: $REQ_PROOF"
+```
+
+## Keep the token
+
+Cache a token until a minute before it expires, then mint another. Minting per call only adds a round trip. If a call returns `401 invalid_token`, mint once and retry; the token may have expired between minting and use. A proof is never cacheable, because a replayed `jti` is refused.
+
+## When it goes wrong
+
+The token endpoint answers in the flat RFC 6749 shape, `{"error": "invalid_client", "error_description": "..."}`, so OAuth libraries can read it. Calls to `/v1` answer with Anton's [error object](/errors), type `authentication_error` or `permission_error`. Branch on `error.code`, and quote the `Request-Id` header to support.
+
+<Errors>
+  <ErrorRow status={400} code="unsupported_grant_type">`grant_type` is not `client_credentials`.</ErrorRow>
+  <ErrorRow status={400} code="invalid_request">The token request is malformed.</ErrorRow>
+  <ErrorRow status={400} code="invalid_dpop_proof">The proof for the token request failed a check. On a `/v1` call the same failure is a `401`.</ErrorRow>
+  <ErrorRow status={401} code="invalid_client">The `client_id` is unknown, the secret is wrong, or the client is revoked.</ErrorRow>
+  <ErrorRow status={401} code="invalid_token">On a `/v1` call: the token is expired, or `ath` does not match the token you sent. Recompute `ath` per request.</ErrorRow>
+  <ErrorRow status={401} code="invalid_dpop_proof">On a `/v1` call: the proof failed a check, such as signature, `htm`, `htu`, `iat` or `jti`. A clock more than 60 seconds off fails `iat`. A repeated `jti` fails as a replay. Sign for the method and URL you are actually calling.</ErrorRow>
+  <ErrorRow status={401} code="static_api_keys_disabled">You sent a static API key. Use client credentials with DPoP.</ErrorRow>
+  <ErrorRow status={403} code="key_environment_mismatch">Credentials from one environment were used against the other.</ErrorRow>
+  <ErrorRow status={403} code="insufficient_scope">The credential was created without the scope this endpoint needs.</ErrorRow>
+  <ErrorRow status={403} code="capability_required">Your account does not hold the capability this endpoint needs.</ErrorRow>
+</Errors>
+
+## Limits of the defence
+
+DPoP stops a stolen token. It does not stop an attacker who takes both your private key and a live token: they can forge proofs until that token expires. Short token lifetimes, one credential per service and keeping the key apart from the token limit the damage.
+
+Anton's signing key rotates with a 24-hour overlap, during which both keys are published. [`GET /.well-known/jwks.json`](/reference/authentication/get-jwks) always returns the trusted set, cached for five minutes.
+
+<Note>
+  Every `/v1` response carries an `Anton-Version` header with the version it was served at. Your account is pinned to the latest version when you create your first OAuth client. Send `Anton-Version` on one request to try another.
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Capabilities and scopes" href="/concepts/capabilities">
+    What each scope and capability opens.
+  </Card>
+  <Card title="Register a payee" href="/guides/register-a-payee">
+    Your first authenticated write.
+  </Card>
+</CardGroup>

@@ -1,3 +1,9 @@
 node_modules/
 .mintlify/
 .DS_Store
+
+# docs site (Next.js)
+site/.next/
+site/.source/
+site/next-env.d.ts
+site/tsconfig.tsbuildinfo

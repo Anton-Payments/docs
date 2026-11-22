@@ -1,0 +1,78 @@
+---
+title: "Sandbox test data"
+description: "Fund a sandbox balance from the API so you can run the payout flow end to end."
+kind: concept
+---
+
+To send a payout you need a balance to pay from. In the sandbox you can credit one with a single API call, with no dashboard step and no real money.
+
+## Fund a balance
+
+`POST /v1/sandbox/deposits` credits your sandbox balance in a currency. The credit is additive: calling it twice credits twice. If you have no account in that currency yet, one is created holding the deposit.
+
+```bash
+curl https://api.antonpayments.dev/v1/sandbox/deposits \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fund-usd-1" \
+  -d '{
+    "currency": "USD",
+    "amount": "1000.00"
+  }'
+```
+
+Response (`201`):
+
+```json
+{
+  "id": "sdp_dbvqrpqukoh470i09vfg",
+  "object": "sandbox_deposit",
+  "livemode": false,
+  "currency": "USD",
+  "amount": "1000.00",
+  "available": "1000.00",
+  "created_at": "2026-11-20T02:18:15.202Z",
+  "updated_at": "2026-11-20T02:18:15.202Z"
+}
+```
+
+`amount` is what you credited and `available` is the balance after the credit.
+
+- The endpoint exists only in the sandbox (`https://api.antonpayments.dev`). In production it answers `404`.
+- It requires an `Idempotency-Key`. See [Idempotency](/concepts/idempotency).
+- The amount must be greater than zero (otherwise `422 amount_invalid`) and use no more decimal places than the currency allows (otherwise `422 amount_precision_invalid`). An amount that is not a decimal string is `400 type_mismatch`.
+- A currency the sandbox cannot fund is `422 unsupported_sandbox_currency`.
+- Calls are rate limited per merchant. See [Rate limits](/concepts/rate-limits).
+
+Check the result with `GET /v1/balances`.
+
+## A typical test run
+
+<Steps>
+  <Step title="Fund a balance">
+    `POST /v1/sandbox/deposits` in the currency you pay from.
+  </Step>
+  <Step title="Create a beneficiary and instrument">
+    Use `POST /v1/beneficiaries` and `POST /v1/instruments`, as in the [payout guide](/guides/send-a-payout).
+  </Step>
+  <Step title="Send a payout">
+    `POST /v1/payouts`, then watch it move through its statuses by [webhook](/concepts/webhook-events) or with `GET /v1/payouts/{id}`.
+  </Step>
+</Steps>
+
+## What is different from production
+
+Rail submission is mocked. Authentication, validation, idempotency, rate limits, webhook signing and the payout statuses behave as in production. The [Sandbox overview](/sandbox/overview) lists the rest.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Sandbox overview" href="/sandbox/overview">
+    Token lifetimes, timing and funding, compared with production.
+  </Card>
+  <Card title="Going live" href="/guides/go-live">
+    New credentials, the production host, and a webhook endpoint that verifies signatures.
+  </Card>
+</CardGroup>

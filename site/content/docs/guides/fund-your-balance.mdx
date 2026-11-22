@@ -1,0 +1,89 @@
+---
+title: Fund your balance
+description: Every currency you hold has its own balance and its own bank details. In the sandbox, one call credits the balance and no bank is involved.
+kind: guide
+---
+
+A payout can only spend what is `available` in the currency it debits. Balances don't convert on their own, so USD never covers a payout that debits EUR. Money for a currency arrives through that currency's account, and the account is where you read the bank details.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "The currency you plan to pay from"]} />
+
+## Read what you hold
+
+[`GET /v1/balances`](/reference/balances/list-balances) returns one balance per currency you hold, in full, with no paging. Fetch a single one with `GET /v1/balances/{currency}`; a currency you hold nothing in is `404 resource_missing`.
+
+```bash Read your balances
+curl "https://api.antonpayments.dev/v1/balances" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+Each balance has three figures. `available` is what new payouts can use. `pending` is reserved for payouts in flight. `total` is the two added together. Amounts are decimal strings at the currency's precision.
+
+Check `available` before you create a payout, not `total`.
+
+## Choose how the money arrives
+
+<Decision>
+  <Choice title="Sandbox: credit it" value="POST /v1/sandbox/deposits" fields="currency, amount, sandbox only" picked>
+    One call adds to your balance and returns the new `available`. The endpoint answers `404` in production.
+  </Choice>
+  <Choice title="Production: bank transfer" value="GET /v1/accounts/{currency}/details" fields="iban, account_number, routing_codes">
+    Read the details for the currency, then pay into them from your bank. Anton credits the balance when the money lands.
+  </Choice>
+</Decision>
+
+## Credit a sandbox balance
+
+Name the `currency` and the `amount` to add. The amount is positive and carries the currency's precision, so `1000.00` for USD and no decimals for JPY.
+
+<RunStep title="Credit your sandbox balance" method="POST" path="/v1/sandbox/deposits"
+  headers={{ "Idempotency-Key": "fund-usd-1" }}
+  body={{
+    currency: "USD",
+    amount: "1000.00"
+  }}>
+  The response carries the `amount` this call added and the balance's `available` after it. The credit is additive, so a second call stacks on the first. A currency you hold no account in gets one, created with the deposit.
+</RunStep>
+
+<Warning>
+  Sandbox only. `POST /v1/sandbox/deposits` exists on `https://api.antonpayments.dev` and answers `404` on the production host. Code that funds itself this way will not run live, so keep it out of anything you deploy.
+</Warning>
+
+A deposit is not stored as a record, so there is no endpoint to fetch it later. Read the balance instead.
+
+## Find the bank details
+
+Production money comes in by transfer to your account in that currency. [`GET /v1/accounts/{currency}/details`](/reference/accounts/get-account-details) returns where to send it.
+
+```bash Read the details for one currency
+curl "https://api.antonpayments.dev/v1/accounts/EUR/details" \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF"
+```
+
+Which fields are set depends on the currency and country: some accounts have an `iban` and a `bic`, others an `account_number` and a `sort_code`, and other schemes appear in `routing_codes`. The rest come back `null`. Show your user only the fields that are set, with the `holder_name` they must pay.
+
+`GET /v1/accounts` lists your accounts, one per currency. An account has the same three figures as a balance, but there `pending` means funds not yet available. For deciding what a payout can spend, read the balance.
+
+## Know when it lands
+
+A transfer that arrives reaches you as a signed `funding.credit` event, with the amount, currency, a masked sender name and the payment reference. Match it to the payment you expected by `reference`, not by sender.
+
+`balance.low` fires when a currency's available balance crosses its threshold. It fires once and stays quiet until the balance recovers, so treat it as a prompt to top up. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers subscribing and verifying them.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={404} code="resource_missing">You hold no account in this currency, so there are no details to read.</ErrorRow>
+  <ErrorRow status={422} code="amount_precision_invalid">The amount has more decimal places than the currency allows.</ErrorRow>
+  <ErrorRow status={422} code="unsupported_sandbox_currency">The currency has no sandbox account. Pick another.</ErrorRow>
+  <ErrorRow status={429} code="rate_limited_sandbox_deposit">Deposits are rate limited per merchant. Wait for `Retry-After`.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Send a payout" href="/guides/send-a-payout">Debit the currency you just funded, then read `available` again.</Card>
+  <Card title="Convert currency" href="/guides/convert-currency">Move money between your own balances.</Card>
+</CardGroup>

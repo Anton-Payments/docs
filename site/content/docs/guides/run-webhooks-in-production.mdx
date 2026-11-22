@@ -1,0 +1,112 @@
+---
+title: Run webhooks in production
+description: A secret rotation keeps signing with the old secret for 24 hours, so you can roll it out without dropping a delivery. The new secret is shown once.
+kind: guide
+---
+
+A receiver that verifies and deduplicates is the start. Keeping it working means three jobs: changing the secret, checking the endpoint before you rely on it, and finding out when deliveries stop arriving. All three have an endpoint under `/v1/webhooks`.
+
+<BeforeYouBegin items={["A subscription (whk_...) and a handler that already verifies signatures", "A secrets manager the handler reads its secret from"]} />
+
+If your endpoint sits behind a firewall, allow Anton's webhook IP addresses. Production sends from a fixed set, listed in the dashboard.
+
+## Rotate the signing secret
+
+Rotating issues a new secret. For 24 hours the old one keeps signing as well, so every delivery in that window carries two `v1=` signatures and a verifier that has not switched yet keeps passing. [Verify webhook signatures](/guides/verify-webhook-signatures) checks every entry, which is why this works.
+
+<RunStep title="Rotate the secret" method="POST" path="/v1/webhooks/{id}/secret/rotate" stepId="rotate"
+  pathParams={{ id: "whk_01" }}
+  headers={{ "Idempotency-Key": "rotate-whk_01-2026-11" }}>
+  The response is the subscription with the new `secret` and `previous_secret_expires_at`, when the old secret stops signing.
+</RunStep>
+
+The secret is in this response and nowhere else. A retry with the same `Idempotency-Key` returns the subscription with `secret` set to `null`, so write the secret to your secrets manager before you do anything else. If you lose it, rotate again with a new key.
+
+Roll the new secret into your handler inside the window. Once deployed, nothing refers to the old one.
+
+<Decision>
+  <Choice title="Planned rotation" value="no query parameter" fields="24-hour overlap" picked>
+    Both secrets sign for 24 hours. Deploy the new one at your own pace and no delivery fails verification.
+  </Choice>
+  <Choice title="Leaked secret" value="immediate=true" fields="no overlap">
+    The old secret stops signing at once. Deliveries to a handler still holding the old secret fail verification and are retried, which is the right cost for a secret someone else may hold. Have the new secret ready to deploy before you call.
+  </Choice>
+</Decision>
+
+For a leak, call the same path with `?immediate=true`.
+
+## Send a test delivery
+
+A test delivery tells you the URL is reachable and your verification passes, before a real payout depends on it. It is an event of type `test`, signed like any other, with a payout-shaped `data.object` marked `"test": true`.
+
+<RunStep title="Queue a test event" method="POST" path="/v1/webhooks/{id}/test" stepId="test"
+  pathParams={{ id: "whk_01" }}
+  headers={{ "Idempotency-Key": "test-whk_01-1" }}>
+  The answer is `202` and the event in its pending state. It does not say whether your server accepted it.
+</RunStep>
+
+The outcome is in the delivery record. List it with `GET /v1/webhooks/{id}/deliveries` and read `status` and `response_status`. The call is rate limited, and it returns `409 webhook_subscription_inactive` for a deactivated subscription. Activate it first.
+
+Test sends do not replace watching real traffic.
+
+## Read the delivery record
+
+Each attempt to reach your endpoint is a `webhook_delivery`. It holds what your server answered (`response_status` and up to 4 KB of `response_body`), the headers Anton sent with the signature in them, `attempts` against `max_attempts`, and `next_retry_at`.
+
+`status` is one of four values.
+
+| `status` | Meaning |
+| --- | --- |
+| `pending` | Not tried yet. |
+| `success` | Your server answered with a `2xx`. |
+| `failed` | The try failed and another is scheduled for `next_retry_at`. |
+| `abandoned` | Every try failed. Anton does not try again. |
+
+Two lists serve two questions. `GET /v1/webhooks/events/{id}/deliveries` answers where one event went, one record per endpoint it was sent to. `GET /v1/webhooks/{id}/deliveries` answers what one endpoint has been through, newest first, in pages. Deliveries to endpoints you have since deleted are left out of the first unless you pass `include_deleted=true`.
+
+`error` says why the last try failed, and `response_body` often says why your server refused it. When the failure is a signature failure, the stored request headers let you recompute the signature from a real attempt.
+
+## Recover what you missed
+
+There is no endpoint to replay a delivery. A delivery that was `abandoned` stays that way, so recovery is on your side:
+
+1. List events with `GET /v1/webhooks/events`, filtered by `created_after` and, if you want one kind, `type`. Without `created_after` the list reaches back to the first one.
+2. Compare it with what you applied, by event `id`.
+3. Apply the gaps with the same idempotent handler your live path uses.
+
+Timestamps for `created_after` are RFC 3339 UTC with milliseconds and a `Z`, such as `2026-11-01T00:00:00.000Z`. Anything else is `400 invalid_request`.
+
+To catch a gap early, run this on a schedule rather than after an incident. For a payout you can also read its current state with `GET /v1/payouts/{id}`, which returns the same object an event carries.
+
+## Watch the endpoint's health
+
+`GET /v1/webhooks/summary` counts the last 30 days of outcomes for every live endpoint. Add `subscription_id` for one.
+
+The fields are `delivered`, `retrying`, `abandoned` and `pending`, plus `last_delivered_at`. It also returns the retry schedule your deliveries follow: `max_attempts` and `retry_after_seconds`, the wait in seconds before each retry.
+
+A rising `abandoned`, or a `last_delivered_at` that has stopped moving while you are sending payouts, is the signal. Alert on both. Then read the endpoint's delivery list to see what your server answered.
+
+## Pause and resume
+
+`POST /v1/webhooks/{id}/deactivate` pauses deliveries. The subscription keeps its URL, events and secret, and `POST /v1/webhooks/{id}/activate` resumes it. Use it when you must take the receiver down on purpose. Both need an `Idempotency-Key`.
+
+Changing the URL or the event list needs no pause: [`PATCH /v1/webhooks/{id}`](/reference/webhooks/update-webhook-subscription) changes only what you send. `metadata` replaces the whole map.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={409} code="webhook_subscription_inactive">You sent a test delivery to a deactivated subscription. Activate it, then send again.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">No such subscription on your account. Check the `whk_` id and which environment you called.</ErrorRow>
+  <ErrorRow status={429} code="rate_limit_exceeded">Wait the seconds in `Retry-After`, then retry with the same `Idempotency-Key`.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Go live" href="/guides/go-live">
+    The checks sandbox cannot prove, with webhooks among them.
+  </Card>
+  <Card title="Webhook events" href="/concepts/webhook-events">
+    The full catalog and the envelope every delivery shares.
+  </Card>
+</CardGroup>

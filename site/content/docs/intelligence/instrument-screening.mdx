@@ -1,0 +1,73 @@
+---
+title: "Screen an account or wallet"
+description: "A clean payee can still own a bad account. Screen the bank account, IBAN, card or wallet the money will go to, and get the verdict in the response."
+kind: guide
+---
+
+`instrument_screening` evaluates one payment instrument alongside the person or business that owns it. It decides before it answers. It does not store the instrument; to save one for payouts, see [Register an instrument](/guides/register-an-instrument).
+
+<BeforeYouBegin items={["Sandbox credentials with the intelligence scope", "The owner's name, and the account, IBAN, card details or wallet address"]} />
+
+## Say what kind of instrument it is
+
+`instrument.type` is `bank_account`, `crypto_wallet`, `card` or `iban`, and the details go in the block of the same name. A mismatch, such as `type: "crypto_wallet"` with a `bank_account` block, is a `422 validation_error`. The `entity` is still required: it is the owner, with `type` set to `person` or `business`.
+
+<Decision>
+  <Choice title="Crypto wallet" value='type: "crypto_wallet"' fields="network, address" set={{ instrument: { type: "crypto_wallet", country: "US", currency: "BTC", crypto_wallet: { network: "bitcoin", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" } } }} picked>
+    `network` is `bitcoin`, `ethereum`, `solana`, `polygon`, `tron` or `other`.
+  </Choice>
+  <Choice title="Bank account" value='type: "bank_account"' fields="routing_number, account_number, account_type" set={{ instrument: { type: "bank_account", country: "US", currency: "USD", bank_account: { routing_number: "021000021", account_number: "000123456789", account_type: "checking" } } }}>
+    `account_type` is `checking`, `savings`, `business_checking` or `other`.
+  </Choice>
+</Decision>
+
+An IBAN goes in `iban` as `iban` and an optional `bic`. A card goes in `card` as a `fingerprint`, `bin` or `last4`, never a full card number. If the details already sit in your vault, send `vault_token_id` on the instrument instead of the block. `country` and `currency` take uppercase codes, such as `US` and `BTC`.
+
+## Send the evaluation
+
+<RunStep title="Screen the instrument" method="POST" path="/v1/intelligence/evaluations"
+  headers={{ "Idempotency-Key": "intel-wallet-john-doe-001" }}
+  body={{
+    use_case: "instrument_screening",
+    entity: {
+      type: "person",
+      reference_id: "payee-john-doe",
+      name: "John Doe",
+      country: "US"
+    },
+    instrument: {
+      type: "crypto_wallet",
+      country: "US",
+      currency: "BTC",
+      crypto_wallet: {
+        network: "bitcoin",
+        address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+      }
+    }
+  }}>
+  The response is `201`, already decided.
+</RunStep>
+
+Account numbers and wallet addresses are used in memory for the evaluation. Anton keeps redacted evidence, not the values, as [PII and vault tokens](/intelligence/pii-and-vault) explains.
+
+## Read the result
+
+`decision`, `score`, `tier`, `reasons` and `required_actions` work as they do for a payee; [Decisions](/intelligence/decisions) lists the values. A `review` on an account you were about to pay is a reason to hold the payout, not to retry with different details.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="validation_error">The `instrument` block is missing, or its nested payload does not match `instrument.type`.</ErrorRow>
+  <ErrorRow status={400} code="unknown_field">A field is outside the contract. The contract is strict at every depth.</ErrorRow>
+</Errors>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Screen a payout" href="/intelligence/payout-screening">
+    Add the amount and corridor to the same subject.
+  </Card>
+  <Card title="Register an instrument" href="/guides/register-an-instrument">
+    Keep the account for payouts once it is clean.
+  </Card>
+</CardGroup>

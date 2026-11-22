@@ -1,0 +1,74 @@
+---
+title: "API conventions"
+description: "Dates version the API, amounts are strings, and every unknown field or parameter is rejected instead of ignored."
+kind: concept
+---
+
+The API is REST over HTTPS, with JSON in and out. Amounts are decimal strings, never floats, so nothing rounds on the way.
+
+## Base URLs
+
+| Environment | Base URL |
+|---|---|
+| Production | `https://api.antonpayments.com` |
+| Sandbox | `https://api.antonpayments.dev` |
+
+## Authentication
+
+Every request carries a DPoP-bound OAuth 2.0 access token and a fresh DPoP proof. Static API keys are not accepted. Mint a token and sign proofs as [Authentication](/authentication) shows.
+
+```http
+Authorization: DPoP <access_token>
+DPoP: <proof JWT, fresh per request>
+```
+
+Effective access is `scopes ∩ capabilities`. A call outside your account's capabilities fails with `403 capability_required`, and a call outside the credential's scopes with `403 insufficient_scope`. See [Capabilities and scopes](/concepts/capabilities).
+
+## Conventions
+
+- **Versioning.** The API is versioned by date, for example `2026-12-01`. Your account is pinned to the latest version when you create your first OAuth client, and every `/v1` response carries an `Anton-Version` header with the version it was served at. Send `Anton-Version` on one request to try another version on that call. An unknown version is `400 invalid_api_version`. Webhook events are rendered at your pinned version. New routes, optional fields, enum values, error codes, event types and headers can appear in any version, so ignore what you do not recognise.
+- **JSON.** A request with a body must be `application/json`, otherwise it is `400 invalid_content_type`. The upload endpoints take `multipart/form-data` instead. Field names are `snake_case`. Unknown body fields, unknown query parameters and wrong types are rejected with `400`, never ignored.
+- **Amounts.** Decimal strings in the currency's precision: `"1234.56"`, not `1234.56`. More decimal places than the currency allows is `422 amount_precision_invalid`. Responses always render the full precision (`"10.50"`, never `"10.5"`). `GET /v1/currencies` lists each currency's `precision`.
+- **Timestamps.** RFC 3339 in UTC with milliseconds and a `Z` suffix: `"2026-11-19T14:03:22.104Z"`. Fields that hold a time end in `_at`.
+- **Resources.** Every object has `id`, `object` (its type name) and `livemode` (`false` in sandbox). Objects you create can carry `metadata`: up to 50 string keys, keys up to 40 characters, values up to 500. Never put personal data in it.
+- **Identifiers.** Prefixed opaque strings such as `pay_...`, `ben_...`, `ins_...`, `bat_...` and `whk_...`. A path ID with the wrong prefix or shape is `400 resource_id_invalid`, with `param` set. A well-formed ID that does not exist, or that belongs to another account, is `404 resource_missing`.
+- **Single resources.** A request for one resource returns the object at the top level, with no `data` wrapper. A delete returns `{"id": "...", "object": "...", "deleted": true}`.
+- **Lists.** Every list is `{"object": "list", "data": [...], "has_more": ..., "next_cursor": ...}`. See [Pagination](/concepts/pagination).
+- **Errors.** Every error has `type`, `code`, `message` and `request_id`. Branch on `code`. See [Errors](/errors).
+- **The spec.** The full OpenAPI description is at [openapi-merchant.yaml](/openapi-merchant.yaml). Use it to generate a client or import the API into Postman.
+
+## Response headers
+
+| Header | On | Meaning |
+| --- | --- | --- |
+| `Request-Id` | Every response | Our identifier for the request (`req_...`), the same value as `error.request_id`. Quote it to support. Anton always generates it. |
+| `Anton-Version` | Every `/v1` response, including `401` | The API version the response was served at. |
+| `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | Every authenticated response, unless the limit could not be checked | Your current rate limit window. See [Rate limits](/concepts/rate-limits). |
+| `Retry-After` | `429` and `503` | Seconds to wait before retrying. |
+| `WWW-Authenticate` | `401` | The challenge: `DPoP realm="anton", algs="ES256 EdDSA"`, plus `error="invalid_token"` or `error="invalid_dpop_proof"` when a credential was sent and refused. See [Errors](/errors#authentication-challenge). |
+| `Idempotent-Replayed` | Replayed responses | `true` when the response replays an earlier request with the same `Idempotency-Key`. See [Idempotency](/concepts/idempotency). |
+
+To correlate a call with your own systems, send `X-Client-Request-Id`: up to 128 characters from `A-Z a-z 0-9 . _ : -`, and anything else is ignored. Anton logs it next to its own ID and never uses it as its own.
+
+## Cross-cutting topics
+
+<CardGroup cols={2}>
+  <Card title="Idempotency" href="/concepts/idempotency">
+    Retry any mutation with `Idempotency-Key`.
+  </Card>
+  <Card title="Pagination" href="/concepts/pagination">
+    Cursors on every list endpoint.
+  </Card>
+  <Card title="Rate limits" href="/concepts/rate-limits">
+    `X-RateLimit-*` headers, and `Retry-After` on a `429`.
+  </Card>
+  <Card title="Errors" href="/errors">
+    Branch on `error.code`. Every code, with its status.
+  </Card>
+  <Card title="Webhook events" href="/concepts/webhook-events">
+    Event types, their payloads and the API version they render at.
+  </Card>
+  <Card title="Webhook signing" href="/concepts/webhook-signing">
+    Verify each delivery before you act on it.
+  </Card>
+</CardGroup>

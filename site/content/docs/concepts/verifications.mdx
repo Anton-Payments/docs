@@ -1,0 +1,167 @@
+---
+title: "Identity verification"
+description: "Your customer completes a hosted flow, Anton screens the result, and your systems never touch their documents or legal name."
+kind: concept
+---
+
+You create a verification subject, Anton mints a **hosted verification link**, and your customer completes the flow: government ID and a selfie for a person, business details plus a flow for each controlling owner for a business. Anton then screens the result and returns a decision.
+
+Identity documents never touch your systems. Anton keeps the legal name only as a vault token reference, and every read returns a **masked** `display_name` (`A•• L••••••`) and a masked `email`.
+
+<Note>
+  Verifications need the `intelligence` account capability and a credential with the `intelligence` scope. A credential without the scope gets `403 insufficient_scope`.
+</Note>
+
+## Verify a person
+
+Create a subject with `type: "person"`. With `delivery: "email"`, Anton emails the hosted link to the subject, attributed to your business name. `delivery` defaults to `manual`.
+
+```bash
+curl https://api.antonpayments.dev/v1/verification-subjects \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: verify-customer-8841" \
+  -d '{
+    "type": "person",
+    "display_name": "Ada Lovelace",
+    "email": "ada@example.com",
+    "external_ref": "customer_8841",
+    "country": "CA",
+    "delivery": "email",
+    "message": "Hi Ada, please verify your identity so we can activate your account.",
+    "link_expires_in_days": 7
+  }'
+```
+
+The response is the subject. Its first verification is in `verifications`, and it carries the one-time `hosted_link`:
+
+```json
+{
+  "id": "vsub_01JD3XB7Q2",
+  "object": "verification_subject",
+  "livemode": false,
+  "status": "created",
+  "type": "person",
+  "display_name": "A•• L••••••",
+  "email": "a***@example.com",
+  "external_ref": "customer_8841",
+  "country": "CA",
+  "current_verification_id": "vrf_01JD3XB7Q3",
+  "verifications": [
+    {
+      "id": "vrf_01JD3XB7Q3",
+      "object": "verification",
+      "livemode": false,
+      "status": "created",
+      "subject_id": "vsub_01JD3XB7Q2",
+      "reason": "initial",
+      "screening": null,
+      "owners": [],
+      "link_expires_at": "2026-11-26T20:26:03.152Z",
+      "completed_at": null,
+      "hosted_link": "https://verify.example.com/v/example",
+      "metadata": {},
+      "created_at": "2026-11-19T20:26:03.152Z",
+      "updated_at": "2026-11-19T20:26:03.152Z"
+    }
+  ],
+  "metadata": { "crm_id": "42" },
+  "created_at": "2026-11-19T20:26:03.152Z",
+  "updated_at": "2026-11-19T20:26:03.152Z"
+}
+```
+
+`metadata` is yours: up to 50 string keys. Send it when you create the subject and it is stored on the subject. Send it when you re-verify and it is stored on the new verification. It comes back on every read.
+
+In this response:
+
+- **`hosted_link` is secret-once.** It appears here and on the resend, regenerate and re-verify responses, and is never readable again. It opens a flow that collects your customer's identity documents, so treat it like a credential.
+- **`status` says whether the email went out.** `sent` means Anton delivered it. `created` means it did not, because you chose `delivery: "manual"` or the environment cannot send email. Deliver the link through your own channel, and never tell your customer to check their inbox on a `created` response.
+- **`display_name` is masked from the first response.** The true name is not retrievable on this surface.
+
+`message` (up to 500 characters) is shown in the delivery email, attributed to your business. It is used for that one send and never stored, because it can carry incidental personal data. `link_expires_in_days` is `7`, `14` or `30`, and defaults to `7`.
+
+## Verify a business
+
+`type: "business"` collects business details first, then cascades to each controlling owner, who completes an individual flow at their own hosted link. The business verification sits in `awaiting_owners` until every controlling owner is approved.
+
+The verification's `owners` array tracks each owner's status. To re-deliver one owner's link, name the owner by `owner_id`:
+
+```bash
+curl https://api.antonpayments.dev/v1/verifications/$VRF_ID/owners/resend \
+  -X POST \
+  -H "Authorization: DPoP $ANTON_ACCESS_TOKEN" \
+  -H "DPoP: $DPOP_PROOF" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: resend-owner-$OWNER_ID-1" \
+  -d '{ "owner_id": "'"$OWNER_ID"'" }'
+```
+
+Name the owner by `email` instead and `deliver: false` returns the link in the response for you to pass on. The `email` must belong to an owner of this verification, or the call is `404`.
+
+## Lifecycle
+
+```
+created → sent → in_progress → processing → approved | declined | review
+                                    ↘ awaiting_owners (business)
+any non-terminal → expired | revoked
+```
+
+| Status            | Meaning                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `created`         | Verification exists, link minted, nothing delivered by Anton.          |
+| `sent`            | Link delivered to the subject by email.                                |
+| `in_progress`     | The subject opened the flow.                                           |
+| `processing`      | Submitted; provider checks running.                                    |
+| `awaiting_owners` | Business only: business case done, owner flows outstanding.            |
+| `review`          | Flagged for manual review.                                             |
+| `approved`        | Verified. Terminal.                                                    |
+| `declined`        | Failed verification. Terminal.                                         |
+| `expired`         | Link or inquiry lapsed unused. Terminal.                               |
+| `revoked`         | You cancelled it. Terminal.                                            |
+
+Subscribe to the [`verification.*` webhook events](/concepts/webhook-events#verification) (`link_sent`, `started`, `approved`, `declined`, `review`, `expired`) or poll `GET /v1/verification-subjects/{id}`.
+
+## Sanctions screening
+
+Every completed verification is screened through Anton Intelligence. The verification's `screening` block carries the outcome, and is `null` until the verification has been screened:
+
+```json
+{
+  "status": "clear",
+  "evaluation_id": "eval_01HX8Z9K0M2N3P4Q5R6S7T8UH1",
+  "score": 140,
+  "tier": "low",
+  "reasons": []
+}
+```
+
+`status` is `clear`, `review` or `pending`. `score` runs from 0 to 1000, higher is worse, and `tier` is `low`, `medium`, `high` or `critical`. Both are `null` until an evaluation is linked. `reasons` are codes from the same fixed list an evaluation uses. The block never lists what was checked. `evaluation_id` resolves at [`GET /v1/intelligence/evaluations/{id}`](/reference/intelligence/get-evaluation).
+
+## Managing links
+
+Pick by what happened to the link.
+
+- **[Resend](/reference/verifications/resend-verification-link)** when the link expired unused or never arrived. It mints a fresh one-time link for the same verification and re-delivers it. It fails with `422` on a terminal verification.
+- **[Regenerate](/reference/verifications/regenerate-verification)** when the link may have been forwarded or exposed. It kills the old link and inquiry at once and opens a new verification with `reason: "regenerated"`.
+- **[Revoke](/reference/verifications/revoke-verification)** when you no longer want the verification. It cancels it for good and expires its link.
+
+To verify someone again, because the details changed or on a refresh cycle, [re-verify](/reference/verifications/reverify-subject). It opens a new verification on the same subject and keeps the history.
+
+## What this API never returns
+
+- `display_name` and `email` are masked on every read, for subjects and owners alike.
+- Reading a true legal name and viewing captured documents exist only in the merchant dashboard, restricted by role, with every access audit-logged.
+- Webhook payloads for verifications carry IDs and statuses, never names, links or document content.
+
+You supplied the name when you created the subject, so your systems already hold what you need. Masking means a leaked credential cannot harvest verified identities.
+
+<Note>
+  Every `POST` verification endpoint requires an `Idempotency-Key` header. See [Idempotency](/concepts/idempotency). Lists are cursor-paginated. See [Pagination](/concepts/pagination).
+</Note>
+
+## Monitoring
+
+`GET /v1/verification-stats` returns totals by outcome, pass rate, median completion minutes and weekly volume, the same aggregates behind the dashboard overview. See the [API reference](/reference/verifications/get-verification-stats).

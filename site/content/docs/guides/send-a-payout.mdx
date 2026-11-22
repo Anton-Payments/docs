@@ -1,0 +1,111 @@
+---
+title: Send a payout
+description: The call returns before the money moves. Everything after that reaches you as a signed event.
+kind: guide
+kicker: Core path · 3 of 3
+---
+
+A payout takes money from your balance to one instrument of one payee, and its ID starts with `pay_`. Anton checks it before any rail sees it, which is why the create call answers at once and the outcome arrives later, by webhook. Polling only tells you the same thing, later.
+
+<BeforeYouBegin items={["A sandbox OAuth client and its DPoP key", "A payee with an active instrument", "Enough balance in the source currency"]} />
+
+## Choose which amount is fixed
+
+Every payout carries both amounts. `source_amount` is what leaves your balance before fees, `destination_amount` is what the payee receives, and `fixed_side` says which one you mean. Anton reprices the other from the corridor at the moment you send.
+
+<Decision>
+  <Choice title="Fix the destination" value='fixed_side: "fixed_destination"' fields="destination_amount is exact" set={{ fixed_side: "fixed_destination" }} picked>
+    The payee gets the invoice amount to the cent. Your cost moves with the rate. This is the default.
+  </Choice>
+  <Choice title="Fix the source" value='fixed_side: "fixed_source"' fields="source_amount is exact" set={{ fixed_side: "fixed_source" }}>
+    Your cost is settled before you send. The payee gets whatever it buys after conversion and fees.
+  </Choice>
+</Decision>
+
+Across currencies, the side you didn't fix is an estimate. Send your best guess; Anton overwrites it and the response carries the real figure. In one currency the two amounts are the same number.
+
+Who pays the fee is a separate call. `fee_bearer` defaults to `merchant`; set it to `beneficiary` and the fee comes out of what the payee receives. To know the fee and rate before you commit, take a [pricing quote](/guides/pay-across-currencies) and send its `id` as `quote_id`. It holds for five minutes and one payout.
+
+## Send the payout
+
+<RunStep title="Create the payout" method="POST" path="/v1/payouts"
+  headers={{ "Idempotency-Key": "payout-PO-8821" }}
+  body={{
+    beneficiary_id: "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
+    instrument_id: "ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2",
+    source_amount: "550.00",
+    source_currency: "USD",
+    destination_amount: "500.00",
+    destination_currency: "EUR",
+    method: "sepa",
+    rail_type: "fiat",
+    fee_bearer: "merchant",
+    fixed_side: "fixed_destination",
+    purpose: "supplier_payment",
+    reference: "PO-8821"
+  }}>
+  It usually comes back `processing`, because screening starts as the payout is created, or `on_hold` if it goes to review. When your own approval rules want a second person, it moves to `pending_approval` after screening.
+</RunStep>
+
+The fields that aren't obvious:
+
+- `method` is how this payout travels, such as `sepa`, `ach`, `swift` or `faster_payment`. It isn't the instrument's `method`, and the two don't have to match.
+- `rail_type` is a hint, not an order. Anton can route around a rail that is down for the corridor.
+- `purpose` is a compliance code like `supplier_payment`. `reference` is yours, up to 100 characters, and it reaches the payee wherever the rail carries one.
+- `source_currency` can be left out. It falls back to your account's default currency.
+
+Amounts are decimal strings, and they carry at most the currency's precision: 2 places for USD, 0 for JPY, 6 for USDC. More places is `422 amount_precision_invalid`. Responses always show exactly that many places.
+
+If a person in your product pressed the button, send `session` with their IP, timezone and user agent as your edge saw them. None of it can fail the payout; only a malformed `ip` is rejected, and the rest is graded in `session_quality`. A payout that sits in a believable session is less likely to be held.
+
+## What happens next
+
+Anton owns the payout until the rail has it. From `sent` on, the bank or the chain sets the pace, and every `status` change reaches you as its own event.
+
+<Lifecycle states="processing, sent, completed"
+  notes="Checked, then submitted | Rail confirmed dispatch | Payee received funds"
+  edges="Rail dispatches | Rail settles">
+  Statuses that can branch off this path: `pending_approval` (a second person on your team must approve), `on_hold`, `failed`, `returned` and `cancelled`. `completed`, `returned`, `cancelled` and `failed` are final. A payout that reads `created` is in progress too.
+</Lifecycle>
+
+`on_hold` is a review, and it never comes with a reason. Show your user a pending state, not an error. It resumes as `processing` or ends as `cancelled` or `failed`, and nobody can cancel it while it waits.
+
+`returned` means the money left and came back; your user was not paid, and the whole amount, fee included, returns to your balance. `failed` carries a `failure_code`: `cannot_be_processed`, `provider_rejected`, `provider_unavailable`, `insufficient_funds` or `beneficiary_not_found`. Read an unknown code as a plain failure and an unknown status as still moving, and new values will never break you.
+
+The events worth a handler: `payout.completed`, `payout.failed`, `payout.returned`, `payout.on_hold`, `payout.approval_required` and `payout.cancelled`. [Track payouts with webhooks](/guides/track-payouts-with-webhooks) covers receiving them.
+
+## Cancel a payout
+
+Cancel works until Anton hands the payout to a rail: from `created`, from `pending_approval`, and early in `processing`. The payout doesn't show whether it has been submitted yet, so a `processing` payout is worth trying and may answer `409`. Call [`POST /v1/payouts/{id}/cancel`](/reference/payouts/cancel-payout) with an `Idempotency-Key` and no body, and the amount, fee and buffer all come back. A held payout answers `409 payout_on_hold`; one already on its way answers `409 payout_not_cancellable` and can only finish.
+
+## When it goes wrong
+
+<Errors>
+  <ErrorRow status={422} code="insufficient_balance">Your balance cannot cover the payout. Fund the account and retry with a new key.</ErrorRow>
+  <ErrorRow status={422} code="amount_precision_invalid">An amount has more decimal places than its currency allows. Round to the currency's precision.</ErrorRow>
+  <ErrorRow status={422} code="cannot_be_processed">The payout cannot be processed. The response gives no reason. Contact support with the `request_id`.</ErrorRow>
+  <ErrorRow status={422} code="policy_blocked">Your own approval policy blocks the payout. Review the rule on your account.</ErrorRow>
+  <ErrorRow status={422} code="quote_expired">The quote passed its five minutes. Request a new one.</ErrorRow>
+  <ErrorRow status={422} code="quote_mismatch">The request does not match its quote. Send the quote's currencies and amount.</ErrorRow>
+  <ErrorRow status={409} code="quote_already_used">A quote binds to one payout. Request a new one.</ErrorRow>
+  <ErrorRow status={409} code="payout_on_hold">You tried to cancel a held payout. Wait until the hold ends.</ErrorRow>
+  <ErrorRow status={409} code="payout_not_cancellable">The payout is already with a rail, or finished. It can no longer be cancelled.</ErrorRow>
+  <ErrorRow status={404} code="resource_missing">`beneficiary_id` or `quote_id` names nothing of yours.</ErrorRow>
+</Errors>
+
+## Idempotency
+
+Build the `Idempotency-Key` from your own record, like `payout-PO-8821`, never from a random number. Then a retry after a timeout returns the payout you already made instead of paying twice, marked `Idempotent-Replayed: true`. The same key with a different body is `422 idempotency_key_reused`; `409 idempotency_in_flight` means the first attempt is still running, so wait and resend. Keys last 24 hours, and only a `2xx` answer is stored: a request refused with a `4xx` or `5xx` runs again when you retry it. [Idempotency](/concepts/idempotency) has the rest.
+
+<Note>
+  Match payouts to your books with `reference` and `metadata`, a map of strings. Neither is the place for personal data, and nor is `external_id`.
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Track payouts with webhooks" href="/guides/track-payouts-with-webhooks">
+    Every status above, signed and delivered to your URL.
+  </Card>
+  <Card title="Create a payout" href="/reference/payouts/create-payout" />
+</CardGroup>

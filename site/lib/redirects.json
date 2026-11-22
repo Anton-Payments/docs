@@ -1,0 +1,170 @@
+[
+  {
+    "source": "/introduction",
+    "destination": "/"
+  },
+  {
+    "source": "/capabilities",
+    "destination": "/concepts/capabilities"
+  },
+  {
+    "source": "/how-anton-evaluates-payouts",
+    "destination": "/concepts/how-anton-evaluates-payouts"
+  },
+  {
+    "source": "/guides/manage-beneficiaries",
+    "destination": "/guides/register-a-payee"
+  },
+  {
+    "source": "/guides/handle-webhooks",
+    "destination": "/guides/track-payouts-with-webhooks"
+  },
+  {
+    "source": "/guides/fx-exchange",
+    "destination": "/guides/pay-across-currencies"
+  },
+  {
+    "source": "/guides/crypto-payouts",
+    "destination": "/guides/pay-out-in-stablecoin"
+  },
+  {
+    "source": "/guides/batch-payouts",
+    "destination": "/guides/send-payouts-in-bulk"
+  },
+  {
+    "source": "/guides/going-live",
+    "destination": "/guides/go-live"
+  },
+  {
+    "source": "/guides/verifications",
+    "destination": "/concepts/verifications"
+  },
+  {
+    "source": "/api-reference/introduction",
+    "destination": "/concepts/api-conventions"
+  },
+  {
+    "source": "/api-reference/errors",
+    "destination": "/errors"
+  },
+  {
+    "source": "/api-reference/idempotency",
+    "destination": "/concepts/idempotency"
+  },
+  {
+    "source": "/api-reference/pagination",
+    "destination": "/concepts/pagination"
+  },
+  {
+    "source": "/api-reference/rate-limits",
+    "destination": "/concepts/rate-limits"
+  },
+  {
+    "source": "/api-reference/webhook-events",
+    "destination": "/concepts/webhook-events"
+  },
+  {
+    "source": "/api-reference/webhook-signing",
+    "destination": "/concepts/webhook-signing"
+  },
+  {
+    "source": "/api-reference/ip-allowlist",
+    "destination": "/guides/go-live"
+  },
+  {
+    "source": "/guides/intelligence/:slug",
+    "destination": "/intelligence/:slug"
+  },
+  {
+    "source": "/reference/fx/get-indicative-fx-rate",
+    "destination": "/reference/fx/list-indicative-fx-rates"
+  },
+  {
+    "source": "/api-reference/fx/get-indicative-fx-rate",
+    "destination": "/reference/fx/list-indicative-fx-rates"
+  },
+  {
+    "source": "/reference/fx/execute-fx-exchange",
+    "destination": "/reference/fx/create-fx-exchange"
+  },
+  {
+    "source": "/api-reference/fx/execute-fx-exchange",
+    "destination": "/reference/fx/create-fx-exchange"
+  },
+  {
+    "source": "/reference/instruments/create-instrument-for-beneficiary",
+    "destination": "/reference/instruments/create-instrument"
+  },
+  {
+    "source": "/api-reference/instruments/create-instrument-for-beneficiary",
+    "destination": "/reference/instruments/create-instrument"
+  },
+  {
+    "source": "/reference/beneficiaries/rescore-beneficiary",
+    "destination": "/reference/beneficiaries/rescreen-beneficiary"
+  },
+  {
+    "source": "/api-reference/beneficiaries/rescore-beneficiary",
+    "destination": "/reference/beneficiaries/rescreen-beneficiary"
+  },
+  {
+    "source": "/reference/instruments/list-instruments-for-beneficiary",
+    "destination": "/reference/instruments/list-instruments"
+  },
+  {
+    "source": "/api-reference/instruments/list-instruments-for-beneficiary",
+    "destination": "/reference/instruments/list-instruments"
+  },
+  {
+    "source": "/reference/intelligence/get-evidence",
+    "destination": "/reference/intelligence/get-evaluation"
+  },
+  {
+    "source": "/api-reference/intelligence/get-evidence",
+    "destination": "/reference/intelligence/get-evaluation"
+  },
+  {
+    "source": "/reference/webhooks/get-webhook-secret",
+    "destination": "/reference/webhooks/rotate-webhook-secret"
+  },
+  {
+    "source": "/api-reference/webhooks/get-webhook-secret",
+    "destination": "/reference/webhooks/rotate-webhook-secret"
+  },
+  {
+    "source": "/intelligence/evidence",
+    "destination": "/intelligence/decisions"
+  },
+  {
+    "source": "/api-reference/:group/:slug",
+    "destination": "/reference/:group/:slug"
+  },
+  {
+    "source": "/concepts/ip-allowlist",
+    "destination": "/guides/go-live"
+  },
+  {
+    "source": "/auth",
+    "destination": "/authentication"
+  },
+  {
+    "source": "/payouts",
+    "destination": "/guides/send-a-payout"
+  },
+  {
+    "source": "/beneficiaries",
+    "destination": "/guides/register-a-payee"
+  },
+  {
+    "source": "/batches",
+    "destination": "/guides/send-payouts-in-bulk"
+  },
+  {
+    "source": "/webhooks",
+    "destination": "/guides/track-payouts-with-webhooks"
+  },
+  {
+    "source": "/reports",
+    "destination": "/guides/reconcile-with-transactions"
+  }
+]

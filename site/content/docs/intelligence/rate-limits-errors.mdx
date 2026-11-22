@@ -1,0 +1,72 @@
+---
+title: "Rate limits and errors"
+description: "Intelligence has its own rate limit on top of the account-wide one, and every error comes back in the standard envelope."
+kind: concept
+---
+
+## Rate limits
+
+| Surface | Limit |
+|---|---|
+| `/v1/intelligence/*` | 120 requests a minute per merchant, inside the 100-a-second limit per IP address |
+
+A limited request returns `429`, a `Retry-After` header and the standard error envelope:
+
+```json
+{
+  "error": {
+    "type": "rate_limit_error",
+    "code": "rate_limit_exceeded",
+    "message": "rate limit exceeded, retry after 60 seconds",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#rate_limit_exceeded",
+    "request_id": "req_01JD3XB7Q2"
+  }
+}
+```
+
+Wait for `Retry-After` and add jitter to your backoff. [Rate limits](/concepts/rate-limits) covers the patterns and the `X-RateLimit-*` headers.
+
+## Common errors
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `unknown_field` | 400 | The request has a field outside the contract. `param` names it. |
+| `type_mismatch` | 400 | A field has the wrong JSON type. |
+| `missing_idempotency_key` | 400 | Creates need the `Idempotency-Key` header. |
+| `capability_required` | 403 | Your account does not hold the `intelligence` capability. See [Capabilities and scopes](/concepts/capabilities). |
+| `insufficient_scope` | 403 | The credential was created without the `intelligence` scope. |
+| `validation_error` | 422 | A required field is missing, or an enum, country, date or currency is invalid, or the instrument payload does not match `instrument.type`. `details` lists every failure. |
+| `rate_limit_exceeded` | 429 | Over the limit. Wait for `Retry-After`. |
+
+Every code is in the [error catalog](/errors#error-codes).
+
+## Examples
+
+A field the contract does not define:
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "unknown_field",
+    "message": "unknown field \"subject\"",
+    "param": "subject",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#unknown_field",
+    "request_id": "req_01JD3XB7Q2"
+  }
+}
+```
+
+A credential without the `intelligence` scope:
+
+```json
+{
+  "error": {
+    "type": "permission_error",
+    "code": "insufficient_scope",
+    "message": "this endpoint requires a credential with the \"intelligence\" scope",
+    "doc_url": "https://docs.antonpayments.com/api-reference/errors#insufficient_scope",
+    "request_id": "req_01JD3XB7Q2"
+  }
+}
+```
