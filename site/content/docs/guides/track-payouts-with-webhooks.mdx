@@ -63,7 +63,7 @@ Verify the signature before you read the body as truth. [Verify webhook signatur
 - **Delivery is at least once.** Keep the event ids you have applied and skip a repeat.
 - **Order is not guaranteed.** Events for one payout are dispatched in order, but retries can reorder them at your endpoint. Compare `created_at` with the last event you applied for that payout.
 - **Set your record from `status`.** Events can arrive late or twice. Read `data.object.status`, so applying an event twice leaves the same state.
-- **Final statuses stay final.** `completed`, `returned`, `cancelled` and `failed` end a payout. Never move one out of them because a late event arrived.
+- **Final statuses stay final, with one exception.** `returned`, `cancelled` and `failed` end a payout. A `completed` payout can still become `returned` when the receiving bank bounces it after settlement, so apply a `payout.returned` event to a completed payout. Never move a payout out of any other final status because a late event arrived.
 
 Treat a status you do not know as still in progress, and a `failure_code` you do not know as a plain failure. New values then never break the handler.
 

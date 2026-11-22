@@ -10,7 +10,7 @@ import { useProduct } from './use-product';
 
 /*
   The header: logo, the four sections, search, the Dashboard and the theme. Nothing else.
-  Page tools (the console) live on the page. Sign-in arrives with real sandbox sign-in, not before.
+  Page tools (the code panel) live on the page. Sign-in arrives with real sandbox sign-in, not before.
 */
 export function TopBar() {
   const path = usePathname();

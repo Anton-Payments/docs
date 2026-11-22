@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import { source } from '@/lib/source';
-import { flatten, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
+import { bodyContent, flatten, getOperation, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
 
 /*
   The docs as plain Markdown, for AI tools: every page and every endpoint, with the site's
@@ -77,8 +77,20 @@ export function allPages(): PageDoc[] {
   return pages;
 }
 
+/** A URL or path as bare segments: no origin, no leading /md/, no slashes at either end. */
+function cleanPath(url: string) {
+  let s = url.replace(/^https?:\/\/[^/]+/, '');
+  // a loop, not /^\/+|\/+$/: that regex is quadratic on a long run of slashes
+  let a = 0;
+  let b = s.length;
+  while (a < b && s[a] === '/') a++;
+  while (b > a && s[b - 1] === '/') b--;
+  s = s.slice(a, b);
+  return s.startsWith('md/') ? s.slice(3) : s;
+}
+
 export function pageMarkdown(url: string) {
-  const u = '/' + url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/+|\/+$/g, '').replace(/^md\//, '');
+  const u = '/' + cleanPath(url);
   return allPages().find((p) => p.url === u || (u === '/' && p.url === '/'));
 }
 
@@ -121,9 +133,10 @@ export function endpointMarkdown(op: Operation, origin = ''): string {
     parts.push('## Parameters');
     parts.push(params.map((p) => `- \`${p.name}\` (${p.in}, ${typeOf(p.schema)}${p.required ? ', required' : ''})${p.description ? `: ${p.description.replace(/\s*\n\s*/g, ' ')}` : ''}`).join('\n'));
   }
-  const body = op.requestBody?.content?.['application/json']?.schema;
+  const bc = bodyContent(op);
+  const body = bc?.schema;
   if (body) {
-    parts.push('## Request body');
+    parts.push(bc.kind === 'json' ? '## Request body' : `## Request body (\`${bc.mediaType}\`)`);
     parts.push(fields(body, 0, true).join('\n'));
     const ex = requestExample(op);
     if (ex !== undefined) parts.push('Example:\n\n```json\n' + JSON.stringify(ex, null, 2) + '\n```');
@@ -140,4 +153,17 @@ export function endpointMarkdown(op: Operation, origin = ''): string {
   }
   parts.push(`Reference page: ${origin}${op.href}`);
   return parts.filter(Boolean).join('\n\n');
+}
+
+/** The Markdown behind any docs address: a page, or an endpoint at /reference/<group>/<op>. */
+export function markdownFor(url: string, origin = ''): { url: string; markdown: string } | undefined {
+  const c = cleanPath(url);
+  const u = c.endsWith('.md') ? c.slice(0, -3) : c;
+  const ref = u.match(/^reference\/([^/]+)\/([^/]+)$/);
+  if (ref) {
+    const op = getOperation(ref[1], ref[2]);
+    return op ? { url: op.href, markdown: endpointMarkdown(op, origin) } : undefined;
+  }
+  const p = pageMarkdown(u === 'index' ? '/' : u);
+  return p ? { url: p.url, markdown: p.markdown } : undefined;
 }

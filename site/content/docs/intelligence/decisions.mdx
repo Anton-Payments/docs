@@ -22,7 +22,7 @@ The result fields exist only once `status` is `completed`. A `payout_screening` 
       country: "US"
     }
   }}>
-  The `use_case` fixes the required fields. A `payee_registration` needs an `entity.name` or an `entity.vault_token_id`.
+  The `use_case` fixes the required fields. A `payee_registration` needs an `entity.name`, an `entity.vault_token_id` or an `entity.document.number`.
 </RunStep>
 
 For `payout_screening`, poll [`GET /v1/intelligence/evaluations/{id}`](/reference/intelligence/get-evaluation) until `status` is `completed` or `failed`, or subscribe to `intelligence.evaluation.completed` and `intelligence.evaluation.failed`. A failed evaluation carries `failure_reason: evaluation_failed` and no decision. That is not an approval, so do not treat it as one.

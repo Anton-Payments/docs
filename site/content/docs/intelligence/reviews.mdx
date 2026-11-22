@@ -21,7 +21,7 @@ Reviews are your team's own compliance reviews: screenings of yours that need a 
   Each row is a `review` with its `number`, `kind`, `priority` and `due_at`.
 </RunStep>
 
-`kind` is one of `possible_sanctions_match`, `possible_pep_match`, `screening_review`, `manual`, `payout_held_by_rule` or `payee_risk_by_rule`. The last two are opened by your own payout rules, and their money decision is made on the linked approval in the portal, not through this API.
+`kind` is one of `possible_sanctions_match`, `possible_pep_match`, `screening_review`, `manual` or `payout_held_by_rule`. `payout_held_by_rule` is opened by your own payout rules, and its money decision is made on the linked approval in the portal, not through this API.
 
 `source` says where it came from: `evaluation`, `manual`, `monitoring`, `list_screening` or `payout_rule`. For an `evaluation`, `evaluation_id` is the evaluation of yours that opened it.
 

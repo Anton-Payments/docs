@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getOperation, loadSpec, requestExample, requestExamples, responseExample, successStatus } from '@/lib/openapi';
 import { guidesUsing } from '@/lib/guide-usage';
-import { ConsolePage } from '@/components/shell/providers';
+import { endpointMarkdown } from '@/lib/page-markdown';
+import { SITE_URL } from '@/lib/site';
 import { OperationDocs, OperationHeader, exampleRequest } from '@/components/reference/operation';
 import { ExampleSwitch } from '@/components/reference/example-switch';
+import { TryController } from '@/components/reference/try-mode';
+import { tryFields } from '@/lib/try-fields.server';
 import { GuidePane } from '@/components/guide/pane';
 import { ReportLink } from '@/components/shell/report-link';
 import { exampleResponse } from '@/lib/echo';
@@ -13,7 +16,8 @@ import { exampleResponse } from '@/lib/echo';
 /*
   An endpoint, on the same engine as the guides: the code panel starts locked open beside the
   fields, every field name points at its line in the request or the response, and the spec's
-  alternative examples are a switch that rewrites the request.
+  alternative examples are a switch that rewrites the request. Try mode (#try) turns the field
+  rows into inputs in place; /reference/<group>/<op>/try redirects here.
 */
 
 type Props = { params: Promise<{ group: string; op: string }> };
@@ -38,13 +42,9 @@ export default async function OperationPage({ params }: Props) {
 
   return (
     <>
-      <ConsolePage
-        kind="reference"
-        target={{ kind: 'request', title: op.title, request, response }}
-      />
       <main className="main g2 ref" id="content">
         <div className="main-inner">
-          <OperationHeader op={op} view="docs" />
+          <OperationHeader op={op} markdown={endpointMarkdown(op, SITE_URL)} />
           {guides.length > 0 && (
             <p className="ref-used">
               <span>Walked through in</span>
@@ -54,12 +54,13 @@ export default async function OperationPage({ params }: Props) {
           <article className="prose ref-prose">
             <div hidden data-pane="run" data-title={op.title} data-req={JSON.stringify(request)} data-resp={JSON.stringify(response)} />
             <ExampleSwitch variants={variants} />
+            <TryController fields={tryFields(op)} initial={request} storageKey={`anton-try:${op.method.toUpperCase()} ${op.path}`} />
             <OperationDocs op={op} />
           </article>
           <ReportLink path={op.href} title={op.title} />
         </div>
       </main>
-      <GuidePane startOpen />
+      <GuidePane startOpen sheet />
     </>
   );
 }

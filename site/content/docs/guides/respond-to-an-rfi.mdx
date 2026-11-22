@@ -14,9 +14,9 @@ An RFI is a request for information from Anton. A payout or review that is waiti
 
 ## Decide who answers
 
-A person signed in to the dashboard answers: they open the RFI, write the response and attach documents. The `rfis.respond` permission allows it, and the Admin and Operator roles hold it. No API credential can respond, whatever its scope, so your integration needs a step that tells a person to act.
+A person signed in to the dashboard answers: they open the RFI, write the response and attach documents. The `rfis.respond` permission allows it, and the Admin and Operator roles hold it. The Compliance role can also answer, with text only: it cannot attach documents. No API credential can respond, whatever its scope, so your integration needs a step that tells a person to act.
 
-RFIs exist on every account tier, including accounts that hold only the `intelligence` capability. Make sure someone on your team holds the role.
+RFIs exist on every account tier, including accounts that hold only the `intelligence` capability. Make sure someone on your team holds a role that can answer.
 
 ## What your integration can see
 

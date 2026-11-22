@@ -62,7 +62,7 @@ curl "https://api.antonpayments.dev/v1/accounts/EUR/details" \
   -H "DPoP: $DPOP_PROOF"
 ```
 
-Which fields are set depends on the currency and country: some accounts have an `iban` and a `bic`, others an `account_number` and a `sort_code`, and other schemes appear in `routing_codes`. The rest come back `null`. Show your user only the fields that are set, with the `holder_name` they must pay.
+Which fields are set depends on the currency and country: some accounts have an `iban` and a `bic`, others an `account_number` and a `sort_code`, and other schemes appear in `routing_codes`. The rest come back `null`, except `routing_codes`, which is `{}` when empty. Show your user only the fields that are set, with the `holder_name` they must pay.
 
 `GET /v1/accounts` lists your accounts, one per currency. An account has the same three figures as a balance, but there `pending` means funds not yet available. For deciding what a payout can spend, read the balance.
 

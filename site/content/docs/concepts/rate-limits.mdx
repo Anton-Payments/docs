@@ -4,12 +4,13 @@ description: "Every authenticated response tells you your limit, what is left an
 kind: concept
 ---
 
-Two kinds of limit apply. Read the headers on any response to see how close you are to a limit. Back off when you get a `429`.
+Several limits apply. Read the headers on any response to see how close you are to a limit. Back off when you get a `429`.
 
 | Limit | Applies to |
 |---|---|
 | 100 requests a second | Each IP address, across the whole API |
-| 120 requests a minute | Each merchant, on `/v1/intelligence/*` |
+| 1000 requests a minute | Each merchant, across the authenticated API. This is the base limit; it scales from 1x to 20x with your account's rate-limit tier. |
+| 120 requests a minute | Each merchant, on `/v1/intelligence/evaluations*` |
 | 60 requests a minute | Each merchant, on `POST /v1/webhooks/{id}/test` |
 
 A few other endpoints, such as exports and FX quotes, carry tighter limits of their own. These numbers can change; the headers always show the limit that applies, and they are the contract.
@@ -142,4 +143,4 @@ func DoWithBackoff(newReq func() (*http.Request, error)) (*http.Response, error)
 
 ## Needing a higher limit
 
-If sustained traffic keeps hitting your ceiling, contact [help.antonpayments.com](https://help.antonpayments.com) with your use case and expected volume.
+The per-merchant limit can be raised for your account. If sustained traffic keeps hitting your ceiling, contact [help.antonpayments.com](https://help.antonpayments.com) with your use case and expected volume.
