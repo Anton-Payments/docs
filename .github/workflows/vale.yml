@@ -72,10 +72,10 @@ jobs:
         run: |
           set -uo pipefail
           printf -- '---\ntitle: "Vale control"\n---\n\nThis sentence contains a deliberate mispelling.\n' \
-            > guides/_vale_control.mdx
+            > _vale_control.mdx
           rc=0
-          vale guides/_vale_control.mdx > control.log 2>&1 || rc=$?
-          rm -f guides/_vale_control.mdx
+          vale _vale_control.mdx > control.log 2>&1 || rc=$?
+          rm -f _vale_control.mdx
           cat control.log
           # `rc != 0` is NOT enough. Vale exits 1 for alerts and 2 for config
           # or runtime errors, so a broken StylesPath would also be non-zero
