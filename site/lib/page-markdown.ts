@@ -77,8 +77,20 @@ export function allPages(): PageDoc[] {
   return pages;
 }
 
+/** A URL or path as bare segments: no origin, no leading /md/, no slashes at either end. */
+function cleanPath(url: string) {
+  let s = url.replace(/^https?:\/\/[^/]+/, '');
+  // a loop, not /^\/+|\/+$/: that regex is quadratic on a long run of slashes
+  let a = 0;
+  let b = s.length;
+  while (a < b && s[a] === '/') a++;
+  while (b > a && s[b - 1] === '/') b--;
+  s = s.slice(a, b);
+  return s.startsWith('md/') ? s.slice(3) : s;
+}
+
 export function pageMarkdown(url: string) {
-  const u = '/' + url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/+|\/+$/g, '').replace(/^md\//, '');
+  const u = '/' + cleanPath(url);
   return allPages().find((p) => p.url === u || (u === '/' && p.url === '/'));
 }
 
@@ -144,7 +156,8 @@ export function endpointMarkdown(op: Operation, origin = ''): string {
 
 /** The Markdown behind any docs address: a page, or an endpoint at /reference/<group>/<op>. */
 export function markdownFor(url: string, origin = ''): { url: string; markdown: string } | undefined {
-  const u = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/+|\/+$/g, '').replace(/^md\//, '').replace(/\.md$/, '');
+  const c = cleanPath(url);
+  const u = c.endsWith('.md') ? c.slice(0, -3) : c;
   const ref = u.match(/^reference\/([^/]+)\/([^/]+)$/);
   if (ref) {
     const op = getOperation(ref[1], ref[2]);
