@@ -144,6 +144,8 @@ The token endpoint answers in the flat RFC 6749 shape, `{"error": "invalid_clien
   <ErrorRow status={403} code="key_environment_mismatch">A sandbox token was sent to the production API.</ErrorRow>
   <ErrorRow status={403} code="insufficient_scope">The credential was created without the scope this endpoint needs.</ErrorRow>
   <ErrorRow status={403} code="capability_required">Your account does not hold the capability this endpoint needs.</ErrorRow>
+  <ErrorRow status={429} code="rate_limit_exceeded">Too many token requests from your IP address. This body is the standard error envelope, not the OAuth error. Wait for `Retry-After` seconds.</ErrorRow>
+  <ErrorRow status={500} code="server_error">On the token request: the failure is on our side. The body is the OAuth error. Safe to retry.</ErrorRow>
 </Errors>
 
 ## Limits of the defence
