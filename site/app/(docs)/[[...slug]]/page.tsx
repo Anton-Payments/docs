@@ -10,6 +10,8 @@ import { Toc } from '@/components/shell/toc';
 import { ConsolePage } from '@/components/shell/providers';
 import { GuidePane } from '@/components/guide/pane';
 import { ReportLink } from '@/components/shell/report-link';
+import { CopyMarkdown } from '@/components/shell/copy-markdown';
+import { pageMarkdown } from '@/lib/page-markdown';
 import { RouteBar } from '@/components/guide/route-bar';
 import { routeFor } from '@/lib/guide-route';
 import { Home, type HrefMap } from '@/components/home/home';
@@ -92,6 +94,7 @@ export default async function Page({ params }: Props) {
     );
   }
 
+  const md = pageMarkdown(url);
   const section = d.section || sectionOf(url);
   const nextHref = nextOnCorePath(url);
   const next = nextHref ? source.getPage(nextHref.slice(1).split('/')) : null;
@@ -119,6 +122,7 @@ export default async function Page({ params }: Props) {
               <h1>{d.title}</h1>
             </div>
             {pageExtras(d.kind)}
+            {md && <CopyMarkdown markdown={md.markdown} href={`/md${url}`} />}
           </div>
           {d.description && <p className="lede">{d.description}</p>}
           <article className="prose">

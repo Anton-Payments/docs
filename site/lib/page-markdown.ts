@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import { source } from '@/lib/source';
-import { flatten, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
+import { flatten, getOperation, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
 
 /*
   The docs as plain Markdown, for AI tools: every page and every endpoint, with the site's
@@ -140,4 +140,16 @@ export function endpointMarkdown(op: Operation, origin = ''): string {
   }
   parts.push(`Reference page: ${origin}${op.href}`);
   return parts.filter(Boolean).join('\n\n');
+}
+
+/** The Markdown behind any docs address: a page, or an endpoint at /reference/<group>/<op>. */
+export function markdownFor(url: string, origin = ''): { url: string; markdown: string } | undefined {
+  const u = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/+|\/+$/g, '').replace(/^md\//, '').replace(/\.md$/, '');
+  const ref = u.match(/^reference\/([^/]+)\/([^/]+)$/);
+  if (ref) {
+    const op = getOperation(ref[1], ref[2]);
+    return op ? { url: op.href, markdown: endpointMarkdown(op, origin) } : undefined;
+  }
+  const p = pageMarkdown(u === 'index' ? '/' : u);
+  return p ? { url: p.url, markdown: p.markdown } : undefined;
 }

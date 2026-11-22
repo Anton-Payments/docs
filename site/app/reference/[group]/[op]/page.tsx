@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { getOperation, loadSpec, requestExample, requestExamples, responseExample, successStatus } from '@/lib/openapi';
 import { guidesUsing } from '@/lib/guide-usage';
 import { ConsolePage } from '@/components/shell/providers';
+import { endpointMarkdown } from '@/lib/page-markdown';
+import { SITE_URL } from '@/lib/site';
 import { OperationDocs, OperationHeader, exampleRequest } from '@/components/reference/operation';
 import { ExampleSwitch } from '@/components/reference/example-switch';
 import { GuidePane } from '@/components/guide/pane';
@@ -44,7 +46,7 @@ export default async function OperationPage({ params }: Props) {
       />
       <main className="main g2 ref" id="content">
         <div className="main-inner">
-          <OperationHeader op={op} view="docs" />
+          <OperationHeader op={op} view="docs" markdown={endpointMarkdown(op, SITE_URL)} />
           {guides.length > 0 && (
             <p className="ref-used">
               <span>Walked through in</span>

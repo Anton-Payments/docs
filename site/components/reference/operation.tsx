@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { SampleInput } from '@/lib/samples';
 import { flatten, requiresIdempotency, serverUrls, successStatus, type Operation } from '@/lib/openapi';
 import { Md } from './markdown';
+import { CopyMarkdown } from '@/components/shell/copy-markdown';
 import { Fields, ParamTable } from './schema';
 
 export function exampleRequest(op: Operation, body?: unknown): SampleInput {
@@ -17,7 +18,7 @@ export function exampleRequest(op: Operation, body?: unknown): SampleInput {
   return { method: op.method, path: op.path, baseUrl: serverUrls().sandbox, pathParams, query, headers, body };
 }
 
-export function OperationHeader({ op, view }: { op: Operation; view: 'docs' | 'try' }) {
+export function OperationHeader({ op, view, markdown }: { op: Operation; view: 'docs' | 'try'; markdown: string }) {
   const scopes = op.security?.flatMap((s) => Object.values(s).flat()).filter(Boolean) || [];
   return (
     <>
@@ -37,6 +38,7 @@ export function OperationHeader({ op, view }: { op: Operation; view: 'docs' | 't
         <span className="endpoint"><b className={`verb ${op.method}`}>{op.method.toUpperCase()}</b>{op.path}</span>
         {requiresIdempotency(op) && <span className="pill warn">Idempotency-Key required</span>}
         {[...new Set(scopes)].map((s) => <span key={s} className="pill unknown">Scope: {s}</span>)}
+        <span className="ref-md"><CopyMarkdown markdown={markdown} href={`/md${op.href}`} /></span>
       </div>
     </>
   );

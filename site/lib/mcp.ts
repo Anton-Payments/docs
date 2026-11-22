@@ -1,6 +1,6 @@
 import 'server-only';
 import { loadSpec, findOperation } from '@/lib/openapi';
-import { endpointMarkdown, pageMarkdown } from '@/lib/page-markdown';
+import { endpointMarkdown, markdownFor } from '@/lib/page-markdown';
 import { search as searchIndex, snippet } from '@/lib/search-index';
 
 /*
@@ -73,7 +73,7 @@ function callTool(name: string, args: Json, origin: string) {
     return text(r.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.text}`).join('\n\n'));
   }
   if (name === 'read_page') {
-    const p = pageMarkdown(String(args.path || ''));
+    const p = markdownFor(String(args.path || ''), origin);
     if (!p) return text(`No page at "${args.path}". Use search_docs to find the path.`, true);
     return text(p.markdown + `\n\nSource: ${origin}${p.url}`);
   }
