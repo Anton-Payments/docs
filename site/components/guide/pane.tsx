@@ -2,8 +2,8 @@
 
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useConsole, type MockResponse } from '@/components/shell/providers';
-import { LANGS, highlightCode, highlightJson, sample, type Lang, type SampleInput } from '@/lib/samples';
+import { LANGS, highlightCode, highlightJson, sample, type Lang, type MockResponse, type SampleInput } from '@/lib/samples';
+import { TRY_STATE, type TryState } from '@/components/reference/try-mode';
 import { indexLines, lineTokens, proseTokens, splitHtmlLines, type LineIndex } from '@/lib/code-lines';
 import { GUIDE_SET } from '@/components/mdx/decision';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -12,7 +12,12 @@ import { CopyButton } from '@/components/ui/copy-button';
   The code that follows along. Every runnable step and code block in a guide is marked
   [data-pane]; this column shows whichever one the reader has scrolled to, so the prose stays
   clean on the left and the exact thing to send sits on the right. Below 1280px the column is
-  hidden and the same code shows inline.
+  hidden and the same code shows inline; on a reference page (sheet) it becomes a bottom sheet
+  instead, since the reference has no inline code.
+
+  It is the one place a request lives: the bottom console it used to share the screen with is
+  gone. Nothing is sent from the docs yet, and the tile says so: it reports how much of the
+  request the guide has built, what Try mode still needs, or that the response is the example.
 
   The text and the code point at each other. A field named in the prose (inline code) is linked
   to its line: the section you are reading lights its lines, hovering a field lights its own, and
@@ -104,9 +109,10 @@ const linesFor = (idx: LineIndex, toks: Iterable<string>) => {
   return s;
 };
 
-export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
+const WIDE = '(min-width: 1280px)';
+
+export function GuidePane({ startOpen = false, sheet = false }: { startOpen?: boolean; sheet?: boolean }) {
   const path = usePathname();
-  const c = useConsole();
   const [items, setItems] = useState<Item[]>([]);
   const [sec, setSec] = useState(-1);
   const [pinned, setPinned] = useState<{ i: number; sec: number } | null>(null);
@@ -121,6 +127,9 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
   const [tokBySec, setTokBySec] = useState<Map<number, Set<string>>>(new Map());
   const [hotToks, setHotToks] = useState<string[]>([]);
   const [changed, setChanged] = useState<Set<number>>(EMPTY);
+  const [tryState, setTryState] = useState<TryState>({ on: false, missing: [], invalid: [] });
+  const [mod, setMod] = useState('Ctrl+');
+  useEffect(() => { if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) setMod('⌘'); }, []);
   const secRef = useRef(-1);
   secRef.current = sec;
   const codeRef = useRef<HTMLDivElement>(null);
@@ -132,13 +141,38 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
     setSet({});
   }, [path]);
 
-  // with room to spare the panel starts open; Escape folds it away
+  // what Try mode still needs, for the tile
   useEffect(() => {
-    if (startOpen || window.matchMedia('(min-width: 1720px)').matches) setOpen(true);
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
+    const on = (e: Event) => setTryState((e as CustomEvent<TryState>).detail);
+    window.addEventListener(TRY_STATE, on);
+    return () => window.removeEventListener(TRY_STATE, on);
   }, []);
+
+  // with room to spare the panel starts open (a sheet on a narrow screen starts folded);
+  // Escape folds it away and Cmd/Ctrl+J opens or folds it
+  useEffect(() => {
+    if ((startOpen && window.matchMedia(WIDE).matches) || window.matchMedia('(min-width: 1720px)').matches) setOpen(true);
+    const keys = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', keys);
+    return () => window.removeEventListener('keydown', keys);
+  }, []);
+
+  // as a bottom sheet it never covers the field being edited: focusing one folds it
+  useEffect(() => {
+    if (!sheet) return;
+    const focus = (e: FocusEvent) => {
+      if (window.matchMedia(WIDE).matches) return;
+      if ((e.target as HTMLElement).closest?.('main .tf-in, main .tf-file, main .tf-secret')) { setOpen(false); setOverPane(false); }
+    };
+    document.addEventListener('focusin', focus);
+    return () => document.removeEventListener('focusin', focus);
+  }, [sheet]);
 
   // the dock rides above the footer instead of covering it, and steps away only when there is
   // no room left for it at all
@@ -175,7 +209,10 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
 
   // a live choice in the prose rewrites fields of the request, and shows the reader the change
   useEffect(() => {
-    const on = (e: Event) => { setSet((s) => ({ ...s, ...((e as CustomEvent).detail || {}) })); setPeekUntil(Date.now() + 2400); };
+    const on = (e: Event) => {
+      setSet((s) => ({ ...s, ...((e as CustomEvent).detail || {}) }));
+      if (!(e as Event & { quiet?: boolean }).quiet) setPeekUntil(Date.now() + 2400);
+    };
     window.addEventListener(GUIDE_SET, on);
     return () => window.removeEventListener(GUIDE_SET, on);
   }, []);
@@ -363,18 +400,23 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
   }, []);
 
 
-  const run = () => {
-    if (!cur || !req) return;
-    c.setOpen(true);
-    c.send({ kind: 'request', title: cur.title, request: req, response: cur.resp, stepId: cur.stepId });
-  };
+  // the tile says what's true: how far the guide has built the request, what Try mode still
+  // needs, or that the response shown is the example
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const tileText =
+    cur?.kind !== 'run' ? cur?.section || ''
+    : !built.done ? `${built.shown} of ${built.total} fields`
+    : tryState.on && tryState.missing.length ? `${plural(tryState.missing.length, 'required field', 'required fields')} to set`
+    : tryState.on && tryState.invalid.length ? `${plural(tryState.invalid.length, 'field', 'fields')} to fix`
+    : 'Example · not sent';
+  const tileWarn = cur?.kind === 'run' && built.done && tryState.on && (tryState.missing.length > 0 || tryState.invalid.length > 0);
 
   const verb = cur?.req?.method.toLowerCase();
 
   return (
     <aside
       ref={paneRef}
-      className={`gpane ${built.done ? '' : 'building'} ${expanded ? 'x' : ''} ${away ? 'away' : ''} ${settled ? 'settled' : ''}`}
+      className={`gpane ${sheet ? 'sheet' : ''} ${built.done ? '' : 'building'} ${expanded ? 'x' : ''} ${away ? 'away' : ''} ${settled ? 'settled' : ''}`}
       aria-label="Code for this guide"
       onMouseEnter={() => setOverPane(true)}
       onMouseLeave={() => setOverPane(false)}
@@ -400,9 +442,9 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
         <div className="gp-foot">
           {cur?.kind === 'run' ? (
             <>
-              <span className="gp-id">Example values</span>
+              <span className="gp-note">Not sent from the docs. Run it from your code.</span>
               <span style={{ flex: 1 }} />
-              <button type="button" className="btn accent sm" onClick={run}>Open in console <span aria-hidden="true">→</span></button>
+              <span className="gp-keys" aria-hidden="true"><kbd>{mod}J</kbd> fold</span>
             </>
           ) : (
             <span className="gp-id dim">{items.length ? `${active + 1} of ${items.length} on this page` : ''}</span>
@@ -436,9 +478,7 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
               ) : (
                 <span className="gp-ep">{cur.title}</span>
               )}
-              <span className="gp-what">
-                {cur.kind === 'run' ? (built.done ? 'Ready to send' : `${built.shown} of ${built.total} fields`) : cur.section}
-              </span>
+              <span className={`gp-what ${tileWarn ? 'warn' : ''}`} title={tileText}>{tileText}</span>
               <svg className="gp-tog" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
 
             </button>
@@ -447,7 +487,7 @@ export function GuidePane({ startOpen = false }: { startOpen?: boolean }) {
               onClick={() => setOpen((o) => !o)}
               aria-pressed={open}
               aria-label={open ? 'Unlock the code panel' : 'Lock the code panel open'}
-              title={open ? 'Unlock: folds away when you read on (Esc)' : 'Lock open while you read'}
+              title={open ? 'Unlock: folds away when you read on (Esc, or Cmd+J)' : 'Lock open while you read (Cmd+J)'}
             >
               {open ? (
                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>

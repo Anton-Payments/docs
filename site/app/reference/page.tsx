@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { loadSpec } from '@/lib/openapi';
-import { ConsolePage } from '@/components/shell/providers';
 
 export const metadata = { title: 'API reference' };
 
@@ -21,7 +20,6 @@ export default function ReferenceIndex() {
   const version = spec.info?.version;
   return (
     <>
-      <ConsolePage kind="reference" target={null} />
       <main className="main" id="content">
         <div className="main-inner wide">
           <div className="ph"><div className="ph-text"><div className="crumb">API reference{version ? ` · version ${version}` : ''}</div><h1>API reference</h1></div>

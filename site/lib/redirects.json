@@ -166,5 +166,9 @@
   {
     "source": "/reports",
     "destination": "/guides/reconcile-with-transactions"
+  },
+  {
+    "source": "/reference/:group/:op/try",
+    "destination": "/reference/:group/:op#try"
   }
 ]

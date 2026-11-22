@@ -248,17 +248,42 @@ export function exampleFor(s: Schema | undefined, depth = 0): unknown {
   return undefined;
 }
 
-export function requestExample(op: Operation): unknown {
-  const c = op.requestBody?.content?.['application/json'];
+/** The request body's media type, as the samples and Try mode write it. */
+export type BodyKind = 'json' | 'form' | 'multipart';
+const MEDIA: Record<BodyKind, string> = { json: 'application/json', form: 'application/x-www-form-urlencoded', multipart: 'multipart/form-data' };
+
+/** The operation's request body: which kind, its schema and its media entry. JSON wins when several are offered. */
+export function bodyContent(op: Operation) {
+  const c = op.requestBody?.content;
   if (!c) return undefined;
+  for (const kind of ['json', 'form', 'multipart'] as BodyKind[]) {
+    const m = c[MEDIA[kind]];
+    if (m) return { kind, mediaType: MEDIA[kind], schema: m.schema, media: m };
+  }
+  return undefined;
+}
+
+/** A file field's example value: "@" and a file name, which the samples attach. */
+export const exampleFileName = (op: Operation) => `@${op.groupSlug}.csv`;
+
+export function requestExample(op: Operation): unknown {
+  const b = bodyContent(op);
+  if (!b) return undefined;
+  const c = b.media;
   if (c.example !== undefined) return c.example;
   const first = c.examples && Object.values(c.examples)[0];
   if (first?.value !== undefined) return first.value;
+  if (b.kind === 'multipart') {
+    // the parts a request can't go without; a file part is a file name the samples attach
+    const f = flatten(b.schema);
+    const req = new Set(f?.required || []);
+    return Object.fromEntries(Object.entries(f?.properties || {}).filter(([k]) => req.has(k)).map(([k, v]) => [k, flatten(v)?.format === 'binary' ? exampleFileName(op) : exampleFor(v)]));
+  }
   return exampleFor(c.schema);
 }
 
 export function requestExamples(op: Operation): { key: string; summary: string; value: unknown }[] {
-  const c = op.requestBody?.content?.['application/json'];
+  const c = bodyContent(op)?.media;
   if (!c) return [];
   if (c.examples) return Object.entries(c.examples).map(([key, e]) => ({ key, summary: e.summary || key, value: e.value }));
   const v = requestExample(op);
