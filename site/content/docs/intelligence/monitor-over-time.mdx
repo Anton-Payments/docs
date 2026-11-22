@@ -15,7 +15,7 @@ A clear re-screen is recorded and sends nothing. A match opens a review in your 
 
 ## Screen a subject yourself
 
-`use_case` is `monitoring`, and the event type it maps to is `monitoring.evaluate`. `entity` is required, and `entity.type` is `person` or `business`. Beyond that, the evaluation needs searchable `entity` or `instrument` data: an `entity.name`, an `entity.vault_token_id`, or an `instrument`. Without one it is a `422 validation_error`.
+`use_case` is `monitoring`, and the event type it maps to is `monitoring.evaluate`. `entity` is required, and `entity.type` is `person` or `business`. Beyond that, the evaluation needs searchable `entity` or `instrument` data: an `entity.name`, an `entity.vault_token_id`, an `entity.document.number`, or an `instrument`. Without one it is a `422 validation_error`.
 
 Use `reference_id` for your own identifier of the subject, such as `cust_7731`. A name sent in `name` is used in memory and never stored; see [PII and vault tokens](/intelligence/pii-and-vault) to send a token instead.
 

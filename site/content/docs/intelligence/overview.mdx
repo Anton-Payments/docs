@@ -36,7 +36,7 @@ The account also needs the `intelligence` capability. [AI-compliance-only accoun
 }
 ```
 
-For a meaningful evaluation, include at least one searchable input: `entity.name`, `entity.vault_token_id`, `instrument.vault_token_id`, or the matching instrument fields.
+For a meaningful evaluation, include at least one searchable input: `entity.name`, `entity.vault_token_id`, `entity.document.number`, `instrument.vault_token_id`, or the matching instrument fields. An email or phone alone is refused with `422 validation_error`, because sanctions lists cannot be matched on them.
 
 ## Validate before creating
 

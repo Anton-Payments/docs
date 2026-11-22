@@ -12,7 +12,7 @@ The credential needs the `intelligence` scope. [Authentication](/authentication)
 
 ## Say who you are screening
 
-The `entity` is the subject, and `entity.type` is `person` or `business`. Give it something to search on: `name` or `vault_token_id`. Add `country` and, for a person, `birth_date` as `YYYY-MM-DD`. Details you leave out can come back as the reason `information_incomplete`.
+The `entity` is the subject, and `entity.type` is `person` or `business`. Give it something to search on: `name`, `vault_token_id` or `document.number`. Add `country` and, for a person, `birth_date` as `YYYY-MM-DD`. Details you leave out can come back as the reason `information_incomplete`.
 
 <Decision>
   <Choice title="A person" value='type: "person"' fields="birth_date helps" set={{ entity: { type: "person", reference_id: "payee-84012", name: "Maria Testperson", country: "DE", birth_date: "1988-03-14" } }} picked>
