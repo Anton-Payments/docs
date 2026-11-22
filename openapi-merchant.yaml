@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=ba9413eb8014e98fa6139c27b0301d0b39fcbf81a6c0624c6b80ac0aab578db7
+# anton-spec-sync sha256=dd04ba8dad7304e77d4ddebeb8555de838d946439520338404bfcc6e7017e0ef
 openapi: 3.1.0
 
 info:
@@ -691,12 +691,14 @@ paths:
           description: |
             `review_closed`, `decision_pending` (a decision is waiting for approval), or
             `second_approver_unavailable` (nobody else on your team can approve).
+
+            Also `idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`invalid_decision`, `invalid_reason_code`, `note_too_long` or `validation_error`.'
+          description: "`invalid_decision`, `invalid_reason_code`, `note_too_long` or `validation_error`. Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body."
           content:
             application/json:
               schema:
@@ -737,11 +739,13 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`review_not_waiting`.'
+          description: "`review_not_waiting`. Also `idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -791,13 +795,13 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`review_closed` or `note_limit_reached`.'
+          description: "`review_closed` or `note_limit_reached`. Also `idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: '`note_too_long` or `validation_error`.'
+          description: "`note_too_long` or `validation_error`. Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body."
           content:
             application/json:
               schema:
@@ -1097,6 +1101,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1202,6 +1208,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1250,6 +1258,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1447,6 +1457,37 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OAuthError' }
+        '429':
+          description: "Too many token requests from your IP address. The rate limiter answers before the token endpoint runs, so this body is Anton's standard error envelope (`rate_limit_error`, `rate_limit_exceeded`), not the flat OAuth error. Wait for `Retry-After` seconds, then request the token again."
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                rate_limit_exceeded:
+                  value:
+                    error:
+                      type: rate_limit_error
+                      code: rate_limit_exceeded
+                      message: rate limit exceeded, retry after 60 seconds
+                      doc_url: https://docs.antonpayments.com/api-reference/errors#rate_limit_exceeded
+                      request_id: req_01JD3XB7Q2
+        '500':
+          description: "`server_error`: the client could not be authenticated or the token could not be signed, on our side. The body is the flat OAuth error with a generic `error_description` (`internal error` or `could not mint token`). Safe to retry."
+          headers:
+            Cache-Control: { schema: { type: string }, description: '`no-store` per RFC 6749 §5.1.' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+              example: {"error":"server_error","error_description":"internal error"}
 
   /.well-known/jwks.json:
     get:
@@ -2832,6 +2873,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -2859,12 +2902,12 @@ paths:
         The payout usually comes back in status `processing`, because screening starts as it is created. It is `on_hold` when it goes to review. When your own approval policy needs a second person, it moves to `pending_approval` after screening. Treat `created` the same way: in progress. The payout moves on asynchronously, and its status changes arrive as `payout.*` webhook events. Do not poll.
 
         Both `source_amount` and `destination_amount` are required. `fixed_side` (`fixed_source` or `fixed_destination`) says which one is authoritative, and the other is recomputed from current corridor pricing. Amounts are decimal strings with at most the currency's precision (2 places for USD, 0 for JPY, 6 for USDC). More is `422
-        amount_precision_invalid`. To pin the fee and rate, call `POST /v1/pricing/quotes` first and pass its `id` as `quote_id`.
+        amount_precision_invalid`. To pin the fee and rate, call `POST /v1/pricing/quotes` first and pass its `id` as `quote_id`; the payout must match the quote's currencies, amounts, `method`, `rail_type` and destination country, or it is `422 quote_mismatch` naming the field.
 
         A payout that cannot be processed is refused with `422
         cannot_be_processed`, and the response never says why. A payout your own approval policy blocks is `422 policy_blocked`.
 
-        Requires an `Idempotency-Key` header.
+        Requires an `Idempotency-Key` header. A retry with the same key and the same request returns the original result, including the same refusal when the payout was refused, and sends no second `payout.created` event. The same key with a different request is `422 idempotency_key_reused`, however long ago the first call was.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -3181,7 +3224,7 @@ paths:
           description: A page of events.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"pev_01HX8Z9K0M2N3P4Q5R6S7T8UE1","object":"payout_event","livemode":false,"status":"created","payout_id":"pay_dbvqrpqukoh470i0a7j0","previous_status":null,"failure_code":null,"actor_type":"api_key","actor_id":null,"occurred_at":"2026-11-20T02:18:15.241Z","created_at":"2026-11-20T02:18:15.241Z"}],"has_more":true,"next_cursor":"eyJsYXN0X2lkIjoiMSIsImxhc3RfdHMiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9"}
+              example: {"object":"list","data":[{"id":"pev_01HX8Z9K0M2N3P4Q5R6S7T8UE1","object":"payout_event","livemode":false,"status":"created","payout_id":"pay_dbvqrpqukoh470i0a7j0","previous_status":null,"failure_code":null,"actor_type":"api_client","actor_id":null,"occurred_at":"2026-11-20T02:18:15.241Z","created_at":"2026-11-20T02:18:15.241Z"}],"has_more":true,"next_cursor":"eyJsYXN0X2lkIjoiMSIsImxhc3RfdHMiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9"}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3325,6 +3368,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
         '413':
           description: "`file_too_large`: the file exceeds the 8 MB limit."
           content:
@@ -3332,7 +3377,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: "`import_too_large`: the file has more than 1,000 data rows. Split it and upload each part."
+          description: "`import_too_large`: the file has more than 1,000 data rows. Split it and upload each part. Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body."
           content:
             application/json:
               schema:
@@ -3407,6 +3452,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -4527,8 +4574,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
         '422':
-          description: The amount has too many decimal places for the currency (`amount_precision_invalid`) or is not positive, or the currency has no sandbox account (`unsupported_sandbox_currency`).
+          description: "The amount has too many decimal places for the currency (`amount_precision_invalid`) or is not positive, or the currency has no sandbox account (`unsupported_sandbox_currency`). Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body."
           content:
             application/json:
               schema:
@@ -5199,10 +5248,13 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
         '422':
           description: >-
             A field failed validation, an amount is zero or negative (`amount_invalid`), an amount has too many
             decimal places (`amount_precision_invalid`), or no pricing plan applies (`pricing_plan_not_found`).
+            Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body.
           content:
             application/json:
               schema:
@@ -5455,8 +5507,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
         '422':
-          description: An event type is unknown (a retired name points to its replacement), or metadata is over its limits.
+          description: "An event type is unknown (a retired name points to its replacement), or metadata is over its limits. Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body."
           content:
             application/json:
               schema:
@@ -5836,6 +5890,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -5922,11 +5980,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: The subscription is not active (`webhook_subscription_inactive`, `param` is `id`).
+          description: "The subscription is not active (`webhook_subscription_inactive`, `param` is `id`). Also `idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -6004,6 +6064,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -6082,6 +6146,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyKeyReused'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -6195,7 +6263,7 @@ paths:
                               "required_confirmations": null,
                               "risk": {
                                 "score": 640,
-                                "tier": "HIGH"
+                                "tier": "high"
                               },
                               "source_amount": "550.00",
                               "source_currency": "USD",
@@ -6321,7 +6389,7 @@ paths:
                           "required_confirmations": null,
                           "risk": {
                             "score": 640,
-                            "tier": "HIGH"
+                            "tier": "high"
                           },
                           "source_amount": "550.00",
                           "source_currency": "USD",
@@ -7374,11 +7442,14 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
         '422':
           description: >-
             A field failed validation: both or neither amount, a zero or negative amount (`amount_invalid`),
             more decimal places than the currency allows (`amount_precision_invalid`), an unsupported currency (`currency_not_supported`) or no account
             in the source currency (`no_funding_account`).
+            Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body.
           content:
             application/json:
               schema:
@@ -7572,7 +7643,7 @@ paths:
               }
       responses:
         '201':
-          description: The exchange.
+          description: The exchange. Check `status`. The request is accepted with a 201 whether the conversion is `completed`, still `pending` or `failed`, and only `completed` has credited the destination balance.
           content:
             application/json:
               schema:
@@ -7637,6 +7708,7 @@ paths:
           description: >-
             The quote was already executed (`quote_already_used`), or another request with the same
             `Idempotency-Key` is still in flight.
+            Also `idempotency_in_flight`: another request with the same `Idempotency-Key` is still being processed.
           content:
             application/json:
               schema:
@@ -7646,6 +7718,7 @@ paths:
             The quote has expired (`quote_expired`) or is not locked (`quote_not_locked`), a field failed
             validation, the balance is too low (`insufficient_balance`) or there is no account in the
             destination currency (`no_buy_account`).
+            Also `idempotency_key_reused`: the same `Idempotency-Key` was sent with a different request body.
           content:
             application/json:
               schema:
@@ -8830,8 +8903,8 @@ components:
           description: Payee risk score, an integer from 0 to 1000. Higher is always worse. Reflects the payee and recent payouts to it, and is refreshed over time. `null` until the payee's first score, shortly after it is created.
         risk_tier:
           type: [string, 'null']
-          enum: [CRITICAL, HIGH, MEDIUM, LOW, null]
-          description: "Risk band for `risk_score`: `>= 900` CRITICAL, `>= 700` HIGH, `>= 400` MEDIUM, otherwise LOW. `null` while unscored."
+          enum: [critical, high, medium, low, null]
+          description: "Risk band for `risk_score`: `>= 900` `critical`, `>= 700` `high`, `>= 400` `medium`, otherwise `low`. `null` while unscored."
         risk_signals:
           type: array
           maxItems: 2
@@ -9486,8 +9559,9 @@ components:
           pattern: '^pq_[a-zA-Z0-9]+$'
           description: |
             A bindable pricing quote returned by `POST /v1/pricing/quotes`. The payout fee is locked to the
-            quoted value. The quote must be unexpired, unused, and match the payout's currencies and amount,
-            otherwise `422 quote_expired`, `409 quote_already_used` or `422 quote_mismatch`.
+            quoted value. The quote must be unexpired, unused, and match the payout's source and destination currencies,
+            source and destination amounts, `method`, `rail_type` and destination country (the beneficiary's;
+            these last three when the quote was priced with them), otherwise `422 quote_expired`, `409 quote_already_used` or `422 quote_mismatch`.
 
     SessionAssertion:
       type: object
@@ -9736,7 +9810,8 @@ components:
                   description: The payout's risk score, 0 to 1000, higher is worse; `null` until scored.
                 tier:
                   type: [string, 'null']
-                  description: The score's tier (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`); `null` until scored.
+                  enum: [low, medium, high, critical, null]
+                  description: The score's tier; `null` until scored.
               description: The payout's risk score and tier, and nothing else (no reasons or signals).
             - type: 'null'
           description: |
@@ -9852,7 +9927,7 @@ components:
           description: Set when `status` is `failed`, with the values of the payout's `failure_code`.
         actor_type:
           type: string
-          enum: [user, api_key, system]
+          enum: [user, api_client, system]
         actor_id:
           type: [string, 'null']
           description: The user (`usr_...`) for `actor_type` `user`; `null` otherwise.
@@ -10419,9 +10494,11 @@ components:
         `confirmed_match` accepts `identity_confirmed`, `exact_identifier_match`, `customer_confirmed`;
         `no_concern` accepts `activity_explained`, `documents_verified`; `concern_confirmed` accepts `suspicious_activity`, `policy_breach`;
         `other` goes with any decision.
+        `payee_verified` and `payee_not_verified` appear only on decisions about a payout your own rule held;
+        those are made in the portal, so this API returns them but doesn't accept them.
       enum: [dob_needed, id_document_needed, more_information_needed, dob_differs, nationality_differs, id_document_verified,
         different_entity_type, location_differs, identity_confirmed, exact_identifier_match, customer_confirmed,
-        activity_explained, documents_verified, suspicious_activity, policy_breach, other]
+        activity_explained, documents_verified, suspicious_activity, policy_breach, payee_verified, payee_not_verified, other]
     ReviewActor:
       type: object
       required: [type]
@@ -11590,7 +11667,7 @@ components:
         status:
           type: string
           enum: [completed, pending, failed]
-          description: Outcome of the conversion.
+          description: Where the conversion stands. `completed` means the funds have moved, your destination balance is credited and the source amount is debited. `pending` means the conversion has not settled yet; the source amount stays held on your balance and nothing is credited until it settles. `failed` means it did not go through; the held amount is released and nothing is credited. A `pending` exchange moves to `completed` or `failed` on its own, and you are told through the `fx.exchange.completed` or `fx.exchange.failed` webhook event, or you can read it with `GET /v1/fx/exchanges/{id}`.
         quote_id:
           type: [string, 'null']
           description: The locked quote that was executed.
