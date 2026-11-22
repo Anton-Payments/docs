@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
 import { useTheme } from './providers';
 import { MenuIcon, SearchIcon } from './icons';
 import { openSearch } from './search';
@@ -13,6 +14,17 @@ import { openSearch } from './search';
 export function TopBar() {
   const path = usePathname();
   const home = path === '/';
+  // the phone drawer closes on any navigation, and on a tap anywhere outside it
+  useEffect(() => { document.querySelector('.side')?.classList.remove('open'); }, [path]);
+  useEffect(() => {
+    const away = (e: MouseEvent) => {
+      const side = document.querySelector('.side');
+      const t = e.target as HTMLElement;
+      if (side?.classList.contains('open') && !side.contains(t) && !t.closest('.menu-btn')) side.classList.remove('open');
+    };
+    document.addEventListener('click', away);
+    return () => document.removeEventListener('click', away);
+  }, []);
   const tab = path.startsWith('/reference') ? 'ref' : path.startsWith('/changelog') ? 'log' : path.startsWith('/intelligence') ? 'intel' : 'guides';
   return (
     <header className={`top ${home ? 'home' : ''}`}>

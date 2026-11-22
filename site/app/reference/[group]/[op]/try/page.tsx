@@ -31,7 +31,7 @@ export default async function TryPage({ params }: Props) {
   return (
     <>
       <ConsolePage kind="try" target={{ kind: 'request', title: op.title, request: req, response: { status: Number(status), body: responseExample(op, status) ?? {} }, hint: `Send calls ${op.method.toUpperCase()} ${op.path} in your sandbox. No real money moves.` }} />
-      <main className="main">
+      <main className="main" id="content">
         <div className="main-inner wide">
           <OperationHeader op={op} view="try" />
           <TryForm initial={req} paramFields={paramFields} bodyFields={bodyFields} />

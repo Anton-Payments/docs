@@ -31,7 +31,6 @@ export function RunStepClient({ title, request, response, stepId, reference, chi
         <div className="rs-actions">
           <button className="btn sm pri" onClick={run}>Open in console</button>
           {reference && <Link href={reference} className="btn sm">Reference</Link>}
-          <span className="rs-hint">The code is on the right</span>
         </div>
       </header>
       <div className="rb">

@@ -7,7 +7,6 @@ import { source } from '@/lib/source';
 import { mdxComponents } from '@/components/mdx';
 import { pageExtras } from '@/components/mdx/pages';
 import { Toc } from '@/components/shell/toc';
-import { ConsoleButton } from '@/components/shell/console-button';
 import { ConsolePage } from '@/components/shell/providers';
 import { GuidePane } from '@/components/guide/pane';
 import { RouteBar } from '@/components/guide/route-bar';
@@ -118,7 +117,6 @@ export default async function Page({ params }: Props) {
                     ))}
                   </div>
                 )}
-                {!routeFor(url) && <ConsoleButton />}
               </div>
               <h1>{d.title}</h1>
             </div>

@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { ConsoleButton } from '@/components/shell/console-button';
 import { loadSpec } from '@/lib/openapi';
 import { ConsolePage } from '@/components/shell/providers';
 
@@ -23,10 +22,10 @@ export default function ReferenceIndex() {
   return (
     <>
       <ConsolePage kind="reference" target={null} />
-      <main className="main">
+      <main className="main" id="content">
         <div className="main-inner wide">
           <div className="ph"><div className="ph-text"><div className="crumb">API reference{version ? ` · version ${version}` : ''}</div><h1>API reference</h1></div>
-            <div className="row"><a className="btn sm" href="/openapi-merchant.yaml" download>Download OpenAPI</a><ConsoleButton /></div>
+            <div className="row"><a className="btn sm" href="/openapi-merchant.yaml" download>Download OpenAPI</a></div>
           </div>
           <p className="lede">Built from the same OpenAPI file the API is checked against. Generate a client from it and you are coding against the exact contract.</p>
           <div className="row" style={{ marginBottom: 6 }}>
