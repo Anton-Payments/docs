@@ -4,7 +4,7 @@ description: A failed payout did not go through, and a returned one went out and
 kind: guide
 ---
 
-Both are final, and neither can be retried in place. `failed` carries a `failure_code`. `returned` carries none, because the money went out first.
+Neither can be retried in place, and `failed` is final. `returned` is final too, once it is set. `failed` carries a `failure_code`. `returned` carries none, because the money went out first.
 
 <BeforeYouBegin items={["A subscription to payout.failed and payout.returned", "Your own record of each payout, keyed on its id"]} />
 
@@ -40,9 +40,9 @@ A failed payout cannot be revived. Fixing the cause means a new payout, with a n
 
 ## Returned
 
-`returned` is reachable only from `sent`: the funds came back after being sent, and `payout.returned` says the receiving institution returned them. Your user did not get paid.
+`returned` is reachable from `processing`, `sent` or `completed`: the funds came back after being sent, and `payout.returned` says the receiving institution returned them. A bank can bounce a payout after it settled, so a `completed` payout can still become `returned`. Your user did not get paid.
 
-The whole amount comes back to your balance, fee included. The movement shows in the transactions list; [Reconcile with transactions](/guides/reconcile-with-transactions) covers reading it.
+The source amount comes back to your balance. The fee is kept. The movement shows in the transactions list; [Reconcile with transactions](/guides/reconcile-with-transactions) covers reading it.
 
 ## What to tell your user
 

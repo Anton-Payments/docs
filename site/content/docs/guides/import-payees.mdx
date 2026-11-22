@@ -12,7 +12,7 @@ Upload gives you a preview with a verdict per row. You fix what failed, then con
 
 ## Start from the template
 
-Column order and casing matter, and a header row that does not match is `400 invalid_csv`. Download the template for your type and fill it in.
+Headers are matched by name, ignoring case, in any order. A file missing the required columns is `400 invalid_csv`. Download the template for your type and fill it in.
 
 ```bash Download the template
 curl "https://api.antonpayments.dev/v1/beneficiaries/import/template?type=individual" \
@@ -65,7 +65,7 @@ The import is `confirmed` once the call completes, even when some rows failed. T
 ## When it goes wrong
 
 <Errors>
-  <ErrorRow status={400} code="invalid_csv">The file could not be parsed, or its header does not match the individual or business template. Download the template again.</ErrorRow>
+  <ErrorRow status={400} code="invalid_csv">The file could not be parsed, or it is missing the required columns of the individual or business template. Download the template again.</ErrorRow>
   <ErrorRow status={400} code="invalid_file_format">The file is not a `.csv`.</ErrorRow>
   <ErrorRow status={400} code="invalid_file">The `file` field is missing or unreadable.</ErrorRow>
   <ErrorRow status={413} code="file_too_large">The file is over 8 MB. Split it.</ErrorRow>

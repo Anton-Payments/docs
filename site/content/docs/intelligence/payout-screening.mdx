@@ -12,7 +12,7 @@ description: "The one evaluation that never answers on the spot. It returns 202 
 
 The `payout` block is required for this use case, with `amount`, `source_country` and `destination_country`. `amount` is a `value` as a decimal string, such as `"250.00"`, and a `currency` of 3 to 5 uppercase letters: a fiat code or a crypto asset like `USDC`. `rail` is optional and is one of `bank`, `card`, `crypto`, `wallet`, `internal` or `other`. `reference_id` is your own identifier for the payment.
 
-Send the `entity` too, with something searchable: a `name` or `vault_token_id`. You can add an `instrument` when you know where the money goes. Without searchable entity or instrument data the call is a `422`.
+Send the `entity` too, with something searchable: a `name`, `vault_token_id` or `document.number`. You can add an `instrument` when you know where the money goes. Without searchable entity or instrument data the call is a `422`.
 
 <RunStep title="Screen the payout" method="POST" path="/v1/intelligence/evaluations" status="202"
   headers={{ "Idempotency-Key": "intel-payout-001" }}

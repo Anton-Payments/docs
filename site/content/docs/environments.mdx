@@ -9,7 +9,7 @@ kind: concept
 | **Production** | `https://api.antonpayments.com` | 1 hour | Real |
 | **Sandbox** | `https://api.antonpayments.dev` | 8 hours | None. Rails are simulated |
 
-A credential belongs to one environment, and its `client_id` says which: sandbox IDs start `ant_oc_test_` and production IDs `ant_oc_live_`. Send one to the other host and the call is refused with `403 key_environment_mismatch`. Every object carries `livemode`, `true` in production and `false` in the sandbox, so stored data can always say where it came from. [Authentication](/authentication) covers the token and the proof.
+A credential belongs to one environment, and its `client_id` says which: sandbox IDs start `ant_oc_test_` and production IDs `ant_oc_live_`. A sandbox token sent to the production API is refused with `403 key_environment_mismatch`, and a sandbox client asking the production token endpoint for a token gets `403 invalid_client`. A production token sent to the sandbox returns `401 invalid_token`, because each environment signs tokens with its own key. Every object carries `livemode`, `true` in production and `false` in the sandbox, so stored data can always say where it came from. [Authentication](/authentication) covers the token and the proof.
 
 ## Sandbox
 

@@ -8,9 +8,9 @@ kind: concept
 
 | Surface | Limit |
 |---|---|
-| `/v1/intelligence/*` | 120 requests a minute per merchant, inside the 100-a-second limit per IP address |
+| `/v1/intelligence/evaluations*` | 120 requests a minute per merchant, inside the 100-a-second limit per IP address |
 
-A limited request returns `429`, a `Retry-After` header and the standard error envelope:
+Reviews under `/v1/intelligence/reviews` are not part of this limit. A limited request returns `429`, a `Retry-After` header and the standard error envelope:
 
 ```json
 {
