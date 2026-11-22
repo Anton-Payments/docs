@@ -7,7 +7,6 @@ import { source } from '@/lib/source';
 import { mdxComponents } from '@/components/mdx';
 import { pageExtras } from '@/components/mdx/pages';
 import { Toc } from '@/components/shell/toc';
-import { ConsolePage } from '@/components/shell/providers';
 import { GuidePane } from '@/components/guide/pane';
 import { ReportLink } from '@/components/shell/report-link';
 import { CopyMarkdown } from '@/components/shell/copy-markdown';
@@ -88,7 +87,6 @@ export default async function Page({ params }: Props) {
     const entries = latestEntries(3).map((e) => ({ ...e, when: formatDate(e.date) }));
     return (
       <>
-        <ConsolePage kind="home" target={null} />
         <main id="content"><Home entries={entries} hrefs={homeHrefs()} /></main>
       </>
     );
@@ -104,7 +102,6 @@ export default async function Page({ params }: Props) {
 
   return (
     <>
-      <ConsolePage kind={d.kind} target={null} />
       <main className={`main ${twoPane ? 'g2' : ''}`} id="content">
         {routeFor(url) && <RouteBar url={url} />}
         <div className={`main-inner ${d.kind === 'changelog' ? 'cl-page' : ''}`}>

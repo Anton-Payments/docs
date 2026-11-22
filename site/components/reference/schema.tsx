@@ -24,7 +24,8 @@ function children(s: Schema | undefined): Schema | undefined {
   return undefined;
 }
 
-function Field({ name, schema, required, depth }: { name: string; schema: Schema; required?: boolean; depth: number }) {
+/** `slot` names the value Try mode puts in this row; the row holds an empty slot for its input. */
+function Field({ name, schema, required, depth, slot }: { name: string; schema: Schema; required?: boolean; depth: number; slot?: string }) {
   const f = flatten(schema)!;
   const kids = depth < 4 ? children(f) : undefined;
   const isDecimal = f.type === 'string' && /(^|_)(amount|fee|rate|balance|total_debited)$/.test(name);
@@ -40,6 +41,7 @@ function Field({ name, schema, required, depth }: { name: string; schema: Schema
         </span>
       </div>
       <div className="pd">
+        {slot && <div className="try-slot" data-try-slot={slot} />}
         <Md>{f.description}</Md>
         {f.enum && f.enum.length > 0 && (
           <div className="enum">{f.enum.filter((e) => e !== null).map((e) => <code key={String(e)}>{String(e)}</code>)}</div>
@@ -58,7 +60,7 @@ function Field({ name, schema, required, depth }: { name: string; schema: Schema
   );
 }
 
-export function Fields({ schema, depth = 0, hideReadOnly }: { schema: Schema; depth?: number; hideReadOnly?: boolean }) {
+export function Fields({ schema, depth = 0, hideReadOnly, trySlots }: { schema: Schema; depth?: number; hideReadOnly?: boolean; trySlots?: boolean }) {
   const f = flatten(schema);
   if (!f?.properties) return null;
   const req = new Set(f.required || []);
@@ -67,17 +69,20 @@ export function Fields({ schema, depth = 0, hideReadOnly }: { schema: Schema; de
   return (
     <div className="params">
       {entries.map(([k, v]) => (
-        <Field key={k} name={k} schema={v} required={req.has(k)} depth={depth} />
+        <Field key={k} name={k} schema={v} required={req.has(k)} depth={depth} slot={trySlots && depth === 0 ? k : undefined} />
       ))}
     </div>
   );
 }
 
-export function ParamTable({ params }: { params: Parameter[] }) {
+/** A parameter's Try key: "$in.name", with the idempotency header spelled as the samples send it. */
+const paramKey = (p: Parameter) => '$' + p.in + '.' + (p.in === 'header' && /idempotency-key/i.test(p.name) ? 'Idempotency-Key' : p.name);
+
+export function ParamTable({ params, trySlots }: { params: Parameter[]; trySlots?: boolean }) {
   return (
     <div className="params">
       {params.map((p) => (
-        <Field key={p.in + p.name} name={p.name} schema={{ ...(p.schema || {}), description: p.description || p.schema?.description, example: p.example ?? p.schema?.example }} required={p.required} depth={0} />
+        <Field key={p.in + p.name} name={p.name} schema={{ ...(p.schema || {}), description: p.description || p.schema?.description, example: p.example ?? p.schema?.example }} required={p.required} depth={0} slot={trySlots ? paramKey(p) : undefined} />
       ))}
     </div>
   );

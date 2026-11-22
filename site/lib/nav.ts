@@ -120,16 +120,3 @@ export function sectionOf(path: string): string | undefined {
   for (const p of PRODUCTS) for (const s of p.sections) if (s.items.some((i) => i.href === path)) return s.title;
   return undefined;
 }
-
-/** Console defaults by page kind. The reader's choice overrides these, remembered per kind. */
-export type PageKind = 'home' | 'quickstart' | 'guide' | 'concept' | 'reference' | 'try' | 'webhooks' | 'changelog';
-export const CONSOLE_DEFAULTS: Record<PageKind, boolean> = {
-  home: false,
-  quickstart: false,
-  guide: false,
-  concept: false,
-  reference: false,
-  try: false,
-  webhooks: true,
-  changelog: false,
-};

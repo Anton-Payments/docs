@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GUIDE_SET } from '@/components/mdx/decision';
+import { TRY_RESET } from './try-mode';
 
 /**
  * The spec's alternative request examples, as a switch. Picking one rewrites the request in the
@@ -9,6 +10,11 @@ import { GUIDE_SET } from '@/components/mdx/decision';
  */
 export function ExampleSwitch({ variants }: { variants: { label: string; set: Record<string, unknown> }[] }) {
   const [on, setOn] = useState(0);
+  useEffect(() => {
+    const reset = () => setOn(0);
+    window.addEventListener(TRY_RESET, reset);
+    return () => window.removeEventListener(TRY_RESET, reset);
+  }, []);
   if (variants.length < 2) return null;
   return (
     <div className="seg2 ref-ex" role="group" aria-label="Request example">

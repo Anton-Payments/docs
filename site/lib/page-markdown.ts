@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import { source } from '@/lib/source';
-import { flatten, getOperation, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
+import { bodyContent, flatten, getOperation, requestExample, requiresIdempotency, responseExample, successStatus, type Operation, type Schema } from '@/lib/openapi';
 
 /*
   The docs as plain Markdown, for AI tools: every page and every endpoint, with the site's
@@ -133,9 +133,10 @@ export function endpointMarkdown(op: Operation, origin = ''): string {
     parts.push('## Parameters');
     parts.push(params.map((p) => `- \`${p.name}\` (${p.in}, ${typeOf(p.schema)}${p.required ? ', required' : ''})${p.description ? `: ${p.description.replace(/\s*\n\s*/g, ' ')}` : ''}`).join('\n'));
   }
-  const body = op.requestBody?.content?.['application/json']?.schema;
+  const bc = bodyContent(op);
+  const body = bc?.schema;
   if (body) {
-    parts.push('## Request body');
+    parts.push(bc.kind === 'json' ? '## Request body' : `## Request body (\`${bc.mediaType}\`)`);
     parts.push(fields(body, 0, true).join('\n'));
     const ex = requestExample(op);
     if (ex !== undefined) parts.push('Example:\n\n```json\n' + JSON.stringify(ex, null, 2) + '\n```');
