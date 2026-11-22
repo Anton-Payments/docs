@@ -23,7 +23,7 @@ To load payees from a file without paying anyone, see [Import payees](/guides/im
 
 ## Get the template
 
-The template has the exact header row and a few example rows. Column order and casing matter, so build your file from it and do not rename columns.
+The template has the exact header row and a few example rows. Headers are matched by name, ignoring case, in any order, so the columns can sit wherever you like. Start from the template and keep the column names.
 
 ```bash Download the template
 curl "https://api.antonpayments.dev/v1/batches/template?format=csv" \

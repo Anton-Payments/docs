@@ -15,7 +15,7 @@ The token comes from `POST /oauth/token`, using the client credentials the merch
 The dashboard creates the credential and generates an ES256 or Ed25519 DPoP keypair in your browser, so the private half never leaves your device. The secret is shown once. Store it and the private key in a secrets manager, and pass them to your service as environment variables or a mount.
 
 - `client_id` looks like `ant_oc_<env>_<32hex>`. It is public.
-- `client_secret` looks like `ant_ocs_<env>_<48hex>`. It cannot be shown again.
+- `client_secret` looks like `ant_ocs_<env>_<96hex>`. It cannot be shown again.
 - The public half of your key is registered with Anton, and every token you mint is bound to it.
 
 Each credential also carries scopes, `payouts` and `intelligence`, checked against your account's capabilities when the credential is created. A call outside the credential's scopes is `403 insufficient_scope`. A call outside your account's capabilities is `403 capability_required`. [Capabilities and scopes](/concepts/capabilities) has the detail.

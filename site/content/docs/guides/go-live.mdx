@@ -50,7 +50,7 @@ An account that is not active gets `403 merchant_not_active`. Sandbox needs none
     Read `error.code` on each `4xx` and `5xx` and decide whether you retry, escalate, show the user or fail the job. See [Errors](/errors).
   </Step>
   <Step title="Treat on_hold as waiting">
-    A held payout is under review, carries no reason and cannot be cancelled. Show your user a pending state. `status_message` is the only text, and an RFI that holds a payout is answered in the dashboard by a person with `rfis.respond` ([Respond to an RFI](/guides/respond-to-an-rfi)).
+    A held payout is under review, carries no reason and cannot be cancelled. Show your user a pending state. `status_message` is the only text, and an RFI that holds a payout is answered in the dashboard by a person with `rfis.respond` (Admin, Operator, or Compliance for text answers only) ([Respond to an RFI](/guides/respond-to-an-rfi)).
   </Step>
   <Step title="Keep credentials in a secrets manager">
     Never in source or frontend code. See [Authentication](/authentication).

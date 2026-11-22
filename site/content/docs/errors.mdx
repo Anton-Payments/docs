@@ -270,7 +270,6 @@ Codes group below by what went wrong, then run in order of status. The status fo
 | --- | --- | --- | --- |
 | `export_busy` | 429 | `rate_limit_error` | Another export is already running. Retry shortly. `Retry-After` says how many seconds to wait. |
 | `rate_limit_exceeded` | 429 | `rate_limit_error` | You exceeded a rate limit. `Retry-After` says how many seconds to wait. See [Rate limits](/concepts/rate-limits). |
-| `rate_limited` | 429 | `rate_limit_error` | You exceeded a rate limit. Same meaning as `rate_limit_exceeded`; `Retry-After` says how many seconds to wait. |
 | `rate_limited_sandbox_deposit` | 429 | `rate_limit_error` | Too many sandbox deposits. `Retry-After` says how many seconds to wait. |
 
 ### Server and upstream
