@@ -1,0 +1,78 @@
+name: Deploy docs
+
+# Builds the docs site and rolls it out. One branch, one site:
+#   develop -> Cloud Run `docs-preview`, at docs-preview.antonpayments.com, never indexed
+#   main    -> Cloud Run `docs-site`,    at docs.antonpayments.com
+# The infrastructure is Terraform in the infra repo (environments/docs); this workflow only
+# builds an image and rolls a revision.
+#
+# Repository variables, from `make output-docs` in infra:
+#   GCP_WIF_PROVIDER  workload_identity_provider
+#   GCP_DEPLOY_SA     deploy_service_account
+
+on:
+  push:
+    branches: [develop, main]
+    paths: ['site/**', 'openapi-merchant.yaml', '.github/workflows/deploy.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # WIF: GitHub's OIDC token is exchanged for a short-lived GCP credential
+
+concurrency:
+  group: docs-deploy-${{ github.ref_name }}
+  cancel-in-progress: false # never interrupt a rollout halfway
+
+env:
+  PROJECT: anton-docs
+  REGION: northamerica-northeast2
+  IMAGE: northamerica-northeast2-docker.pkg.dev/anton-docs/site/site
+  # the branch picks the site; any other ref (a manual run elsewhere) fails in "Pick the site"
+  SERVICE: ${{ github.ref_name == 'main' && 'docs-site' || 'docs-preview' }}
+  HOST: ${{ github.ref_name == 'main' && 'docs.antonpayments.com' || 'docs-preview.antonpayments.com' }}
+  PREVIEW: ${{ github.ref_name == 'main' && '0' || '1' }}
+
+jobs:
+  deploy:
+    # skipped, not failed, until infra is applied and the two repository variables are set
+    if: vars.GCP_WIF_PROVIDER != '' && vars.GCP_DEPLOY_SA != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Pick the site
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            main|develop) echo "deploying ${GITHUB_REF_NAME} to ${SERVICE} (${HOST})" ;;
+            *) echo "::error::only develop and main deploy"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build the image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          # DOCS_PREVIEW=1 bakes in robots.txt "Disallow: /" and an X-Robots-Tag header; main builds without it
+          tag="${IMAGE}:${GITHUB_SHA}-${SERVICE}"
+          docker build -f site/Dockerfile --build-arg "DOCS_PREVIEW=${PREVIEW}" -t "${tag}" .
+          docker push "${tag}"
+
+      - name: Roll out
+        # Only the image changes; every other setting on the service belongs to Terraform.
+        run: gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}-${SERVICE}" --region "${REGION}" --project "${PROJECT}" --quiet
+
+      - name: Check the site answers
+        run: |
+          for _ in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${HOST}/robots.txt" || true)
+            [ "$code" = "200" ] && echo "${HOST} is up" && exit 0
+            sleep 6
+          done
+          echo "::warning::${HOST} did not answer 200 (DNS or the certificate may still be pending)"

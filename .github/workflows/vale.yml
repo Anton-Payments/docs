@@ -1,19 +1,7 @@
 name: Vale
 
-# Mintlify's hosted Vale check lints the .md/.mdx files a PR CHANGES — and
-# when a PR changes none, it falls back to the whole repository.
-#
-# That asymmetry is the bug this job exists for. An unaccepted term never
-# fails the PR that introduced it, because that PR only ever sees its own
-# files. It surfaces later, on a PR containing no prose at all — a
-# dependency lockfile bump — which then fails on a backlog its author did
-# not write and cannot reasonably fix. The PRs least able to fix prose are
-# the only ones that ever see the whole-repo state.
-#
-# This job lints the whole tree on EVERY PR, so the author who adds a term
-# is the one who sees it fail. It is also the diagnosable one: the hosted
-# check reports `targetUrl: https://mintlify.com`, the marketing page rather
-# than a run, so its failures carry no detail on the PR page.
+# Lints the whole tree on EVERY PR, not only the files a PR changes, so the author who adds
+# an unaccepted term is the one who sees it fail, and a later PR with no prose never inherits it.
 on:
   pull_request:
     branches: [develop, main]
@@ -43,8 +31,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Nothing here uses git after checkout, and the default leaves the
-          # Actions token in .git/config where any later step — the npm
-          # install below being the realistic one — could read it.
+          # Actions token in .git/config where any later step, the npm
+          # install below being the realistic one, could read it.
           persist-credentials: false
 
       - name: Install Vale
@@ -62,7 +50,7 @@ jobs:
           vale --version
 
       - name: Install mdx2vast
-        # Vale cannot parse .mdx without it — without this step every .mdx
+        # Vale cannot parse .mdx without it, without this step every .mdx
         # file errors with `mdx2vast not found` and the run fails for a
         # reason that has nothing to do with the prose.
         #
@@ -76,7 +64,7 @@ jobs:
       # skipped every file all produce the same clean output as a genuinely
       # clean tree. Planting a known-bad word and requiring a non-zero exit is
       # the only thing that tells those apart.
-      - name: Control — the linter must reject a known typo
+      - name: Control, the linter must reject a known typo
         # `rc=0; cmd || rc=$?` rather than `cmd; rc=$?`: Actions runs `run:`
         # under `bash -e`, so an untested non-zero exit aborts the step
         # instantly. Since this step EXPECTS a non-zero exit, the naive form
@@ -92,7 +80,7 @@ jobs:
           # `rc != 0` is NOT enough. Vale exits 1 for alerts and 2 for config
           # or runtime errors, so a broken StylesPath would also be non-zero
           # and this step would report "Vale rejected the planted typo" while
-          # the spellchecker was not running at all — a message asserting a
+          # the spellchecker was not running at all, a message asserting a
           # state it never measured. Require the spelling rule by name.
           if [ "${rc}" -ne 1 ] || ! grep -q 'Vale.Spelling' control.log; then
             echo "::error::Control did not fire as a spelling alert (exit ${rc}). Vale is not spellchecking, so a clean result from the next step would be meaningless."
@@ -104,16 +92,14 @@ jobs:
         # Absolute path, not `vale .`, deliberately. A file-scoped section in
         # .vale.ini matches differently depending on the path form it is
         # handed: `[CLAUDE.md]` applies to a relative path and silently does
-        # NOT apply to an absolute one. Mintlify's runner passes absolute
-        # paths, so linting relatively here would exercise a different code
-        # path than the check this job is meant to mirror — and would go
-        # green on a config that fails there.
+        # NOT apply to an absolute one. Linting absolutely here keeps CI on
+        # the stricter of the two.
         run: |
           set -uo pipefail
           rc=0
           vale "${GITHUB_WORKSPACE}" > vale.log 2>&1 || rc=$?
           cat vale.log
           if [ "${rc}" -ne 0 ]; then
-            echo "::error::Vale failed. If these are legitimate technical terms, add them to styles/config/vocabularies/AntonDocs/accept.txt — do not weaken the rule. Note Vale lints the whole repo, so an unfixed term here will block every later PR, including Dependabot lockfile bumps that contain no prose."
+            echo "::error::Vale failed. If these are legitimate technical terms, add them to styles/config/vocabularies/AntonDocs/accept.txt, do not weaken the rule. Note Vale lints the whole repo, so an unfixed term here will block every later PR, including Dependabot lockfile bumps that contain no prose."
             exit 1
           fi

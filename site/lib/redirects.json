@@ -142,5 +142,29 @@
   {
     "source": "/concepts/ip-allowlist",
     "destination": "/guides/go-live"
+  },
+  {
+    "source": "/auth",
+    "destination": "/authentication"
+  },
+  {
+    "source": "/payouts",
+    "destination": "/guides/send-a-payout"
+  },
+  {
+    "source": "/beneficiaries",
+    "destination": "/guides/register-a-payee"
+  },
+  {
+    "source": "/batches",
+    "destination": "/guides/send-payouts-in-bulk"
+  },
+  {
+    "source": "/webhooks",
+    "destination": "/guides/track-payouts-with-webhooks"
+  },
+  {
+    "source": "/reports",
+    "destination": "/guides/reconcile-with-transactions"
   }
 ]
