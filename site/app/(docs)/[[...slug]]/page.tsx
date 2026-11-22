@@ -162,6 +162,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: page.data.kind === 'home' ? { absolute: title } : title,
     description: page.data.description,
     alternates: { canonical: page.url },
-    openGraph: { title, description: page.data.description, url: page.url },
+    openGraph: { title, description: page.data.description, url: page.url, images: [{ url: `/og${page.url === '/' ? '' : page.url}`, width: 1200, height: 630 }] },
+    twitter: { card: 'summary_large_image' },
   };
 }

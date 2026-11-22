@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description: 'Developer docs for Anton: cross-border payouts, and the intelligence that checks each one before it moves.',
   icons: { icon: '/brand/mark.svg' },
   openGraph: { siteName: 'Anton Docs', type: 'website' },
-  twitter: { card: 'summary' },
+  twitter: { card: 'summary_large_image' },
 };
 
 // Sets the theme before first paint: the reader's saved choice, else their system setting.
