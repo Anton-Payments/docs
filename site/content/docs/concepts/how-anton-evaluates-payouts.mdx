@@ -33,7 +33,7 @@ You cannot disable the checks, override them at submission or skip them with a f
 | `sent` | `completed`, `failed`, `returned` |
 | `completed` | `returned` |
 
-`returned`, `cancelled` and `failed` are final. `completed` is final except that a bank can still return the payout after settlement. Treat a status you do not know as in progress.
+`returned`, `cancelled` and `failed` are final. A `completed` payout can still become `returned` when a bank bounces it after settlement. Treat a status you do not know as in progress.
 
 ## What each status means
 
