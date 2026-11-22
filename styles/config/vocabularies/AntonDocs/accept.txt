@@ -165,3 +165,11 @@ Mintlify
 Fumadocs
 [Rr]escreening
 www
+[Ss]ignup
+tokenizes
+substring
+monorepos
+[Dd]edupe
+deduplicates
+approvers
+else
