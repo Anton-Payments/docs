@@ -1,4 +1,4 @@
-# anton-spec-sync sha256=dd04ba8dad7304e77d4ddebeb8555de838d946439520338404bfcc6e7017e0ef
+# anton-spec-sync sha256=8b3083b8e241f9d7be479e171f4357911ebfae7df68e6e346dcc7030a0d7792a
 openapi: 3.1.0
 
 info:
@@ -2970,7 +2970,7 @@ paths:
               $ref: '#/components/headers/Idempotent-Replayed'
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z"}
+              example: {"id":"pay_dbvqrpqukoh470i0a7n0","object":"payout","livemode":false,"status":"processing","status_message":null,"failure_code":null,"beneficiary_id":"ben_dbvqrpqukoh470i0a7m0","beneficiary_name":null,"instrument_id":"ins_test789","batch_id":null,"method":"swift","rail_type":"fiat","network":null,"source_amount":"250.00","source_currency":"USD","destination_amount":"200.00","destination_currency":"GBP","exchange_rate":null,"fee":"0.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"255.00","total_debited_currency":"USD","buffer_amount":"5.00","buffer_currency":"USD","wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":"usr_test123","purpose":"supplier_payment","reference":"INV-002","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"funds_released_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.241Z","updated_at":"2026-11-20T02:18:15.241Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3087,7 +3087,7 @@ paths:
           description: A page of payouts.
           content:
             application/json:
-              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z"}],"has_more":false,"next_cursor":null}
+              example: {"object":"list","data":[{"id":"pay_dbvqrpqukoh470i0bcm0","object":"payout","livemode":false,"status":"failed","status_message":null,"failure_code":"provider_rejected","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"funds_released_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:09:15.248Z","updated_at":"2026-11-20T02:09:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bco0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:05:15.248Z","cancelled_at":null,"funds_released_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:05:15.248Z","updated_at":"2026-11-20T02:05:15.248Z"},{"id":"pay_dbvqrpqukoh470i0bcr0","object":"payout","livemode":false,"status":"failed","status_message":"This payout cannot be processed. We are unable to provide further detail.","failure_code":"cannot_be_processed","beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":"2026-11-20T02:18:15.248Z","cancelled_at":null,"funds_released_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T01:59:15.248Z","updated_at":"2026-11-20T01:59:15.248Z"}],"has_more":false,"next_cursor":null}
               schema:
                 allOf:
                   - $ref: '#/components/schemas/CursorList'
@@ -3182,7 +3182,7 @@ paths:
           description: The payout.
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"555.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z"}
+              example: {"id":"pay_dbvqrpqukoh470i0a400","object":"payout","livemode":false,"status":"on_hold","status_message":"This payout is under review. We will update you when the review is complete. We are not able to share further detail at this time.","failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"555.00","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":null,"funds_released_at":null,"risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.232Z","updated_at":"2026-11-20T02:18:15.232Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -3277,7 +3277,7 @@ paths:
           description: The cancelled payout.
           content:
             application/json:
-              example: {"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z","risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
+              example: {"id":"pay_dbvqrpqukoh470i0a7tg","object":"payout","livemode":false,"status":"cancelled","status_message":null,"failure_code":null,"beneficiary_id":"ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1","beneficiary_name":null,"instrument_id":"ins_01HX8Z9K0M2N3P4Q5R6S7T8UA2","batch_id":null,"method":"sepa","rail_type":"fiat","network":"sepa","source_amount":"550.00","source_currency":"USD","destination_amount":"500.00","destination_currency":"EUR","exchange_rate":"0.9091","fee":"5.00","fee_currency":"USD","fee_bearer":"merchant","fixed_side":"fixed_destination","fee_finalized":false,"total_debited":"557.50","total_debited_currency":"USD","buffer_amount":"0.00","buffer_currency":null,"wallet_address":null,"token_contract":null,"token_symbol":null,"transaction_hash":null,"block_confirmations":null,"required_confirmations":null,"network_fee":null,"network_fee_currency":null,"created_by":null,"purpose":"supplier_payment","reference":"PO-8821","screened_at":null,"approved_at":null,"processed_at":null,"completed_at":null,"failed_at":null,"cancelled_at":"2026-11-20T02:18:15.242Z","funds_released_at":"2026-11-20T02:18:15.242Z","risk":null,"delivery":null,"session_quality":null,"metadata":{"order_ref":"A-1042"},"created_at":"2026-11-20T02:18:15.242Z","updated_at":"2026-11-20T02:18:15.242Z"}
               schema:
                 $ref: '#/components/schemas/Payout'
         '400':
@@ -6224,6 +6224,8 @@ paths:
                           "created_at": "2026-11-19T14:03:22.104Z",
                           "data": {
                             "object": {
+                              "funds_released_at": null,
+                              "screened_at": null,
                               "approved_at": null,
                               "batch_id": null,
                               "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
@@ -6350,6 +6352,8 @@ paths:
                       "created_at": "2026-11-19T14:03:22.104Z",
                       "data": {
                         "object": {
+                          "funds_released_at": null,
+                          "screened_at": null,
                           "approved_at": null,
                           "batch_id": null,
                           "beneficiary_id": "ben_01HX8Z9K0M2N3P4Q5R6S7T8UA1",
@@ -9652,11 +9656,13 @@ components:
         - metadata
         - created_at
         - updated_at
+        - screened_at
         - approved_at
         - processed_at
         - completed_at
         - failed_at
         - cancelled_at
+        - funds_released_at
         - risk
         - delivery
         - session_quality
@@ -9777,6 +9783,13 @@ components:
           type: string
         reference:
           type: string
+        screened_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: |
+            When the payout was checked and cleared before it was sent. `null` until then, and always
+            `null` while the payout is `on_hold` or `failed`.
         approved_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
@@ -9798,6 +9811,14 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
+        funds_released_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: |
+            When the funds reserved for the payout went back to your balance. `null` until then, for a
+            payout that is not `failed`, `cancelled` or `returned`, and for one that is `on_hold` or
+            failed with `cannot_be_processed`.
         risk:
           oneOf:
             - type: object
@@ -9887,11 +9908,13 @@ components:
           },
           "created_at": "2026-11-19T14:03:22.104Z",
           "updated_at": "2026-11-19T14:03:25.871Z",
+          "screened_at": null,
           "approved_at": null,
           "processed_at": null,
           "completed_at": null,
           "failed_at": null,
           "cancelled_at": null,
+          "funds_released_at": null,
           "risk": null,
           "delivery": null,
           "session_quality": null
@@ -12333,7 +12356,7 @@ components:
       properties:
         network:
           type: string
-          enum: [bitcoin, ethereum, solana, polygon, tron, other]
+          enum: [bitcoin, ethereum, solana, polygon, tron, arbitrum, optimism, base, avalanche, bsc, ripple, stellar, litecoin, lightning, other]
         address:
           type: string
 
